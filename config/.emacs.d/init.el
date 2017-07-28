@@ -6,6 +6,9 @@
   (error "This config requires at least GNU Emacs 25.1, but you're running version %s."
          emacs-version))
 
+(setq gc-cons-threshold 100000000)
+(run-with-idle-timer 5 nil (lambda () (setq gc-cons-threshold 1000000)))
+
 (setq-default default-directory "~/"
               temp-dir (locate-user-emacs-file "temp")
               custom-file (locate-user-emacs-file "custom.el"))
@@ -111,15 +114,6 @@
 (set-language-environment "UTF-8")
 
 (global-auto-revert-mode)
-
-;; High garbage collection limit when inside the minibuffer
-(defun gc-minibuffer-setup-hook ()
-  (setq gc-cons-threshold most-positive-fixnum))
-(defun gc-minibuffer-exit-hook ()
-  (setq gc-cons-threshold 800000))
-(add-hook 'minibuffer-setup-hook 'gc-minibuffer-setup-hook)
-(add-hook 'minibuffer-exit-hook 'gc-minibuffer-exit-hook)
-
 
 (defun nox/rename-file-and-buffer ()
   "Rename current buffer and if the buffer is visiting a file, rename it too."
@@ -321,13 +315,12 @@ Position the cursor at its beginning, according to the current mode."
 (use-package counsel :ensure t
   :diminish ivy-mode
   :diminish counsel-mode
-  :bind
-  (:map ivy-minibuffer-map
-        ("<return>" . ivy-alt-done))
-  :bind
-  (:map read-expression-map ("C-r" . counsel-expression-history))
+  :bind (:map ivy-minibuffer-map ("<return>" . ivy-alt-done))
+  :bind (:map read-expression-map ("C-r" . counsel-expression-history))
 
   :init
+  (use-package flx :ensure t)
+
   (setq-default ivy-use-virtual-buffers t
                 ivy-height 10
                 ivy-count-format "(%d/%d) "
@@ -335,12 +328,10 @@ Position the cursor at its beginning, according to the current mode."
                 ivy-initial-inputs-alist nil
                 ivy-re-builders-alist '((t . ivy--regex-fuzzy)))
 
-  (use-package flx :ensure t)
   (ivy-mode 1)
   (counsel-mode 1))
 
 (use-package dired
-  :defer
   :config
   (setq-default dired-listing-switches "-alh"
                 dired-recursive-deletes 'always
@@ -353,36 +344,27 @@ Position the cursor at its beginning, according to the current mode."
 
 (use-package font-lock
   :config
-  (defun nox/font-lock-comment-annotations ()
-    "Highlight a bunch of well known comment annotations."
-    (font-lock-add-keywords
-     nil
-     '(("\\<\\(TODO\\)" 1 'font-lock-fixme-face t)
-       ("\\<\\(IMPORTANT\\)" 1 'font-lock-important-face t)
-       ("\\<\\(NOTE\\)" 1 'font-lock-note-face t))))
-
-  (make-face 'font-lock-fixme-face)
+  (make-face 'font-lock-todo-face)
   (make-face 'font-lock-important-face)
   (make-face 'font-lock-note-face)
 
-  (modify-face 'font-lock-fixme-face "Red" nil nil t nil t nil nil)
+  (modify-face 'font-lock-todo-face "Red" nil nil t nil t nil nil)
   (modify-face 'font-lock-important-face "Yellow" nil nil t nil t nil nil)
   (modify-face 'font-lock-note-face "Olive Drab" nil nil t nil t nil nil)
 
-  (add-hook 'prog-mode-hook 'nox/font-lock-comment-annotations))
+  (add-hook
+   'prog-mode-hook
+   (lambda ()
+     (font-lock-add-keywords
+      nil
+      '(("\\<\\(TODO\\|FIXME\\)" 1 'font-lock-todo-face t)
+        ("\\<\\(IMPORTANT\\)" 1 'font-lock-important-face t)
+        ("\\<\\(NOTE\\)" 1 'font-lock-note-face t))))))
 
 (use-package gdb-mi
   :config
   (setq-default gdb-many-windows t
                 gdb-show-main t))
-
-(use-package grep
-  :defer t
-  :config
-  (setq-default grep-use-null-device nil)
-  (cond
-   ((executable-find "grep") (grep-apply-setting 'grep-command "grep -irHn "))
-   ((eq system-type 'windows-nt) (grep-apply-setting 'grep-command "findstr -s -n -i -l "))))
 
 (use-package imenu
   :config
@@ -390,8 +372,7 @@ Position the cursor at its beginning, according to the current mode."
   (set 'imenu-auto-rescan t))
 
 (use-package imenu-anywhere :ensure t
-  :chords
-  (" i" . nox/ivy-imenu-center)
+  :chords (" i" . nox/ivy-imenu-center)
   :config
   (defun nox/ivy-imenu-center ()
     (interactive)
@@ -400,34 +381,29 @@ Position the cursor at its beginning, according to the current mode."
 
 (use-package magit :ensure t
   :if (executable-find "git")
-  :chords
-  (" g" . magit-status)
-  :defer
-  :config
-  (if (eq system-type 'windows-nt)
-      (setenv "GIT_ASKPASS" "git-gui--askpass")))
+  :chords (" g" . magit-status))
 
 (use-package org :ensure t
   :config
   (add-hook 'org-mode-hook 'org-indent-mode))
 
 (use-package paren
-  :init
-  (setq-default show-paren-delay 0) ;; Highlight paren immediately
+  :config
+  (setq-default show-paren-delay 0)
   (show-paren-mode))
 
 (use-package recentf
-  :init
-  (setq-default recentf-auto-cleanup 'never)
-  (setq-default recentf-max-saved-items 150)
+  :config
   (recentf-mode 1)
-  (setq-default recentf-exclude '("COMMIT_MSG" "COMMIT_EDITMSG")))
+  (setq-default recentf-auto-cleanup 'never
+                recentf-max-saved-items 150
+                recentf-exclude '("COMMIT_MSG" "COMMIT_EDITMSG")))
 
 (use-package uniquify
   :config
-  (setq-default uniquify-buffer-name-style 'forward)
-  (setq-default uniquify-separator "/")
-  (setq-default uniquify-after-kill-buffer-p t))
+  (setq-default uniquify-buffer-name-style 'forward
+                uniquify-separator "/"
+                uniquify-after-kill-buffer-p t))
 
 
 ;; ------------------------------
@@ -487,20 +463,11 @@ Position the cursor at its beginning, according to the current mode."
 
   (defun nox/header-format ()
     (interactive)
-    (let ((base-file-name (file-name-sans-extension (file-name-nondirectory buffer-file-name))))
-      (insert "#if !defined(")
-      (push-mark)
-      (insert base-file-name)
-      (upcase-region (mark) (point))
-      (pop-mark)
-      (insert "_H)\n\n\n")
-      (insert "#define ")
-      (push-mark)
-      (insert base-file-name)
-      (upcase-region (mark) (point))
-      (pop-mark)
-      (insert "_H\n")
-      (insert "#endif")))
+    (let ((definition (concat
+                       (upcase (file-name-sans-extension (file-name-nondirectory buffer-file-name)))
+                       "_H")))
+      (insert (format "#if !defined(%s)\n#define %s\n\n\n\n#endif // %s" definition definition definition))
+      (previous-line 2)))
 
   (defun nox/c-hook ()
     (c-add-style "NoxStyle" nox/c-style t)
