@@ -11,7 +11,8 @@
 
 (setq-default default-directory "~/"
               temp-dir (locate-user-emacs-file "temp")
-              custom-file (locate-user-emacs-file "custom.el"))
+              custom-file (locate-user-emacs-file "custom.el")
+              trash-directory (locate-user-emacs-file "trash"))
 
 (require 'package)
 (setq-default package-archives '(("gnu" . "https://elpa.gnu.org/packages/")
@@ -27,12 +28,13 @@
   (require 'use-package))
 (require 'diminish)
 (require 'bind-key)
+(setq-default use-package-always-defer t)
 
 
 ;; ------------------------------
 ;; Appearance
 (use-package color-theme-sanityinc-tomorrow :ensure t
-  :config (load-theme 'sanityinc-tomorrow-night t))
+  :init (load-theme 'sanityinc-tomorrow-night t))
 
 (tool-bar-mode -1)
 (menu-bar-mode -1)
@@ -93,6 +95,8 @@
  mark-ring-max 5000
  global-mark-ring-max 5000
  large-file-warning-threshold (* 100 1024 1024)
+
+ enable-recursive-minibuffers t
 
  save-interprogram-paste-before-kill t
 
@@ -177,7 +181,7 @@ Position the cursor at its beginning, according to the current mode."
   (key-chord-mode 1)
   (setq-default key-chord-two-keys-delay 0.035
                 key-chord-one-key-delay 0)
-  (use-package use-package-chords :ensure t))
+  (use-package use-package-chords :ensure t :demand))
 
 (bind-keys
  ("<C-return>" . nox/open-line-below)
@@ -307,9 +311,8 @@ Position the cursor at its beginning, according to the current mode."
 
   (require 'ansi-color)
   (defun nox/colorize-compilation-buffer ()
-    (toggle-read-only)
-    (ansi-color-apply-on-region compilation-filter-start (point))
-    (toggle-read-only))
+    (let ((inhibit-read-only t))
+      (ansi-color-apply-on-region compilation-filter-start (point))))
   (add-hook 'compilation-filter-hook 'nox/colorize-compilation-buffer))
 
 (use-package counsel :ensure t
@@ -321,23 +324,27 @@ Position the cursor at its beginning, according to the current mode."
   :init
   (use-package flx :ensure t)
 
+  (ivy-mode 1)
+  (counsel-mode 1)
   (setq-default ivy-use-virtual-buffers t
                 ivy-height 10
                 ivy-count-format "(%d/%d) "
                 ivy-extra-directories nil
                 ivy-initial-inputs-alist nil
-                ivy-re-builders-alist '((t . ivy--regex-fuzzy)))
+                ivy-re-builders-alist '((t . ivy--regex-fuzzy))))
 
-  (ivy-mode 1)
-  (counsel-mode 1))
+(use-package ivy-bibtex :ensure t
+  :config
+  (setq-default bibtex-completion-bibliography (car org-ref-default-bibliography)
+                bibtex-completion-notes-path org-ref-bibliography-notes
+                bibtex-completion-library-path org-ref-pdf-directory))
 
 (use-package dired
   :config
   (setq-default dired-listing-switches "-alh"
                 dired-recursive-deletes 'always
                 dired-recursive-copies 'always
-                delete-by-moving-to-trash t
-                trash-directory (locate-user-emacs-file "trash/")))
+                delete-by-moving-to-trash t))
 
 (use-package find-file
   :config (setq-default ff-always-try-to-create t))
@@ -379,21 +386,37 @@ Position the cursor at its beginning, according to the current mode."
     (call-interactively 'ivy-imenu-anywhere)
     (recenter-top-bottom)))
 
+(use-package interleave :ensure t)
+
 (use-package magit :ensure t
   :if (executable-find "git")
   :chords (" g" . magit-status))
 
 (use-package org :ensure t
   :config
-  (add-hook 'org-mode-hook 'org-indent-mode))
+  (add-hook 'org-mode-hook (lambda ()
+                             (org-indent-mode)
+                             (company-mode 0))))
+
+(use-package org-ref :ensure t
+  :init
+  (setq-default org-ref-completion-library 'org-ref-ivy-cite
+                reftex-default-bibliography '("~/Documents/Bibliography/References.bib")
+                org-ref-default-bibliography reftex-default-bibliography
+                org-ref-bibliography-notes "~/Documents/Bibliography/Notes.org"
+                org-ref-pdf-directory "~/Documents/Bibliography/PDFs/"))
+
+(use-package pdf-tools :ensure t
+  :mode (("\\.pdf\\'" . pdf-view-mode))
+  :config (pdf-tools-install))
 
 (use-package paren
-  :config
-  (setq-default show-paren-delay 0)
-  (show-paren-mode))
+  :init
+  (show-paren-mode)
+  (setq-default show-paren-delay 0))
 
 (use-package recentf
-  :config
+  :init
   (recentf-mode 1)
   (setq-default recentf-auto-cleanup 'never
                 recentf-max-saved-items 150
