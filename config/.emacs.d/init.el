@@ -172,7 +172,6 @@ Position the cursor at its beginning, according to the current mode."
   (move-end-of-line nil)
   (newline-and-indent))
 
-
 ;; ------------------------------
 ;; Keybindings
 (use-package hydra :ensure t)
@@ -318,7 +317,9 @@ Position the cursor at its beginning, according to the current mode."
 (use-package counsel :ensure t
   :diminish ivy-mode
   :diminish counsel-mode
-  :bind (:map ivy-minibuffer-map ("<return>" . ivy-alt-done))
+  :bind (:map ivy-minibuffer-map
+              ("<return>" . ivy-alt-done)
+              ("C-j" . ivy-done))
   :bind (:map read-expression-map ("C-r" . counsel-expression-history))
 
   :init
@@ -331,7 +332,29 @@ Position the cursor at its beginning, according to the current mode."
                 ivy-count-format "(%d/%d) "
                 ivy-extra-directories nil
                 ivy-initial-inputs-alist nil
-                ivy-re-builders-alist '((t . ivy--regex-fuzzy))))
+                ivy-re-builders-alist '((t . ivy--regex-fuzzy)))
+
+  (defun counsel-find-file-as-root (x)
+    "Find file X with root privileges."
+    (counsel-require-program counsel-root-command)
+    (let* ((method (file-remote-p x 'method))
+           (user (file-remote-p x 'user))
+           (host (file-remote-p x 'host))
+           (file-name (concat (if (string= method "ssh")
+                                  (format "/ssh:%s%s|"
+                                          (if user (format "%s@" user) "")
+                                          host)
+                                "/")
+                              (format "%s:%s:%s"
+                                      counsel-root-command
+                                      (or host "")
+                                      (expand-file-name
+                                       (if host
+                                           (file-remote-p x 'localname)
+                                         x))))))
+      (if (eq (current-buffer) (get-file-buffer x))
+          (find-alternate-file file-name)
+        (find-file file-name)))))
 
 (use-package ivy-bibtex :ensure t
   :config
@@ -421,6 +444,14 @@ Position the cursor at its beginning, according to the current mode."
   (setq-default recentf-auto-cleanup 'never
                 recentf-max-saved-items 150
                 recentf-exclude '("COMMIT_MSG" "COMMIT_EDITMSG")))
+
+(use-package tramp
+  :config
+  (setq-default tramp-default-method "ssh")
+  (add-to-list 'tramp-default-proxies-alist
+               '(nil "\\`root\\'" "/ssh:%h:"))
+  (add-to-list 'tramp-default-proxies-alist
+               '((regexp-quote (system-name)) nil nil)))
 
 (use-package uniquify
   :config
