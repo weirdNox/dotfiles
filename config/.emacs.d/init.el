@@ -33,8 +33,10 @@
 
 ;; ------------------------------
 ;; Appearance
-(use-package color-theme-sanityinc-tomorrow :ensure t
-  :init (load-theme 'sanityinc-tomorrow-night t))
+(use-package doom-themes :ensure t
+  :init
+  (load-theme 'doom-tomorrow-night t)
+  (doom-themes-org-config))
 
 (tool-bar-mode -1)
 (menu-bar-mode -1)
@@ -219,12 +221,8 @@ Position the cursor at its beginning, according to the current mode."
 
 ;; ------------------------------
 ;; Packages
-(use-package anzu :ensure t
-  :diminish anzu-mode
-  :init (global-anzu-mode))
-
 (use-package avy :ensure t
-  :chords (" j" . avy-goto-char))
+  :chords (" a" . avy-goto-char))
 
 (use-package company :ensure t
   :diminish company-mode
@@ -317,14 +315,14 @@ Position the cursor at its beginning, according to the current mode."
 (use-package counsel :ensure t
   :diminish ivy-mode
   :diminish counsel-mode
+  :bind (("C-r" . swiper)
+         ("C-s" . counsel-grep-or-swiper))
   :bind (:map ivy-minibuffer-map
               ("<return>" . ivy-alt-done)
               ("C-j" . ivy-done))
   :bind (:map read-expression-map ("C-r" . counsel-expression-history))
 
   :init
-  (use-package flx :ensure t)
-
   (ivy-mode 1)
   (counsel-mode 1)
   (setq-default ivy-use-virtual-buffers t
@@ -332,7 +330,12 @@ Position the cursor at its beginning, according to the current mode."
                 ivy-count-format "(%d/%d) "
                 ivy-extra-directories nil
                 ivy-initial-inputs-alist nil
-                ivy-re-builders-alist '((t . ivy--regex-fuzzy)))
+                ivy-re-builders-alist '((swiper . ivy--regex-plus)
+                                        (t . ivy--regex-fuzzy)))
+
+  (if (executable-find "rg")
+      (setq counsel-grep-base-command
+            "rg -i -M 120 --no-heading --line-number --color never '%s' %s"))
 
   (defun counsel-find-file-as-root (x)
     "Find file X with root privileges."
@@ -356,11 +359,17 @@ Position the cursor at its beginning, according to the current mode."
           (find-alternate-file file-name)
         (find-file file-name)))))
 
+(use-package expand-region :ensure t
+  :bind ("C-=" . er/expand-region))
+
 (use-package ivy-bibtex :ensure t
   :config
   (setq-default bibtex-completion-bibliography (car org-ref-default-bibliography)
                 bibtex-completion-notes-path org-ref-bibliography-notes
                 bibtex-completion-library-path org-ref-pdf-directory))
+
+(use-package ivy-hydra :ensure t
+  :demand)
 
 (use-package dired
   :config
@@ -369,8 +378,21 @@ Position the cursor at its beginning, according to the current mode."
                 dired-recursive-copies 'always
                 delete-by-moving-to-trash t))
 
+(use-package dumb-jump :ensure t
+  :init
+  (setq dumb-jump-selector 'ivy)
+  (dumb-jump-mode))
+
+(use-package ediff
+  :config
+  (setq-default ediff-window-setup-function 'ediff-setup-windows-plain
+                ediff-split-window-function 'split-window-horizontally
+                ediff-diff-options "-w"))
+
 (use-package find-file
   :config (setq-default ff-always-try-to-create t))
+
+(use-package flx :ensure t)
 
 (use-package font-lock
   :config
@@ -402,7 +424,7 @@ Position the cursor at its beginning, according to the current mode."
   (set 'imenu-auto-rescan t))
 
 (use-package imenu-anywhere :ensure t
-  :chords (" i" . nox/ivy-imenu-center)
+  :chords (" j" . nox/ivy-imenu-center)
   :config
   (defun nox/ivy-imenu-center ()
     (interactive)
@@ -413,7 +435,15 @@ Position the cursor at its beginning, according to the current mode."
 
 (use-package magit :ensure t
   :if (executable-find "git")
-  :chords (" g" . magit-status))
+  :chords (" g" . magit-status)
+  :config
+  (setq-default magit-completing-read-function 'ivy-completing-read))
+
+(use-package multiple-cursors :ensure t
+  :chords (" l" . mc/edit-lines)
+  :bind (("M-»" . mc/mark-next-like-this)
+         ("M-«" . mc/mark-previous-like-this)
+         ("C-M-«" . mc/mark-all-like-this)))
 
 (use-package org :ensure t
   :config
