@@ -6,10 +6,11 @@
   (error "This config requires at least GNU Emacs 25.1, but you're running version %s."
          emacs-version))
 
-(setq gc-cons-threshold 100000000)
-(run-with-idle-timer 5 nil (lambda () (setq gc-cons-threshold 1000000)))
+(setq-default gc-cons-threshold 100000000)
+(add-hook 'after-init-hook (lambda () (setq-default gc-cons-threshold 1000000)))
 
 (setq-default default-directory "~/"
+              private-settings-file (locate-user-emacs-file "private.el")
               temp-dir (locate-user-emacs-file "temp")
               custom-file (locate-user-emacs-file "custom.el")
               trash-directory (locate-user-emacs-file "trash"))
@@ -35,7 +36,7 @@
 ;; Appearance
 (use-package doom-themes :ensure t
   :init
-  (load-theme 'doom-tomorrow-night t)
+  (load-theme 'doom-one t)
   (doom-themes-org-config))
 
 (tool-bar-mode -1)
@@ -43,7 +44,7 @@
 (scroll-bar-mode -1)
 (fset 'yes-or-no-p 'y-or-n-p)
 
-(add-to-list 'initial-frame-alist '(fullscreen . maximized))
+(setq-default initial-frame-alist '((fullscreen . fullboth)))
 (add-hook 'after-init-hook (lambda ()
                              (when (> (display-pixel-width) 1500)
                                (split-window-horizontally))))
@@ -69,8 +70,9 @@
 ;; Mode line
 (line-number-mode t)
 (column-number-mode t)
-(display-time)
-(setq-default display-time-24hr-format t)
+(display-time-mode)
+(setq-default display-time-24hr-format t
+              display-time-load-average-threshold 1.5)
 
 
 ;; ------------------------------
@@ -82,9 +84,10 @@
  fill-column 90
 
  require-final-newline t
+ mode-require-final-newline t
  sentence-end-double-space nil
 
- scroll-margin 1
+ scroll-margin 2
  scroll-conservatively 101
  scroll-preserve-screen-position t
  mouse-wheel-scroll-amount '(1 ((shift) . 1) ((control) . nil))
@@ -101,6 +104,8 @@
  enable-recursive-minibuffers t
 
  save-interprogram-paste-before-kill t
+
+ help-window-select t
 
  backup-directory-alist `((".*" . ,temp-dir))
  auto-save-file-name-transforms `((".*" ,temp-dir t))
@@ -121,24 +126,26 @@
 
 (global-auto-revert-mode)
 
+(mouse-avoidance-mode 'banish)
+
 (defun nox/rename-file-and-buffer ()
-  "Rename current buffer and if the buffer is visiting a file, rename it too."
+  "Rename current buffer and the file it is visiting, if any."
   (interactive)
   (let ((filename (buffer-file-name)))
     (if (not (and filename (file-exists-p filename)))
         (rename-buffer (read-from-minibuffer "New name: " (buffer-name)))
       (let ((new-name (read-file-name "New name: " filename)))
-        (cond
-         ((vc-backend filename) (vc-rename-file filename new-name))
-         (t
-          (rename-file filename new-name t)
-          (set-visited-file-name new-name t t)))))))
+        (if (vc-backend filename)
+            (vc-rename-file filename new-name)
+          (rename-file filename new-name t))
+        (set-visited-file-name new-name t t)))))
 
 (defun nox/delete-file-and-buffer ()
-  "Kill the current buffer and deletes the file it is visiting."
+  "Kill the current buffer and delete the file it is visiting, if any."
   (interactive)
   (let ((filename (buffer-file-name)))
-    (when filename
+    (if (not (and filename (file-exists-p filename)))
+        (kill-buffer)
       (if (vc-backend filename)
           (vc-delete-file filename)
         (when (y-or-n-p (format "Are you sure you want to delete %s? " filename))
@@ -198,7 +205,7 @@ Position the cursor at its beginning, according to the current mode."
  (" b" . switch-to-buffer)
  (" k" . kill-this-buffer))
 
-(defhydra hydra-files (:exit t)
+(defhydra hydra-files (:color teal)
   "Files"
   ("f" find-file "Open")
   ("s" save-buffer "Save")
@@ -218,11 +225,24 @@ Position the cursor at its beginning, according to the current mode."
   ("q" nil "Quit"))
 (key-chord-define-global "cn" 'hydra-error/next-error)
 
+(defhydra hydra-org (:color teal)
+  "Org-mode"
+  ("l" org-store-link "Store link")
+  ("a" org-agenda "Agenda")
+  ("c" org-capture "Capture")
+  ("q" nil "Quit"))
+(key-chord-define-global "qo" 'hydra-org/body)
+
 
 ;; ------------------------------
 ;; Packages
 (use-package avy :ensure t
   :chords (" a" . avy-goto-char))
+
+(use-package calendar
+  :config
+  (setq-default calendar-week-start-day 1
+                calendar-date-display-form calendar-european-date-display-form))
 
 (use-package company :ensure t
   :diminish company-mode
@@ -359,35 +379,31 @@ Position the cursor at its beginning, according to the current mode."
           (find-alternate-file file-name)
         (find-file file-name)))))
 
-(use-package expand-region :ensure t
-  :bind ("C-=" . er/expand-region))
-
-(use-package ivy-bibtex :ensure t
-  :config
-  (setq-default bibtex-completion-bibliography (car org-ref-default-bibliography)
-                bibtex-completion-notes-path org-ref-bibliography-notes
-                bibtex-completion-library-path org-ref-pdf-directory))
-
 (use-package ivy-hydra :ensure t
-  :demand)
+  :defer 2)
 
 (use-package dired
   :config
   (setq-default dired-listing-switches "-alh"
                 dired-recursive-deletes 'always
                 dired-recursive-copies 'always
-                delete-by-moving-to-trash t))
+                delete-by-moving-to-trash t
+                dired-auto-revert-buffer t))
 
 (use-package dumb-jump :ensure t
-  :init
-  (setq dumb-jump-selector 'ivy)
-  (dumb-jump-mode))
+  :bind (("C-M-g" . dumb-jump-go)
+         ("C-M-p" . dumb-jump-back)
+         ("C-M-q" . dumb-jump-quick-look))
+  :config (setq dumb-jump-selector 'ivy))
 
 (use-package ediff
   :config
   (setq-default ediff-window-setup-function 'ediff-setup-windows-plain
                 ediff-split-window-function 'split-window-horizontally
                 ediff-diff-options "-w"))
+
+(use-package expand-region :ensure t
+  :bind ("C-=" . er/expand-region))
 
 (use-package find-file
   :config (setq-default ff-always-try-to-create t))
@@ -443,21 +459,25 @@ Position the cursor at its beginning, according to the current mode."
   :chords (" l" . mc/edit-lines)
   :bind (("M-»" . mc/mark-next-like-this)
          ("M-«" . mc/mark-previous-like-this)
-         ("C-M-«" . mc/mark-all-like-this)))
+         ("C-M-«" . mc/mark-all-like-this)
+         ("M-<mouse-1>" . mc/add-cursor-on-click))
+  :init
+  (unbind-key "M-<down-mouse-1>"))
 
 (use-package org :ensure t
   :config
+  (setq-default
+   org-agenda-files '("~/Personal/Org/")
+   org-default-notes-file (concat (car org-agenda-files) "Tasks.org")
+   org-refile-targets '((org-agenda-files . (:maxlevel . 6)))
+
+   org-src-fontify-natively t
+   org-src-tab-acts-natively t
+   org-catch-invisible-edits 'error)
+
   (add-hook 'org-mode-hook (lambda ()
                              (org-indent-mode)
                              (company-mode 0))))
-
-(use-package org-ref :ensure t
-  :init
-  (setq-default org-ref-completion-library 'org-ref-ivy-cite
-                reftex-default-bibliography '("~/Documents/Bibliography/References.bib")
-                org-ref-default-bibliography reftex-default-bibliography
-                org-ref-bibliography-notes "~/Documents/Bibliography/Notes.org"
-                org-ref-pdf-directory "~/Documents/Bibliography/PDFs/"))
 
 (use-package pdf-tools :ensure t
   :mode (("\\.pdf\\'" . pdf-view-mode))
@@ -475,13 +495,13 @@ Position the cursor at its beginning, according to the current mode."
                 recentf-max-saved-items 150
                 recentf-exclude '("COMMIT_MSG" "COMMIT_EDITMSG")))
 
-(use-package tramp
-  :config
-  (setq-default tramp-default-method "ssh")
-  (add-to-list 'tramp-default-proxies-alist
-               '(nil "\\`root\\'" "/ssh:%h:"))
-  (add-to-list 'tramp-default-proxies-alist
-               '((regexp-quote (system-name)) nil nil)))
+;; (use-package tramp
+;;   :config
+;;   (setq-default tramp-default-method "ssh")
+;;   (add-to-list 'tramp-default-proxies-alist
+;;                '(nil "\\`root\\'" "/ssh:%h:"))
+;;   (add-to-list 'tramp-default-proxies-alist
+;;                '((regexp-quote (system-name)) nil nil)))
 
 (use-package uniquify
   :config
@@ -491,7 +511,7 @@ Position the cursor at its beginning, according to the current mode."
 
 
 ;; ------------------------------
-;; MODES
+;; Modes
 (use-package cc-mode
   :mode (("\\.c\\'" . c-mode)
          ("\\.cpp\\'" . c++-mode)
@@ -562,3 +582,9 @@ Position the cursor at its beginning, according to the current mode."
 
   (add-hook 'c-mode-common-hook 'nox/c-hook)
   (setq-default c-hanging-semi&comma-criteria '((lambda () 'stop))))
+
+
+;; ------------------------------
+;; Machine specific settings
+(if (file-exists-p private-settings-file)
+    (load private-settings-file))
