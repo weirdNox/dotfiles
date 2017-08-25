@@ -34,10 +34,9 @@
 
 ;; ------------------------------
 ;; Appearance
-(use-package doom-themes :ensure t
+(use-package color-theme-sanityinc-tomorrow :ensure t
   :init
-  (load-theme 'doom-one t)
-  (doom-themes-org-config))
+  (load-theme 'sanityinc-tomorrow-night t))
 
 (tool-bar-mode -1)
 (menu-bar-mode -1)
@@ -260,7 +259,14 @@ Position the cursor at its beginning, according to the current mode."
   :init
   (global-company-mode)
   (setq-default company-require-match nil
-                company-idle-delay nil))
+                company-idle-delay nil
+                company-dabbrev-downcase nil
+                company-dabbrev-ignore-case t
+                company-transformers '(company-sort-by-occurrence company-sort-by-backend-importance)
+                company-backends '(company-capf
+                                   company-files
+                                   (company-dabbrev-code company-gtags company-etags company-keywords)
+                                   company-dabbrev)))
 
 (use-package compile
   :chords (" c" . nox/make)
@@ -391,9 +397,11 @@ Position the cursor at its beginning, according to the current mode."
                 dired-auto-revert-buffer t))
 
 (use-package dumb-jump :ensure t
-  :bind (("C-M-g" . dumb-jump-go)
-         ("C-M-p" . dumb-jump-back)
-         ("C-M-q" . dumb-jump-quick-look))
+  :bind (("M-g j" . dumb-jump-go)
+         ("M-g o" . dumb-jump-go-other-window)
+         ("M-g i" . dumb-jump-go-prompt)
+         ("M-g x" . dumb-jump-go-prefer-external)
+         ("M-g z" . dumb-jump-go-prefer-external-other-window))
   :config (setq dumb-jump-selector 'ivy))
 
 (use-package ediff
@@ -468,8 +476,12 @@ Position the cursor at its beginning, according to the current mode."
   :config
   (setq-default
    org-agenda-files '("~/Personal/Org/")
-   org-default-notes-file (concat (car org-agenda-files) "Tasks.org")
+   org-default-notes-file (concat (car org-agenda-files) "Inbox.org")
    org-refile-targets '((org-agenda-files . (:maxlevel . 6)))
+
+   org-todo-keywords '((sequence "WAITING(w@/!)" "TODO(t)"  "|" "DONE(d!)" "CANCELED(c@)"))
+
+   org-agenda-skip-deadline-prewarning-if-scheduled t
 
    org-src-fontify-natively t
    org-src-tab-acts-natively t
@@ -495,13 +507,13 @@ Position the cursor at its beginning, according to the current mode."
                 recentf-max-saved-items 150
                 recentf-exclude '("COMMIT_MSG" "COMMIT_EDITMSG")))
 
-;; (use-package tramp
-;;   :config
-;;   (setq-default tramp-default-method "ssh")
-;;   (add-to-list 'tramp-default-proxies-alist
-;;                '(nil "\\`root\\'" "/ssh:%h:"))
-;;   (add-to-list 'tramp-default-proxies-alist
-;;                '((regexp-quote (system-name)) nil nil)))
+(use-package tramp
+  :config
+  (setq-default tramp-default-method "ssh")
+  (add-to-list 'tramp-default-proxies-alist
+               '(nil "\\`root\\'" "/ssh:%h:"))
+  (add-to-list 'tramp-default-proxies-alist
+               '((regexp-quote (system-name)) nil nil)))
 
 (use-package uniquify
   :config
@@ -582,6 +594,14 @@ Position the cursor at its beginning, according to the current mode."
 
   (add-hook 'c-mode-common-hook 'nox/c-hook)
   (setq-default c-hanging-semi&comma-criteria '((lambda () 'stop))))
+
+(use-package go-mode :ensure t
+  :config
+  (add-hook 'go-mode-hook
+            (lambda () (add-hook 'before-save-hook 'gofmt-before-save t t))))
+
+(use-package web-mode :ensure t
+  :mode (("\\.\\(go\\)?html?\\'" . web-mode)))
 
 
 ;; ------------------------------
