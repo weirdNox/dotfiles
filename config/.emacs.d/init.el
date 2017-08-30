@@ -44,9 +44,6 @@
 (fset 'yes-or-no-p 'y-or-n-p)
 
 (setq-default initial-frame-alist '((fullscreen . fullboth)))
-(add-hook 'after-init-hook (lambda ()
-                             (when (> (display-pixel-width) 1500)
-                               (split-window-horizontally))))
 
 (cond
  ((member "DejaVu Sans Mono" (font-family-list))
@@ -180,6 +177,30 @@ Position the cursor at its beginning, according to the current mode."
   (move-end-of-line nil)
   (newline-and-indent))
 
+;; From frame-fns.el
+(defun nox/get-frame-name (&optional frame)
+  "Return the string that names FRAME (a frame).  Default is selected frame."
+  (unless frame (setq frame  (selected-frame)))
+  (if (framep frame)
+      (cdr (assq 'name (frame-parameters frame)))
+    (error "Function `get-frame-name': Argument not a frame: `%s'" frame)))
+
+(defun nox/get-frame (frame)
+  "Return a frame, if any, named FRAME (a frame or a string).
+If none, return nil.
+If FRAME is a frame, it is returned."
+  (cond ((framep frame) frame)
+        ((stringp frame)
+         (catch 'get-a-frame-found
+           (dolist (fr (frame-list))
+             (when (string= frame (nox/get-frame-name fr))
+               (throw 'get-a-frame-found fr)))
+           nil))
+        (t (error
+            "Function `get-frame-name': Arg neither a string nor a frame: `%s'"
+            frame))))
+
+
 ;; ------------------------------
 ;; Keybindings
 (use-package hydra :ensure t)
@@ -195,7 +216,8 @@ Position the cursor at its beginning, according to the current mode."
  ("<C-M-return>" . nox/open-line-above)
  ("<backtab>" . indent-for-tab-command)
  ("<C-tab>" . indent-region)
- ("M-o" . other-window))
+ ("M-o" . other-window)
+ ("M-O" . (lambda () (interactive) (other-window -1))))
 
 (bind-chords
  (" f" . find-file)
@@ -342,7 +364,8 @@ Position the cursor at its beginning, according to the current mode."
   :diminish ivy-mode
   :diminish counsel-mode
   :bind (("C-r" . swiper)
-         ("C-s" . counsel-grep-or-swiper))
+         ("C-s" . counsel-grep-or-swiper)
+         ("C-c C-s" . isearch-forward))
   :bind (:map ivy-minibuffer-map
               ("<return>" . ivy-alt-done)
               ("C-j" . ivy-done))
@@ -440,7 +463,49 @@ Position the cursor at its beginning, according to the current mode."
 (use-package gdb-mi
   :config
   (setq-default gdb-many-windows t
-                gdb-show-main t))
+                gdb-show-main t)
+
+  (defun nox/gdb-watch (expr)
+    (interactive "sEnter expression: ")
+    (let ((minor-mode (buffer-local-value 'gud-minor-mode gud-comint-buffer)))
+      (if (eq minor-mode 'gdbmi)
+          (progn
+            (setq expr (apply 'concat (split-string expr " ")))
+            (message expr)
+            (set-text-properties 0 (length expr) nil expr)
+            (gdb-input (concat "-var-create - * " expr "")
+                       `(lambda () (gdb-var-create-handler ,expr))))
+        (message "gud-watch is a no-op in this mode."))))
+
+  (defun nox/switch-to-gdb ()
+    (interactive)
+    (let ((frame (nox/get-frame "Emacs GDB")))
+      (if frame
+          (select-frame frame)
+        (select-frame (make-frame '((fullscreen . maximized)
+                                    (name . "Emacs GDB")))))
+      (gdb-restore-windows)))
+
+  (defun nox/kill-gdb ()
+    (interactive)
+    (ignore-errors (gud-basic-call "quit"))
+    (let ((frame (nox/get-frame "Emacs GDB")))
+      (if frame
+          (delete-frame frame))))
+
+  (advice-add
+   'gdb :before
+   (lambda (&rest ignored)
+     (nox/kill-gdb)
+     (select-frame (make-frame '((fullscreen . maximized)
+                                 (name . "Emacs GDB"))))))
+
+  ;; Prevent buffer stealing
+  (advice-add
+   'gdb-inferior-filter :around
+   (lambda (old proc string)
+     (with-current-buffer (gdb-get-buffer-create 'gdb-inferior-io)
+       (comint-output-filter proc string)))))
 
 (use-package imenu
   :config
@@ -505,7 +570,12 @@ Position the cursor at its beginning, according to the current mode."
   (recentf-mode 1)
   (setq-default recentf-auto-cleanup 'never
                 recentf-max-saved-items 150
-                recentf-exclude '("COMMIT_MSG" "COMMIT_EDITMSG")))
+                recentf-exclude '("COMMIT_MSG" "COMMIT_EDITMSG"))
+  (add-hook 'server-visit-hook 'recentf-save-list))
+
+(use-package server
+  :init
+  (add-hook 'after-make-frame-functions (lambda (frame) (select-frame-set-input-focus frame)) t))
 
 (use-package tramp
   :config

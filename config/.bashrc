@@ -1,0 +1,1 @@
+alias ec="emacsclient -n"
