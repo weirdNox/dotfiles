@@ -177,28 +177,22 @@ Position the cursor at its beginning, according to the current mode."
   (move-end-of-line nil)
   (newline-and-indent))
 
-;; From frame-fns.el
-(defun nox/get-frame-name (&optional frame)
-  "Return the string that names FRAME (a frame).  Default is selected frame."
-  (unless frame (setq frame  (selected-frame)))
-  (if (framep frame)
-      (cdr (assq 'name (frame-parameters frame)))
-    (error "Function `get-frame-name': Argument not a frame: `%s'" frame)))
+(defun nox/pos-at-line (line &optional column)
+  (save-excursion
+    (goto-char (point-min))
+    (forward-line (- line 1))
+    (move-to-column (or column 0))
+    (point)))
 
-(defun nox/get-frame (frame)
-  "Return a frame, if any, named FRAME (a frame or a string).
-If none, return nil.
-If FRAME is a frame, it is returned."
-  (cond ((framep frame) frame)
-        ((stringp frame)
-         (catch 'get-a-frame-found
-           (dolist (fr (frame-list))
-             (when (string= frame (nox/get-frame-name fr))
-               (throw 'get-a-frame-found fr)))
-           nil))
-        (t (error
-            "Function `get-frame-name': Arg neither a string nor a frame: `%s'"
-            frame))))
+(defun nox/get-line-from-file (file line &optional trim)
+  (with-current-buffer (find-file-noselect file)
+    (save-excursion
+      (goto-char (point-min))
+      (forward-line (- line 1))
+      (let ((string (thing-at-point 'line)))
+        (if trim
+            (replace-regexp-in-string "\\(\\`[[:space:]\n]*\\|[[:space:]\n]*\\'\\)" "" string)
+          string)))))
 
 
 ;; ------------------------------
@@ -285,9 +279,11 @@ If FRAME is a frame, it is returned."
                 company-dabbrev-downcase nil
                 company-dabbrev-ignore-case t
                 company-transformers '(company-sort-by-occurrence company-sort-by-backend-importance)
-                company-backends '(company-capf
-                                   company-files
-                                   (company-dabbrev-code company-gtags company-etags company-keywords)
+                company-backends '((company-capf
+                                    company-files
+                                    company-keywords
+                                    company-gtags
+                                    company-dabbrev-code)
                                    company-dabbrev)))
 
 (use-package compile
@@ -365,7 +361,7 @@ If FRAME is a frame, it is returned."
   :diminish counsel-mode
   :bind (("C-r" . swiper)
          ("C-s" . counsel-grep-or-swiper)
-         ("C-c C-s" . isearch-forward))
+         ("C-S-s" . isearch-forward))
   :bind (:map ivy-minibuffer-map
               ("<return>" . ivy-alt-done)
               ("C-j" . ivy-done))
@@ -461,51 +457,160 @@ If FRAME is a frame, it is returned."
         ("\\<\\(NOTE\\)" 1 'font-lock-note-face t))))))
 
 (use-package gdb-mi
+  :chords ("qd" . nox/hydra-gdb/body)
   :config
   (setq-default gdb-many-windows t
                 gdb-show-main t)
 
+  (defhydra nox/hydra-gdb (:exit nil :foreign-keys run :hint nil)
+    "
+Debug it!!
+_O_pen    _R_un          _b_reak      _n_ext (_N_: inst)     _w_atch
+_k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
+^ ^       _s_top         _r_emove     _o_ut
+^ ^       ^ ^            ^ ^          _u_ntil"
+    ("O" gdb :exit t)
+    ("k" nox/gdb-kill :exit t)
+    ("R" gud-run)
+    ("c" gud-cont)
+    ("s" nox/gdb-stop)
+    ("b" gud-break)
+    ("t" gud-tbreak)
+    ("r" gud-remove)
+    ("n" gud-next)
+    ("N" gud-nexti)
+    ("i" gud-step)
+    ("I" gud-stepi)
+    ("o" gud-finish)
+    ("u" gud-until)
+    ("w" nox/gdb-watch)
+    ("q" ignore :exit t)
+    ("C-g" ignore :exit t))
+
+  (defvar nox/gdb-frame nil)
+  (defvar nox/gdb-last-file nil)
+  (defvar nox/gdb-last-args nil)
+
+  (defun nox/gdb-stop ()
+    (interactive)
+    (with-current-buffer gud-comint-buffer
+      (comint-interrupt-subjob)
+      (gud-call (gdb-gud-context-command "-exec-interrupt"))))
+
   (defun nox/gdb-watch (expr)
     (interactive "sEnter expression: ")
-    (let ((minor-mode (buffer-local-value 'gud-minor-mode gud-comint-buffer)))
-      (if (eq minor-mode 'gdbmi)
-          (progn
-            (setq expr (apply 'concat (split-string expr " ")))
-            (message expr)
-            (set-text-properties 0 (length expr) nil expr)
-            (gdb-input (concat "-var-create - * " expr "")
-                       `(lambda () (gdb-var-create-handler ,expr))))
-        (message "gud-watch is a no-op in this mode."))))
+    (when (eq 'gdbmi (buffer-local-value 'gud-minor-mode gud-comint-buffer))
+      (setq expr (replace-regexp-in-string "[ \t\r\n\v\f]" "" expr))
+      (when (= (length expr) 0)
+        (setq expr (if (and transient-mark-mode mark-active)
+                       (buffer-substring (region-beginning) (region-end))
+                     (concat (if (derived-mode-p 'gdb-registers-mode) "$")
+                             (tooltip-identifier-from-point (point)))))
+        (setq expr (replace-regexp-in-string "[ \t\r\n\v\f]" "" expr)))
+      (set-text-properties 0 (length expr) nil expr)
+      (gdb-input (concat "-var-create - * " expr "")
+                 `(lambda () (gdb-var-create-handler ,expr)))))
 
-  (defun nox/switch-to-gdb ()
+  (defun nox/gdb-kill (&optional frame)
     (interactive)
-    (let ((frame (nox/get-frame "Emacs GDB")))
-      (if frame
-          (select-frame frame)
-        (select-frame (make-frame '((fullscreen . maximized)
-                                    (name . "Emacs GDB")))))
-      (gdb-restore-windows)))
-
-  (defun nox/kill-gdb ()
-    (interactive)
-    (ignore-errors (gud-basic-call "quit"))
-    (let ((frame (nox/get-frame "Emacs GDB")))
-      (if frame
-          (delete-frame frame))))
+    (let ((more-frames (< 1 (length (visible-frame-list)))))
+      (if (and more-frames (not frame) (frame-live-p nox/gdb-frame))
+          (delete-frame nox/gdb-frame t) ; Only delete frame when running command, this
+                                        ; function will be called again
+        (let ((process (get-buffer-process gud-comint-buffer)))
+          (if (and process (or (not frame) (eq frame nox/gdb-frame)))
+              (kill-process process))))))
+  (add-to-list 'delete-frame-functions 'nox/gdb-kill) ; Kill GDB when closing its frame
 
   (advice-add
-   'gdb :before
-   (lambda (&rest ignored)
-     (nox/kill-gdb)
-     (select-frame (make-frame '((fullscreen . maximized)
-                                 (name . "Emacs GDB"))))))
+   'gdb :around
+   (lambda (gdb arg)
+     (interactive "P")
+     (let* ((this-frame (equal arg '(16)))
+            (stop-or-specify (or this-frame (equal arg '(4)))))
+       (if stop-or-specify (nox/gdb-kill))
+       (let ((frame-live (and (not stop-or-specify) (frame-live-p nox/gdb-frame)))
+             (gdb-running (and (not stop-or-specify) (get-buffer-process gud-comint-buffer))))
+         (cond ((and gdb-running frame-live)
+                (with-selected-frame nox/gdb-frame (gdb-restore-windows)))
+               ((and gdb-running (not frame-live))
+                (setq nox/gdb-frame (make-frame '((fullscreen . maximized) (name . "Emacs GDB"))))
+                (with-selected-frame nox/gdb-frame (gdb-restore-windows)))
+               (t
+                (let* ((executable (or (unless stop-or-specify nox/gdb-last-file)
+                                       (expand-file-name (read-file-name "Select file to debug: " nil nox/gdb-last-file t nox/gdb-last-file 'file-executable-p))))
+                       (extra-args (or (unless stop-or-specify nox/gdb-last-args)
+                                       (read-string "Extra arguments: " nox/gdb-last-args)))
+                       (command-line (concat "gdb -i=mi " executable " " extra-args)))
+                  (when (file-executable-p executable)
+                    (setq nox/gdb-last-file executable)
+                    (setq nox/gdb-last-args extra-args)
+                    (if this-frame
+                        (progn
+                          (setq nox/gdb-frame (selected-frame))
+                          (modify-frame-parameters nil '((name . "Emacs GDB"))))
+                      (unless frame-live
+                        (setq nox/gdb-frame (make-frame '((fullscreen . maximized) (name . "Emacs GDB"))))))
+                    (with-selected-frame nox/gdb-frame (funcall gdb command-line)))))))
+       (select-frame-set-input-focus nox/gdb-frame))))
 
   ;; Prevent buffer stealing
   (advice-add
    'gdb-inferior-filter :around
    (lambda (old proc string)
      (with-current-buffer (gdb-get-buffer-create 'gdb-inferior-io)
-       (comint-output-filter proc string)))))
+       (comint-output-filter proc string))))
+
+  ;; Better assembly view
+  (def-gdb-auto-update-trigger gdb-invalidate-disassembly
+    "-data-disassemble -s $pc -e \"$pc + 150\" -- 4"
+    gdb-disassembly-handler
+    ;; We update disassembly only after we have actual frame information
+    ;; about all threads, so no there's `update' signal in this list
+    '(start update-disassembly))
+
+  (defun gdb-disassembly-handler-custom ()
+    (let* ((lines (bindat-get-field (gdb-json-partial-output "src_and_asm_line") 'asm_insns))
+           (address (bindat-get-field (gdb-current-buffer-frame) 'addr))
+           (table (make-gdb-table))
+           (marked-line nil))
+      (dolist (line lines)
+        (let ((line-number (bindat-get-field line 'line)))
+          (if (not line-number)
+              (progn
+                (gdb-table-add-row table
+                                   (list
+                                    (bindat-get-field line 'address)
+                                    (bindat-get-field line 'inst)))
+                (when (string-equal (bindat-get-field line 'address) address)
+                  (setq marked-line (length (gdb-table-rows table)))))
+            (gdb-table-add-row table
+                               (list
+                                (format "Line %s" (bindat-get-field line 'line))
+                                (nox/get-line-from-file
+                                 (bindat-get-field line 'fullname)
+                                 (string-to-number (bindat-get-field line 'line)) t)))
+            (let ((line-beg (length (gdb-table-rows table)))
+                  (current nil))
+              (dolist (instr (bindat-get-field line 'line_asm_insn))
+                (gdb-table-add-row table
+                                   (list
+                                    (bindat-get-field instr 'address)
+                                    (bindat-get-field instr 'inst)))
+                (when (string-equal (bindat-get-field instr 'address) address)
+                  (setq marked-line (length (gdb-table-rows table)))))))))
+      (insert (gdb-table-string table " "))
+      (gdb-disassembly-place-breakpoints)
+      (when marked-line
+        (setq fringe-indicator-alist
+              (if (string-equal gdb-frame-number "0")
+                  nil
+                '((overlay-arrow . hollow-right-triangle))))
+        (let ((window (get-buffer-window (current-buffer) 0)))
+          (set-window-point window (gdb-mark-line marked-line
+                                                  gdb-disassembly-position))))
+      (setq mode-name (gdb-current-context-mode-name
+                       (concat "Disassembly: " (bindat-get-field (gdb-current-buffer-frame) 'func)))))))
 
 (use-package imenu
   :config
