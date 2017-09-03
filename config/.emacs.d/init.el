@@ -19,7 +19,7 @@
 (setq-default package-archives '(("gnu" . "https://elpa.gnu.org/packages/")
                                  ("melpa" . "https://melpa.org/packages/")))
 (package-initialize)
-(setq package-enable-at-startup nil)
+(setq-default package-enable-at-startup nil)
 
 (unless (package-installed-p 'use-package)
   (package-refresh-contents)
@@ -35,8 +35,7 @@
 ;; ------------------------------
 ;; Appearance
 (use-package color-theme-sanityinc-tomorrow :ensure t
-  :init
-  (load-theme 'sanityinc-tomorrow-night t))
+  :init (load-theme 'sanityinc-tomorrow-night t))
 
 (tool-bar-mode -1)
 (menu-bar-mode -1)
@@ -193,6 +192,12 @@ Position the cursor at its beginning, according to the current mode."
         (if trim
             (replace-regexp-in-string "\\(\\`[[:space:]\n]*\\|[[:space:]\n]*\\'\\)" "" string)
           string)))))
+
+(defun nox/get-entire-buffer (buffer)
+  (with-current-buffer buffer
+    (save-restriction
+      (widen)
+      (buffer-substring-no-properties (point-min) (point-max)))))
 
 
 ;; ------------------------------
@@ -379,8 +384,8 @@ Position the cursor at its beginning, according to the current mode."
                                         (t . ivy--regex-fuzzy)))
 
   (if (executable-find "rg")
-      (setq counsel-grep-base-command
-            "rg -i -M 120 --no-heading --line-number --color never '%s' %s"))
+      (setq-default counsel-grep-base-command
+                    "rg -i -M 120 --no-heading --line-number --color never '%s' %s"))
 
   (defun counsel-find-file-as-root (x)
     "Find file X with root privileges."
@@ -459,21 +464,38 @@ Position the cursor at its beginning, according to the current mode."
 (use-package gdb-mi
   :chords ("qd" . nox/hydra-gdb/body)
   :config
+  (defvar nox/gdb-frame nil)
+  (defvar nox/gdb-last-file nil)
+  (defvar nox/gdb-last-args nil)
+  (defvar nox/gdb-disassembly-show-source t)
+
   (setq-default gdb-many-windows t
-                gdb-show-main t)
+                gdb-show-main t
+                gdb-display-buffer-other-frame-action
+                '((display-buffer-reuse-window display-buffer-pop-up-frame)
+                  (reusable-frames . visible)
+                  (inhibit-same-window . t)
+                  (pop-up-frame-parameters (minibuffer . t)
+                                           (unsplittable . t)
+                                           (width . 100)
+                                           (fullscreen . fullheight)
+                                           (border-width . 0))))
+
+  (add-to-list 'gdb-disassembly-font-lock-keywords '("0x[[:xdigit:]]+" . font-lock-constant-face) t)
+  (add-to-list 'gdb-disassembly-font-lock-keywords '("Line.*$" . font-lock-comment-face) t)
 
   (defhydra nox/hydra-gdb (:exit nil :foreign-keys run :hint nil)
     "
 Debug it!!
-_O_pen    _R_un          _b_reak      _n_ext (_N_: inst)     _w_atch
+_O_pen    _R_un          _b_reak      _n_ext (_N_: inst)     _w_atch     _S_how source? %-3`nox/gdb-disassembly-show-source
 _k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
 ^ ^       _s_top         _r_emove     _o_ut
 ^ ^       ^ ^            ^ ^          _u_ntil"
     ("O" gdb :exit t)
     ("k" nox/gdb-kill :exit t)
-    ("R" gud-run)
+    ("R" gud-run :exit t)
     ("c" gud-cont)
-    ("s" nox/gdb-stop)
+    ("s" nox/gdb-stop :exit t)
     ("b" gud-break)
     ("t" gud-tbreak)
     ("r" gud-remove)
@@ -483,13 +505,11 @@ _k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
     ("I" gud-stepi)
     ("o" gud-finish)
     ("u" gud-until)
-    ("w" nox/gdb-watch)
+    ("w" nox/gdb-watch :exit t)
+    ("S" (lambda () (interactive) (setq nox/gdb-disassembly-show-source
+                                        (not nox/gdb-disassembly-show-source))))
     ("q" ignore :exit t)
     ("C-g" ignore :exit t))
-
-  (defvar nox/gdb-frame nil)
-  (defvar nox/gdb-last-file nil)
-  (defvar nox/gdb-last-args nil)
 
   (defun nox/gdb-stop ()
     (interactive)
@@ -561,12 +581,53 @@ _k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
      (with-current-buffer (gdb-get-buffer-create 'gdb-inferior-io)
        (comint-output-filter proc string))))
 
+  (defun gud-display-line (true-file line)
+    (let* ((last-nonmenu-event t)	 ; Prevent use of dialog box for questions.
+           (buffer
+            (with-current-buffer gud-comint-buffer
+              (gud-find-file true-file)))
+           (window (and buffer
+                        (or (get-buffer-window buffer)
+                            (display-buffer buffer '(nil (inhibit-same-window . t)
+                                                         (inhibit-switch-frame t))))))
+           (pos))
+      (when buffer
+        (with-current-buffer buffer
+          (unless (or (verify-visited-file-modtime buffer) gud-keep-buffer)
+            (if (yes-or-no-p
+                 (format "File %s changed on disk.  Reread from disk? "
+                         (buffer-name)))
+                (revert-buffer t t)
+              (setq gud-keep-buffer t)))
+          (save-restriction
+            (widen)
+            (goto-char (point-min))
+            (forward-line (1- line))
+            (setq pos (point))
+            (or gud-overlay-arrow-position
+                (setq gud-overlay-arrow-position (make-marker)))
+            (set-marker gud-overlay-arrow-position (point) (current-buffer))
+            (when (featurep 'hl-line)
+              (cond
+               (global-hl-line-mode
+                (global-hl-line-highlight))
+               ((and hl-line-mode hl-line-sticky-flag)
+                (hl-line-highlight)))))
+          (cond ((or (< pos (point-min)) (> pos (point-max)))
+                 (widen)
+                 (goto-char pos))))
+        (when window
+          (set-window-point window gud-overlay-arrow-position)
+          (if (eq gud-minor-mode 'gdbmi)
+              (setq gdb-source-window window))
+          (with-selected-window window (recenter 0))))))
+
   ;; Better assembly view
   (def-gdb-auto-update-trigger gdb-invalidate-disassembly
-    "-data-disassemble -s $pc -e \"$pc + 150\" -- 4"
+    (if nox/gdb-disassembly-show-source
+        "-data-disassemble -s $pc -e \"$pc + 200\" -- 4"
+      "-data-disassemble -s $pc -e \"$pc + 200\" -- 0")
     gdb-disassembly-handler
-    ;; We update disassembly only after we have actual frame information
-    ;; about all threads, so no there's `update' signal in this list
     '(start update-disassembly))
 
   (defun gdb-disassembly-handler-custom ()
@@ -590,15 +651,13 @@ _k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
                                 (nox/get-line-from-file
                                  (bindat-get-field line 'fullname)
                                  (string-to-number (bindat-get-field line 'line)) t)))
-            (let ((line-beg (length (gdb-table-rows table)))
-                  (current nil))
-              (dolist (instr (bindat-get-field line 'line_asm_insn))
-                (gdb-table-add-row table
-                                   (list
-                                    (bindat-get-field instr 'address)
-                                    (bindat-get-field instr 'inst)))
-                (when (string-equal (bindat-get-field instr 'address) address)
-                  (setq marked-line (length (gdb-table-rows table)))))))))
+            (dolist (instr (bindat-get-field line 'line_asm_insn))
+              (gdb-table-add-row table
+                                 (list
+                                  (bindat-get-field instr 'address)
+                                  (bindat-get-field instr 'inst)))
+              (when (string-equal (bindat-get-field instr 'address) address)
+                (setq marked-line (length (gdb-table-rows table))))))))
       (insert (gdb-table-string table " "))
       (gdb-disassembly-place-breakpoints)
       (when marked-line
@@ -610,7 +669,70 @@ _k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
           (set-window-point window (gdb-mark-line marked-line
                                                   gdb-disassembly-position))))
       (setq mode-name (gdb-current-context-mode-name
-                       (concat "Disassembly: " (bindat-get-field (gdb-current-buffer-frame) 'func)))))))
+                       (concat "Disassembly: " (bindat-get-field (gdb-current-buffer-frame) 'func))))))
+
+  (defun gdb-var-update-handler ()
+    (let ((changelist (bindat-get-field (gdb-json-partial-output) 'changelist)))
+      (dolist (var gdb-var-list)
+        (setcar (nthcdr 5 var) nil))
+      (let ((temp-var-list gdb-var-list))
+        (dolist (change changelist)
+          (let* ((varnum (bindat-get-field change 'name))
+                 (var (assoc varnum gdb-var-list))
+                 (new-num (bindat-get-field change 'new_num_children))
+                 (new-value (bindat-get-field change 'value)))
+            (when var
+              (let ((scope (bindat-get-field change 'in_scope))
+                    (has-more (bindat-get-field change 'has_more)))
+                (cond ((string-equal scope "false")
+                       (if gdb-delete-out-of-scope
+                           (gdb-var-delete-1 var varnum)
+                         (setcar (nthcdr 5 var) 'out-of-scope)))
+                      ((string-equal scope "true")
+                       (setcar (nthcdr 6 var) has-more)
+                       (when (and new-value
+                                  (not new-num)
+                                  (or (not has-more)
+                                      (string-equal has-more "0")))
+                         (setcar (nthcdr 4 var) new-value)
+                         (setcar (nthcdr 5 var) 'changed)))
+                      ((string-equal scope "invalid")
+                       (gdb-var-delete-1 var varnum)))))
+            (let ((var-list nil) var1
+                  (children (bindat-get-field change 'new_children)))
+              (when new-num
+                (setq var1 (pop temp-var-list))
+                (while var1
+                  (if (string-equal varnum (car var1))
+                      (let ((new (string-to-number new-num))
+                            (previous (string-to-number (nth 2 var1))))
+                        (setcar (nthcdr 2 var1) new-num)
+                        (push var1 var-list)
+                        (cond
+                         ((> new previous)
+                          ;; Add new children to list.
+                          (dotimes (_ previous)
+                            (push (pop temp-var-list) var-list))
+                          (dolist (child children)
+                            (let ((varchild
+                                   (list (bindat-get-field child 'name)
+                                         (bindat-get-field child 'exp)
+                                         (bindat-get-field child 'numchild)
+                                         (bindat-get-field child 'type)
+                                         (bindat-get-field child 'value)
+                                         'changed
+                                         (bindat-get-field child 'has_more))))
+                              (push varchild var-list))))
+                         ;; Remove deleted children from list.
+                         ((< new previous)
+                          (dotimes (_ new)
+                            (push (pop temp-var-list) var-list))
+                          (dotimes (_ (- previous new))
+                            (pop temp-var-list)))))
+                    (push var1 var-list))
+                  (setq var1 (pop temp-var-list)))
+                (setq gdb-var-list (nreverse var-list))))))))
+    (gdb-speedbar-update)))
 
 (use-package imenu
   :config
@@ -682,13 +804,20 @@ _k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
   :init
   (add-hook 'after-make-frame-functions (lambda (frame) (select-frame-set-input-focus frame)) t))
 
+(use-package speedbar
+  :config
+  (setq-default speedbar-frame-parameters '((minibuffer . t)
+                                            (unsplittable . t)
+                                            (width . 30)
+                                            (border-width . 0)
+                                            (left-fringe . 0))))
+
 (use-package tramp
   :config
-  (setq-default tramp-default-method "ssh")
-  (add-to-list 'tramp-default-proxies-alist
-               '(nil "\\`root\\'" "/ssh:%h:"))
-  (add-to-list 'tramp-default-proxies-alist
-               '((regexp-quote (system-name)) nil nil)))
+  (setq-default tramp-default-method "ssh"
+                tramp-default-proxies-alist
+                '(((regexp-quote (system-name)) nil nil)
+                  (nil "\\`root\\'" "/ssh:%h:"))))
 
 (use-package uniquify
   :config
