@@ -19,7 +19,8 @@
 (setq-default package-archives '(("gnu" . "https://elpa.gnu.org/packages/")
                                  ("melpa" . "https://melpa.org/packages/")))
 (package-initialize)
-(setq-default package-enable-at-startup nil)
+(setq-default package-enable-at-startup nil
+              load-prefer-newer t)
 
 (unless (package-installed-p 'use-package)
   (package-refresh-contents)
@@ -82,7 +83,7 @@
  mode-require-final-newline t
  sentence-end-double-space nil
 
- scroll-margin 2
+ scroll-margin 1
  scroll-conservatively 101
  scroll-preserve-screen-position t
  mouse-wheel-scroll-amount '(1 ((shift) . 1) ((control) . nil))
@@ -96,28 +97,22 @@
  global-mark-ring-max 5000
  large-file-warning-threshold (* 100 1024 1024)
 
- enable-recursive-minibuffers t
-
  save-interprogram-paste-before-kill t
-
- help-window-select t
 
  backup-directory-alist `((".*" . ,temp-dir))
  auto-save-file-name-transforms `((".*" ,temp-dir t))
  delete-old-versions t
  kept-new-versions 6
  kept-old-versions 2
- version-control t
-
- load-prefer-newer t)
-
-(add-hook 'before-save-hook 'delete-trailing-whitespace)
-(add-hook 'after-save-hook 'executable-make-buffer-file-executable-if-script-p)
+ version-control t)
 
 (set-terminal-coding-system 'utf-8-unix)
 (set-keyboard-coding-system 'utf-8-unix)
 (prefer-coding-system 'utf-8-unix)
 (set-language-environment "UTF-8")
+
+(add-hook 'before-save-hook 'delete-trailing-whitespace)
+(add-hook 'after-save-hook 'executable-make-buffer-file-executable-if-script-p)
 
 (global-auto-revert-mode)
 
@@ -206,9 +201,9 @@ Position the cursor at its beginning, according to the current mode."
 (use-package key-chord :ensure t
   :init
   (key-chord-mode 1)
-  (setq-default key-chord-two-keys-delay 0.035
-                key-chord-one-key-delay 0)
-  (use-package use-package-chords :ensure t :demand))
+  (setq-default key-chord-two-keys-delay 0.04
+                key-chord-one-key-delay 0))
+(use-package use-package-chords :ensure t :demand)
 
 (bind-keys
  ("<C-return>" . nox/open-line-below)
@@ -220,12 +215,11 @@ Position the cursor at its beginning, according to the current mode."
 
 (bind-chords
  (" f" . find-file)
- (" o" . ff-find-other-file)
  (" s" . save-buffer)
  (" b" . switch-to-buffer)
  (" k" . kill-this-buffer))
 
-(defhydra hydra-files (:color teal)
+(defhydra hydra-files (:exit t :foreign-keys warn)
   "Files"
   ("f" find-file "Open")
   ("s" save-buffer "Save")
@@ -235,23 +229,7 @@ Position the cursor at its beginning, according to the current mode."
   ("b" hexl-find-file "Open binary")
   ("l" find-file-literally "Open literally")
   ("q" nil "Quit"))
-(key-chord-define-global "qf" 'hydra-files/body)
-
-(defhydra hydra-error ()
-  "Errors"
-  ("f" first-error "First")
-  ("n" next-error "Next")
-  ("p" previous-error "Previous")
-  ("q" nil "Quit"))
-(key-chord-define-global "cn" 'hydra-error/next-error)
-
-(defhydra hydra-org (:color teal)
-  "Org-mode"
-  ("l" org-store-link "Store link")
-  ("a" org-agenda "Agenda")
-  ("c" org-capture "Capture")
-  ("q" nil "Quit"))
-(key-chord-define-global "qo" 'hydra-org/body)
+(bind-chord "qf" 'hydra-files/body)
 
 
 ;; ------------------------------
@@ -292,68 +270,63 @@ Position the cursor at its beginning, according to the current mode."
                                    company-dabbrev)))
 
 (use-package compile
-  :chords (" c" . nox/make)
+  :chords ((" c" . nox/make)
+           ("cn" . hydra-error/next-error))
   :config
-  (defvar-local nox/build-script-names nil
-    "Name of the build file to run when compile is called.")
-
-  (defvar nox/compile-should-close nil
-    "Set to t if it should close window when there are no errors.")
-
-  (defun nox/make ()
-    "Run build script."
-    (interactive)
-    (let ((done nil))
-      (dolist (build-script-name nox/build-script-names)
-        (if done nil
-          (let ((script-dir (locate-dominating-file default-directory build-script-name))
-                (source-path (concat "\"" (buffer-file-name) "\"")))
-            (when script-dir
-              (if (eq (count-windows) 1)
-                  (setq nox/compile-should-close t)
-                (if (not (get-buffer-window (get-buffer "*compilation*")))
-                    (setq nox/compile-should-close nil)))
-
-              (if (get-buffer "*compilation*")
-                  (kill-buffer "*compilation*"))
-
-              (switch-to-buffer-other-window "*compilation*")
-              (cd script-dir)
-              (let ((compilation-command (concat "\"" (expand-file-name default-directory)
-                                                 build-script-name "\" " source-path)))
-                (compile compilation-command))
-              (other-window 1)
-              (setq done t)))))))
-
-  (defun nox/compilation-went-ok ()
-    (and (save-excursion (not (ignore-errors (compilation-next-error 1 nil 1))))
-         (with-current-buffer "*compilation*"
-           (goto-char (point-min))
-           (search-forward "finished" nil t))))
+  (defhydra hydra-error ()
+    "Errors"
+    ("f" first-error "First")
+    ("n" next-error "Next")
+    ("p" previous-error "Previous")
+    ("q" nil "Quit"))
 
   (setq-default compilation-ask-about-save nil
                 compilation-always-kill t
                 compilation-context-lines 0
                 compilation-environment '("TERM=xterm"))
 
-  (add-to-list 'compilation-error-regexp-alist 'nox/devenv)
-  (add-to-list 'compilation-error-regexp-alist-alist '(nox/devenv
-                                                       "*\\([0-9]+>\\)?\\(\\(?:[a-zA-Z]:\\)?[^:(\t\n]+\\)(\\([0-9]+\\)) : \\(?:see declaration\\|\\(?:warnin\\(g\\)\\|[a-z ]+\\) C[0-9]+:\\)"
-                                                       2 3 nil (4)))
+  (defvar-local nox/build-script-names
+    (if (eq system-type 'windows-nt)
+        '("build-nox.bat" "build.bat")
+      '("build-nox.sh" "build.sh"))
+    "List of build script names to run when calling `nox/make'.")
+  (defvar nox/should-close-compile-window nil)
+  (defconst nox/compile-buffer-name "*nox/compilation*")
 
-  (if (eq system-type 'windows-nt)
-      (setq-default nox/build-script-names '("build-nox.bat" "build.bat"))
-    (setq-default nox/build-script-names '("build-nox.sh" "build.sh")))
+  (defun nox/make ()
+    (interactive)
+    (catch 'break
+      (dolist (build-script-name nox/build-script-names)
+        (let ((script-dir (locate-dominating-file default-directory build-script-name)))
+          (when script-dir
+            (let ((file (buffer-file-name))
+                  (compilation-buffer-name-function
+                   (lambda (mode) nox/compile-buffer-name))
+                  (window (get-buffer-window nox/compile-buffer-name)))
+              (if (= (length (window-list)) 1)
+                  (setq nox/should-close-compile-window t)
+                (unless window
+                  (setq nox/should-close-compile-window nil)))
+              (unless window
+                (setq window (display-buffer (get-buffer-create nox/compile-buffer-name) t)))
+              (with-selected-window window
+                (cd script-dir)
+                (compile (concat "\"" (expand-file-name build-script-name script-dir)
+                                 "\" \"" file "\""))))
+            (throw 'break t))))))
 
-  (defun nox/bury-compile-buffer-if-successful (buffer string)
-    "Bury a compilation buffer if succeeded without warnings"
-    (if (nox/compilation-went-ok)
-        (progn
-          (bury-buffer buffer)
-          (if nox/compile-should-close
-              (delete-window (get-buffer-window buffer))
-            (switch-to-prev-buffer (get-buffer-window buffer) t)))))
-  (add-hook 'compilation-finish-functions 'nox/bury-compile-buffer-if-successful)
+  (defun nox/bury-compilation-buffer (buffer string)
+    "Bury compilation buffer if it succeeded."
+    (when (and (string= (buffer-name buffer) nox/compile-buffer-name)
+               (string= string "finished\n")
+               (save-excursion (not (ignore-errors (compilation-next-error 1 nil 1)))))
+      (let ((window (get-buffer-window buffer)))
+        (bury-buffer buffer)
+        (when window
+          (if nox/should-close-compile-window
+              (delete-window window)
+            (switch-to-prev-buffer window))))))
+  (add-hook 'compilation-finish-functions 'nox/bury-compilation-buffer)
 
   (require 'ansi-color)
   (defun nox/colorize-compilation-buffer ()
@@ -382,6 +355,7 @@ Position the cursor at its beginning, according to the current mode."
                 ivy-initial-inputs-alist nil
                 ivy-re-builders-alist '((swiper . ivy--regex-plus)
                                         (t . ivy--regex-fuzzy)))
+  (bind-key "M-y" (lambda () (interactive) (yank-pop)) ivy-minibuffer-map)
 
   (if (executable-find "rg")
       (setq-default counsel-grep-base-command
@@ -438,7 +412,9 @@ Position the cursor at its beginning, according to the current mode."
   :bind ("C-=" . er/expand-region))
 
 (use-package find-file
-  :config (setq-default ff-always-try-to-create t))
+  :chords (" o" . ff-find-other-file)
+  :config
+  (setq-default ff-always-try-to-create t))
 
 (use-package flx :ensure t)
 
@@ -462,29 +438,14 @@ Position the cursor at its beginning, according to the current mode."
         ("\\<\\(NOTE\\)" 1 'font-lock-note-face t))))))
 
 (use-package gdb-mi
-  :chords ("qd" . nox/hydra-gdb/body)
+  :chords ("qd" . hydra-gdb/body)
   :config
   (defvar nox/gdb-frame nil)
   (defvar nox/gdb-last-file nil)
   (defvar nox/gdb-last-args nil)
   (defvar nox/gdb-disassembly-show-source t)
 
-  (setq-default gdb-many-windows t
-                gdb-show-main t
-                gdb-display-buffer-other-frame-action
-                '((display-buffer-reuse-window display-buffer-pop-up-frame)
-                  (reusable-frames . visible)
-                  (inhibit-same-window . t)
-                  (pop-up-frame-parameters (minibuffer . t)
-                                           (unsplittable . t)
-                                           (width . 100)
-                                           (fullscreen . fullheight)
-                                           (border-width . 0))))
-
-  (add-to-list 'gdb-disassembly-font-lock-keywords '("0x[[:xdigit:]]+" . font-lock-constant-face) t)
-  (add-to-list 'gdb-disassembly-font-lock-keywords '("Line.*$" . font-lock-comment-face) t)
-
-  (defhydra nox/hydra-gdb (:exit nil :foreign-keys run :hint nil)
+  (defhydra hydra-gdb (:exit nil :foreign-keys run :hint nil)
     "
 Debug it!!
 _O_pen    _R_un          _b_reak      _n_ext (_N_: inst)     _w_atch     _S_how source? %-3`nox/gdb-disassembly-show-source
@@ -511,6 +472,21 @@ _k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
     ("q" ignore :exit t)
     ("C-g" ignore :exit t))
 
+  (setq-default gdb-many-windows t
+                gdb-show-main t
+                gdb-display-buffer-other-frame-action
+                '((display-buffer-reuse-window display-buffer-pop-up-frame)
+                  (reusable-frames . visible)
+                  (inhibit-same-window . t)
+                  (pop-up-frame-parameters (minibuffer . t)
+                                           (unsplittable . t)
+                                           (width . 100)
+                                           (fullscreen . fullheight)
+                                           (border-width . 0))))
+
+  (add-to-list 'gdb-disassembly-font-lock-keywords '("0x[[:xdigit:]]+" . font-lock-constant-face) t)
+  (add-to-list 'gdb-disassembly-font-lock-keywords '("Line.*$" . font-lock-comment-face) t)
+
   (defun nox/gdb-stop ()
     (interactive)
     (with-current-buffer gud-comint-buffer
@@ -520,15 +496,14 @@ _k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
   (defun nox/gdb-watch (expr)
     (interactive "sEnter expression: ")
     (when (eq 'gdbmi (buffer-local-value 'gud-minor-mode gud-comint-buffer))
-      (setq expr (replace-regexp-in-string "[ \t\r\n\v\f]" "" expr))
+      (replace-regexp-in-string "\\(\\`[[:space:]\n]*\\|[[:space:]\n]*\\'\\)" "" expr)
       (when (= (length expr) 0)
         (setq expr (if (and transient-mark-mode mark-active)
                        (buffer-substring (region-beginning) (region-end))
                      (concat (if (derived-mode-p 'gdb-registers-mode) "$")
-                             (tooltip-identifier-from-point (point)))))
-        (setq expr (replace-regexp-in-string "[ \t\r\n\v\f]" "" expr)))
+                             (tooltip-identifier-from-point (point))))))
       (set-text-properties 0 (length expr) nil expr)
-      (gdb-input (concat "-var-create - * " expr "")
+      (gdb-input (concat "-var-create - * \"" expr "\"")
                  `(lambda () (gdb-var-create-handler ,expr)))))
 
   (defun nox/gdb-kill (&optional frame)
@@ -574,12 +549,10 @@ _k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
                     (with-selected-frame nox/gdb-frame (funcall gdb command-line)))))))
        (select-frame-set-input-focus nox/gdb-frame))))
 
-  ;; Prevent buffer stealing
-  (advice-add
-   'gdb-inferior-filter :around
-   (lambda (old proc string)
+  ;; Prevent buffer stealing, https://stackoverflow.com/a/24923325/2175348
+  (defun gdb-inferior-filter (proc string)
      (with-current-buffer (gdb-get-buffer-create 'gdb-inferior-io)
-       (comint-output-filter proc string))))
+       (comint-output-filter proc string)))
 
   (defun gud-display-line (true-file line)
     (let* ((last-nonmenu-event t)	 ; Prevent use of dialog box for questions.
@@ -734,6 +707,10 @@ _k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
                 (setq gdb-var-list (nreverse var-list))))))))
     (gdb-speedbar-update)))
 
+(use-package help
+  :config
+  (setq-default help-window-select t))
+
 (use-package imenu
   :config
   (set 'imenu-auto-rescan-maxout 500000)
@@ -765,7 +742,15 @@ _k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
   (unbind-key "M-<down-mouse-1>"))
 
 (use-package org :ensure t
+  :chords ("qo" . hydra-org/body)
   :config
+  (defhydra hydra-org (:exit t :foreign-keys warn)
+    "Org-mode"
+    ("l" org-store-link "Store link")
+    ("a" org-agenda "Agenda")
+    ("c" org-capture "Capture")
+    ("q" nil "Quit"))
+
   (setq-default
    org-agenda-files '("~/Personal/Org/")
    org-default-notes-file (concat (car org-agenda-files) "Inbox.org")
