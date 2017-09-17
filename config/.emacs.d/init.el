@@ -197,7 +197,8 @@ Position the cursor at its beginning, according to the current mode."
 
 ;; ------------------------------
 ;; Keybindings
-(use-package hydra :ensure t)
+(use-package hydra :ensure t
+  :config (setq-default lv-use-separator t))
 (use-package key-chord :ensure t
   :init
   (key-chord-mode 1)
@@ -286,15 +287,17 @@ Position the cursor at its beginning, according to the current mode."
                 compilation-environment '("TERM=xterm"))
 
   (defvar-local nox/build-script-names
-    (if (eq system-type 'windows-nt)
-        '("build-nox.bat" "build.bat")
-      '("build-nox.sh" "build.sh"))
+    (append (if (eq system-type 'windows-nt)
+                '("build-nox.bat" "build.bat")
+              '("build-nox.sh" "build.sh"))
+            '("Makefile"))
     "List of build script names to run when calling `nox/make'.")
   (defvar nox/should-close-compile-window nil)
   (defconst nox/compile-buffer-name "*nox/compilation*")
+  (defconst nox/compile-last-make nil)
 
-  (defun nox/make ()
-    (interactive)
+  (defun nox/make (arg)
+    (interactive "P")
     (catch 'break
       (dolist (build-script-name nox/build-script-names)
         (let ((script-dir (locate-dominating-file default-directory build-script-name)))
@@ -311,9 +314,14 @@ Position the cursor at its beginning, according to the current mode."
                 (setq window (display-buffer (get-buffer-create nox/compile-buffer-name) t)))
               (with-selected-window window
                 (cd script-dir)
-                (compile (concat "\"" (expand-file-name build-script-name script-dir)
-                                 "\" \"" file "\""))))
-            (throw 'break t))))))
+                (if (not (string= build-script-name "Makefile"))
+                    (compile (concat "\"" (expand-file-name build-script-name script-dir)
+                                     "\" \"" file "\""))
+                  (when (or arg (not nox/compile-last-make))
+                    (setq nox/compile-last-make
+                          (read-string "Command: " nil nil (or nox/compile-last-make "make -k"))))
+                  (compile nox/compile-last-make)))
+              (throw 'break t)))))))
 
   (defun nox/bury-compilation-buffer (buffer string)
     "Bury compilation buffer if it succeeded."
@@ -321,11 +329,11 @@ Position the cursor at its beginning, according to the current mode."
                (string= string "finished\n")
                (save-excursion (not (ignore-errors (compilation-next-error 1 nil 1)))))
       (let ((window (get-buffer-window buffer)))
-        (bury-buffer buffer)
         (when window
           (if nox/should-close-compile-window
               (delete-window window)
-            (switch-to-prev-buffer window))))))
+            (switch-to-prev-buffer window)))
+        (bury-buffer buffer))))
   (add-hook 'compilation-finish-functions 'nox/bury-compilation-buffer)
 
   (require 'ansi-color)
@@ -356,6 +364,8 @@ Position the cursor at its beginning, according to the current mode."
                 ivy-re-builders-alist '((swiper . ivy--regex-plus)
                                         (t . ivy--regex-fuzzy)))
   (bind-key "M-y" (lambda () (interactive) (yank-pop)) ivy-minibuffer-map)
+  (add-to-list 'swiper-font-lock-exclude 'c-mode t)
+  (add-to-list 'swiper-font-lock-exclude 'c++-mode t)
 
   (if (executable-find "rg")
       (setq-default counsel-grep-base-command
@@ -445,32 +455,31 @@ Position the cursor at its beginning, according to the current mode."
   (defvar nox/gdb-last-args nil)
   (defvar nox/gdb-disassembly-show-source t)
 
-  (defhydra hydra-gdb (:exit nil :foreign-keys run :hint nil)
+  (defhydra hydra-gdb (:hint nil :exit t)
     "
 Debug it!!
-_O_pen    _R_un          _b_reak      _n_ext (_N_: inst)     _w_atch     _S_how source? %-3`nox/gdb-disassembly-show-source
-_k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
-^ ^       _s_top         _r_emove     _o_ut
-^ ^       ^ ^            ^ ^          _u_ntil"
-    ("O" gdb :exit t)
-    ("k" nox/gdb-kill :exit t)
-    ("R" gud-run :exit t)
+_O_pen    _R_un          _b_reak      _n_ext (_N_: inst)     _w_atch     _M_ixed? %-3`nox/gdb-disassembly-show-source
+_k_ill    _S_tart        _t_break     _i_n (_I_: inst)
+^ ^       _c_ontinue     _r_emove     _o_ut
+^ ^       _s_top         ^ ^          _u_ntil"
+    ("O" gdb)
+    ("k" nox/gdb-kill)
+    ("R" gud-run)
+    ("S" gud-start)
     ("c" gud-cont)
-    ("s" nox/gdb-stop :exit t)
+    ("s" nox/gdb-stop)
     ("b" gud-break)
     ("t" gud-tbreak)
     ("r" gud-remove)
-    ("n" gud-next)
-    ("N" gud-nexti)
-    ("i" gud-step)
-    ("I" gud-stepi)
-    ("o" gud-finish)
-    ("u" gud-until)
-    ("w" nox/gdb-watch :exit t)
-    ("S" (lambda () (interactive) (setq nox/gdb-disassembly-show-source
-                                        (not nox/gdb-disassembly-show-source))))
-    ("q" ignore :exit t)
-    ("C-g" ignore :exit t))
+    ("n" gud-next :exit nil)
+    ("N" gud-nexti :exit nil)
+    ("i" gud-step :exit nil)
+    ("I" gud-stepi :exit nil)
+    ("o" gud-finish :exit nil)
+    ("u" gud-until :exit nil)
+    ("w" nox/gdb-watch)
+    ("M" (lambda () (interactive) (setq nox/gdb-disassembly-show-source
+                                        (not nox/gdb-disassembly-show-source))) :exit nil))
 
   (setq-default gdb-many-windows t
                 gdb-show-main t
@@ -486,6 +495,10 @@ _k_ill    _c_ontinue     _t_break     _i_n (_I_: inst)
 
   (add-to-list 'gdb-disassembly-font-lock-keywords '("0x[[:xdigit:]]+" . font-lock-constant-face) t)
   (add-to-list 'gdb-disassembly-font-lock-keywords '("Line.*$" . font-lock-comment-face) t)
+
+  (gud-def gud-start    "-exec-run --start"
+           nil
+           "Run the program and stop at the start of the inferior's main subprogram.")
 
   (defun nox/gdb-stop ()
     (interactive)
