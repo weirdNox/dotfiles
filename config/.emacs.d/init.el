@@ -783,6 +783,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
 (use-package pdf-tools :ensure t
   :mode (("\\.pdf\\'" . pdf-view-mode))
+  :bind (:map pdf-view-mode-map
+              ("C-s" . isearch-forward))
   :config (pdf-tools-install))
 
 (use-package paren
