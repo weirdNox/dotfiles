@@ -116,7 +116,7 @@
 
 (global-auto-revert-mode)
 
-(mouse-avoidance-mode 'banish)
+(mouse-avoidance-mode 'jump)
 
 (defun nox/rename-file-and-buffer ()
   "Rename current buffer and the file it is visiting, if any."
@@ -737,7 +737,9 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     (call-interactively 'ivy-imenu-anywhere)
     (recenter-top-bottom)))
 
-(use-package interleave :ensure t)
+(use-package interleave :ensure t
+  :config
+  (setq-default interleave-org-notes-dir-list '("~/Personal/Org/Interleaved Notes" ".")))
 
 (use-package magit :ensure t
   :if (executable-find "git")
@@ -759,15 +761,17 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   :config
   (defhydra hydra-org (:exit t :foreign-keys warn)
     "Org-mode"
-    ("l" org-store-link "Store link")
-    ("a" org-agenda "Agenda")
     ("c" org-capture "Capture")
+    ("a" org-agenda "Agenda")
+    ("i" interleave-mode "Interleave")
+    ("l" org-store-link "Store link")
     ("q" nil "Quit"))
 
   (setq-default
    org-agenda-files '("~/Personal/Org/")
    org-default-notes-file (concat (car org-agenda-files) "Inbox.org")
-   org-refile-targets '((org-agenda-files . (:maxlevel . 6)))
+   org-refile-targets '((nil . (:maxlevel . 6))
+                        (org-agenda-files . (:maxlevel . 6)))
 
    org-todo-keywords '((sequence "WAITING(w@/!)" "TODO(t)"  "|" "DONE(d!)" "CANCELED(c@)"))
 
@@ -775,17 +779,24 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
    org-src-fontify-natively t
    org-src-tab-acts-natively t
-   org-catch-invisible-edits 'error)
+   org-catch-invisible-edits 'error
 
-  (add-hook 'org-mode-hook (lambda ()
-                             (org-indent-mode)
-                             (company-mode 0))))
+   org-format-latex-options '(:foreground default :background default :scale 1.5
+                                          :html-foreground "Black" :html-background "Transparent"
+                                          :html-scale 1.0
+                                          :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
+   org-latex-preview-ltxpng-directory (locate-user-emacs-file "Latex Previews/"))
+
+  (add-hook 'org-mode-hook (lambda () (org-indent-mode))))
 
 (use-package pdf-tools :ensure t
   :mode (("\\.pdf\\'" . pdf-view-mode))
   :bind (:map pdf-view-mode-map
               ("C-s" . isearch-forward))
-  :config (pdf-tools-install))
+  :config
+  (pdf-tools-install)
+  (setq-default pdf-view-display-size 'fit-page
+                pdf-cache-image-limit 200))
 
 (use-package paren
   :init
