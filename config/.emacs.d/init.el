@@ -45,11 +45,11 @@
 
 (setq-default initial-frame-alist '((fullscreen . fullboth)))
 
-(cond
- ((member "DejaVu Sans Mono" (font-family-list))
-  (add-to-list 'default-frame-alist '(font . "DejaVu Sans Mono-11")))
- ((member "Source Code Pro" (font-family-list))
-  (add-to-list 'default-frame-alist '(font . "Source Code Pro-11"))))
+(cond ((member "DejaVu Sans Mono" (font-family-list))
+       (set-face-attribute 'default nil :font "DejaVu Sans Mono-11"))
+      ((member "Source Code Pro" (font-family-list))
+       (set-face-attribute 'default nil :font "Source Code Pro-11")))
+
 
 (setq-default inhibit-startup-screen t
               initial-scratch-message "")
@@ -447,6 +447,8 @@ Position the cursor at its beginning, according to the current mode."
         ("\\<\\(IMPORTANT\\)" 1 'font-lock-important-face t)
         ("\\<\\(NOTE\\)" 1 'font-lock-note-face t))))))
 
+(use-package gnuplot :ensure t)
+
 (use-package gdb-mi
   :chords ("qd" . hydra-gdb/body)
   :config
@@ -779,7 +781,13 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
    org-src-fontify-natively t
    org-src-tab-acts-natively t
-   org-catch-invisible-edits 'error
+   org-catch-invisible-edits 'smart
+
+   org-pretty-entities t
+
+   org-startup-indented t
+   org-startup-with-inline-images t
+   org-startup-with-latex-preview t
 
    org-format-latex-options '(:foreground default :background default :scale 1.5
                                           :html-foreground "Black" :html-background "Transparent"
@@ -787,7 +795,12 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                                           :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
    org-latex-preview-ltxpng-directory (locate-user-emacs-file "Latex Previews/"))
 
-  (add-hook 'org-mode-hook (lambda () (org-indent-mode))))
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '((gnuplot . t)
+     (python . t)))
+
+  (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images))
 
 (use-package pdf-tools :ensure t
   :mode (("\\.pdf\\'" . pdf-view-mode))
