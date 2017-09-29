@@ -798,6 +798,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   (org-babel-do-load-languages
    'org-babel-load-languages
    '((gnuplot . t)
+     (octave . t)
      (python . t)))
 
   (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images))
