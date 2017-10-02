@@ -402,7 +402,8 @@ Position the cursor at its beginning, according to the current mode."
                 dired-recursive-deletes 'always
                 dired-recursive-copies 'always
                 delete-by-moving-to-trash t
-                dired-auto-revert-buffer t))
+                dired-auto-revert-buffer t
+                dired-dwim-target t))
 
 (use-package dumb-jump :ensure t
   :bind (("M-g j" . dumb-jump-go)
