@@ -1,4 +1,4 @@
-;; Author: weirdNox (Gonçalo Santos)
+;; Author: weirdNox (Gonçalo Santos)               -*- lexical-binding: t -*-
 
 ;; ------------------------------
 ;; Core
@@ -202,7 +202,7 @@ Position the cursor at its beginning, according to the current mode."
 (use-package key-chord :ensure t
   :init
   (key-chord-mode 1)
-  (setq-default key-chord-two-keys-delay 0.04
+  (setq-default key-chord-two-keys-delay 0.033
                 key-chord-one-key-delay 0))
 (use-package use-package-chords :ensure t :demand)
 
@@ -357,6 +357,7 @@ Position the cursor at its beginning, according to the current mode."
   (ivy-mode 1)
   (counsel-mode 1)
   (setq-default ivy-use-virtual-buffers t
+                ivy-virtual-abbreviate 'full
                 ivy-height 10
                 ivy-count-format "(%d/%d) "
                 ivy-extra-directories nil
@@ -397,7 +398,29 @@ Position the cursor at its beginning, according to the current mode."
   :defer 2)
 
 (use-package dired
+  :bind (:map dired-mode-map ("e" . nox/ediff-files))
   :config
+  ;; From abo-abo
+  (defun nox/ediff-files ()
+    (interactive)
+    (let ((files (dired-get-marked-files))
+          (wnd (current-window-configuration)))
+      (if (<= (length files) 2)
+          (let ((file1 (car files))
+                (file2 (if (cdr files)
+                           (cadr files)
+                         (read-file-name
+                          "file: "
+                          (dired-dwim-target-directory)))))
+            (if (file-newer-than-file-p file1 file2)
+                (ediff-files file2 file1)
+              (ediff-files file1 file2))
+            (add-hook 'ediff-after-quit-hook-internal
+                      (lambda ()
+                        (setq ediff-after-quit-hook-internal nil)
+                        (set-window-configuration wnd))))
+        (error "no more than 2 files should be marked"))))
+
   (setq-default dired-listing-switches "-alh"
                 dired-recursive-deletes 'always
                 dired-recursive-copies 'always
@@ -416,8 +439,11 @@ Position the cursor at its beginning, according to the current mode."
 (use-package ediff
   :config
   (setq-default ediff-window-setup-function 'ediff-setup-windows-plain
-                ediff-split-window-function 'split-window-horizontally
-                ediff-diff-options "-w"))
+                ediff-diff-options "-w")
+  (add-hook 'ediff-prepare-buffer-hook
+            (lambda ()
+              (when (derived-mode-p 'outline-mode)
+                (outline-show-all)))))
 
 (use-package expand-region :ensure t
   :bind ("C-=" . er/expand-region))
@@ -789,8 +815,9 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-startup-indented t
    org-startup-with-inline-images t
    org-startup-with-latex-preview t
+   org-confirm-babel-evaluate nil
 
-   org-format-latex-options '(:foreground default :background default :scale 1.5
+   org-format-latex-options '(:foreground default :background default :scale 2
                                           :html-foreground "Black" :html-background "Transparent"
                                           :html-scale 1.0
                                           :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
@@ -880,7 +907,6 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                                  (substatement-open)
                                  (statement-case-open)
                                  (class-open)))
-
       (c-hanging-colons-alist . ((inher-intro)
                                  (case-label)
                                  (label)
@@ -890,7 +916,6 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
       (c-cleanup-list . (scope-operator
                          list-close-comma
                          defun-close-semi))
-
       (c-offsets-alist . ((arglist-close . c-lineup-arglist)
                           (label . -4)
                           (access-label . -4)
@@ -904,7 +929,6 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                           (brace-list-open . 0)
                           (brace-list-intro . 4)
                           (member-init-intro . ++)))
-
       (c-echo-syntactic-information-p . t)))
 
   (defun nox/header-format ()
@@ -929,6 +953,9 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   :config
   (add-hook 'go-mode-hook
             (lambda () (add-hook 'before-save-hook 'gofmt-before-save t t))))
+
+(use-package octave
+  :mode (("\\.m\\'" . octave-mode)))
 
 (use-package web-mode :ensure t
   :mode (("\\.\\(go\\)?html?\\'" . web-mode)))
