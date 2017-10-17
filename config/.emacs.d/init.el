@@ -821,13 +821,16 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                                           :html-foreground "Black" :html-background "Transparent"
                                           :html-scale 1.0
                                           :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
+   org-preview-latex-default-process 'imagemagick
+   org-latex-packages-alist '(("" "tikz" t))
    org-latex-preview-ltxpng-directory (locate-user-emacs-file "Latex Previews/"))
 
   (org-babel-do-load-languages
    'org-babel-load-languages
    '((gnuplot . t)
      (octave . t)
-     (python . t)))
+     (python . t)
+     (latex . t)))
 
   (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images))
 
