@@ -35,8 +35,9 @@
 
 ;; ------------------------------
 ;; Appearance
-(use-package color-theme-sanityinc-tomorrow :ensure t
-  :init (load-theme 'sanityinc-tomorrow-night t))
+(use-package gruvbox :ensure gruvbox-theme
+  :demand
+  :config (load-theme 'gruvbox-dark-hard t))
 
 (tool-bar-mode -1)
 (menu-bar-mode -1)
@@ -841,7 +842,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   :config
   (pdf-tools-install)
   (setq-default pdf-view-display-size 'fit-page
-                pdf-cache-image-limit 200))
+                pdf-cache-image-limit 200
+                pdf-outline-display-labels t))
 
 (use-package paren
   :init
