@@ -812,6 +812,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-catch-invisible-edits 'smart
 
    org-pretty-entities t
+   org-list-allow-alphabetical t
 
    org-startup-indented t
    org-startup-with-inline-images t
@@ -832,6 +833,9 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
      (octave . t)
      (python . t)
      (latex . t)))
+
+  (add-hook 'org-mode-hook 'org-hide-block-all)
+  (set-face-attribute 'org-block nil :inherit 'default)
 
   (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images))
 
