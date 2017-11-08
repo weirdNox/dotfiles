@@ -594,8 +594,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
   ;; Prevent buffer stealing, https://stackoverflow.com/a/24923325/2175348
   (defun gdb-inferior-filter (proc string)
-     (with-current-buffer (gdb-get-buffer-create 'gdb-inferior-io)
-       (comint-output-filter proc string)))
+    (with-current-buffer (gdb-get-buffer-create 'gdb-inferior-io)
+      (comint-output-filter proc string)))
 
   (defun gud-display-line (true-file line)
     (let* ((last-nonmenu-event t)	 ; Prevent use of dialog box for questions.
@@ -827,23 +827,66 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-latex-packages-alist '(("" "tikz" t))
    org-latex-preview-ltxpng-directory (locate-user-emacs-file "Latex Previews/"))
 
+  (add-hook 'org-mode-hook 'org-hide-block-all)
+  (set-face-attribute 'org-block nil :inherit 'default)
+
+  (org-link-set-parameters "pdfview"
+                           :follow 'org-pdfview-open
+                           :complete 'org-pdfview-complete-link
+                           :store 'org-pdfview-store-link)
+
   (org-babel-do-load-languages
    'org-babel-load-languages
    '((gnuplot . t)
      (octave . t)
      (python . t)
      (latex . t)))
-
-  (add-hook 'org-mode-hook 'org-hide-block-all)
-  (set-face-attribute 'org-block nil :inherit 'default)
-
   (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images))
 
 (use-package pdf-tools :ensure t
   :mode (("\\.pdf\\'" . pdf-view-mode))
   :bind (:map pdf-view-mode-map
               ("C-s" . isearch-forward))
+  :commands (org-pdfview-open org-pdfview-store-link org-pdfview-complete-link)
   :config
+  ;; Adapted from https://github.com/markus1189/org-pdfview
+  (defun org-pdfview-open (link)
+    "Open LINK in pdf-view-mode."
+    (cond ((string-match "\\(.*\\)::\\([0-9]*\\)\\+\\+\\([[0-9]\\.*[0-9]*\\)"  link)
+           (let* ((path (match-string 1 link))
+                  (page (string-to-number (match-string 2 link)))
+                  (height (string-to-number (match-string 3 link))))
+             (org-open-file path 1)
+             (pdf-view-goto-page page)
+             (image-set-window-vscroll
+              (round (/ (* height (cdr (pdf-view-image-size))) (frame-char-height))))))
+          ((string-match "\\(.*\\)::\\([0-9]+\\)$"  link)
+           (let* ((path (match-string 1 link))
+                  (page (string-to-number (match-string 2 link))))
+             (org-open-file path 1)
+             (pdf-view-goto-page page)))
+          (t (org-open-file link 1))))
+
+  (defun org-pdfview-store-link ()
+    "Store a link to a pdfview buffer."
+    (when (eq major-mode 'pdf-view-mode)
+      (let* ((path buffer-file-name)
+             (page (number-to-string (pdf-view-current-page)))
+             (link (concat "pdfview:" path "::" page))
+             (description (concat (file-name-nondirectory path) " at page " page)))
+        (org-store-link-props
+         :type "pdfview"
+         :link link
+         :description description))))
+
+  (defun org-pdfview-complete-link (&optional arg)
+    "Use the existing file name completion for file.
+Links to get the file name, then ask the user for the page number
+and append it."
+    (concat (replace-regexp-in-string "^file:" "pdfview:" (org-file-complete-link arg))
+            "::"
+            (read-from-minibuffer "Page:" "1")))
+
   (pdf-tools-install)
   (setq-default pdf-view-display-size 'fit-page
                 pdf-cache-image-limit 200
