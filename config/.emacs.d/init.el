@@ -17,10 +17,10 @@
 
 (require 'package)
 (setq-default package-archives '(("gnu" . "https://elpa.gnu.org/packages/")
-                                 ("melpa" . "https://melpa.org/packages/")))
-(package-initialize)
-(setq-default package-enable-at-startup nil
+                                 ("melpa" . "https://melpa.org/packages/"))
+              package-enable-at-startup nil
               load-prefer-newer t)
+(package-initialize)
 
 (unless (package-installed-p 'use-package)
   (package-refresh-contents)
@@ -767,10 +767,6 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     (call-interactively 'ivy-imenu-anywhere)
     (recenter-top-bottom)))
 
-(use-package interleave :ensure t
-  :config
-  (setq-default interleave-org-notes-dir-list '("~/Personal/Org/Interleaved Notes" ".")))
-
 (use-package magit :ensure t
   :if (executable-find "git")
   :chords (" g" . magit-status)
@@ -793,7 +789,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     "Org-mode"
     ("c" org-capture "Capture")
     ("a" org-agenda "Agenda")
-    ("i" interleave-mode "Interleave")
+    ("i" interleave "Interleave")
     ("l" org-store-link "Store link")
     ("q" nil "Quit"))
 
