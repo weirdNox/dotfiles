@@ -203,7 +203,7 @@ Position the cursor at its beginning, according to the current mode."
 (use-package key-chord :ensure t
   :init
   (key-chord-mode 1)
-  (setq-default key-chord-two-keys-delay 0.033
+  (setq-default key-chord-two-keys-delay 0.03
                 key-chord-one-key-delay 0))
 (use-package use-package-chords :ensure t :demand)
 
@@ -435,7 +435,7 @@ Position the cursor at its beginning, according to the current mode."
          ("M-g i" . dumb-jump-go-prompt)
          ("M-g x" . dumb-jump-go-prefer-external)
          ("M-g z" . dumb-jump-go-prefer-external-other-window))
-  :config (setq dumb-jump-selector 'ivy))
+  :config (setq-default dumb-jump-selector 'ivy))
 
 (use-package ediff
   :config
@@ -767,6 +767,10 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     (call-interactively 'ivy-imenu-anywhere)
     (recenter-top-bottom)))
 
+(use-package interleave
+  :config
+  (setq-default interleave-default-heading-title "Notas da página $p$"))
+
 (use-package magit :ensure t
   :if (executable-find "git")
   :chords (" g" . magit-status)
@@ -1003,7 +1007,9 @@ and append it."
             (lambda () (add-hook 'before-save-hook 'gofmt-before-save t t))))
 
 (use-package octave
-  :mode (("\\.m\\'" . octave-mode)))
+  :mode (("\\.m\\'" . octave-mode))
+  :config
+  (setq-default inferior-octave-startup-args '("-i" "--line-editing")))
 
 (use-package web-mode :ensure t
   :mode (("\\.\\(go\\)?html?\\'" . web-mode)))
