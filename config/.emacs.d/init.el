@@ -46,11 +46,15 @@
 
 (setq-default initial-frame-alist '((fullscreen . fullboth)))
 
-(cond ((member "DejaVu Sans Mono" (font-family-list))
-       (set-face-attribute 'default nil :font "DejaVu Sans Mono-11"))
-      ((member "Source Code Pro" (font-family-list))
-       (set-face-attribute 'default nil :font "Source Code Pro-11")))
-
+(catch 'break
+  (dolist (font-spec '(("DejaVu Sans Mono" . 110) ("Source Code Pro" . 110)))
+    (let ((font-name (car font-spec))
+          (font-size (cdr font-spec)))
+      (when (member font-name (font-family-list))
+        (set-face-attribute 'default nil
+                            :font font-name :height font-size
+                            :weight 'normal :width 'normal)
+        (throw 'break t)))))
 
 (setq-default inhibit-startup-screen t
               initial-scratch-message "")
@@ -107,10 +111,10 @@
  kept-old-versions 2
  version-control t)
 
-(set-terminal-coding-system 'utf-8-unix)
-(set-keyboard-coding-system 'utf-8-unix)
-(prefer-coding-system 'utf-8-unix)
 (set-language-environment "UTF-8")
+(prefer-coding-system 'utf-8-unix)
+(set-default-coding-systems 'utf-8-unix)
+(setq-default default-input-method "TeX")
 
 (add-hook 'before-save-hook 'delete-trailing-whitespace)
 (add-hook 'after-save-hook 'executable-make-buffer-file-executable-if-script-p)
@@ -200,12 +204,6 @@ Position the cursor at its beginning, according to the current mode."
 ;; Keybindings
 (use-package hydra :ensure t
   :config (setq-default lv-use-separator t))
-(use-package key-chord :ensure t
-  :init
-  (key-chord-mode 1)
-  (setq-default key-chord-two-keys-delay 0.03
-                key-chord-one-key-delay 0))
-(use-package use-package-chords :ensure t :demand)
 
 (bind-keys
  ("<C-return>" . nox/open-line-below)
@@ -214,12 +212,6 @@ Position the cursor at its beginning, according to the current mode."
  ("<C-tab>" . indent-region)
  ("M-o" . other-window)
  ("M-O" . (lambda () (interactive) (other-window -1))))
-
-(bind-chords
- (" f" . find-file)
- (" s" . save-buffer)
- (" b" . switch-to-buffer)
- (" k" . kill-this-buffer))
 
 (defhydra hydra-files (:exit t :foreign-keys warn)
   "Files"
@@ -231,13 +223,13 @@ Position the cursor at its beginning, according to the current mode."
   ("b" hexl-find-file "Open binary")
   ("l" find-file-literally "Open literally")
   ("q" nil "Quit"))
-(bind-chord "qf" 'hydra-files/body)
+(bind-key "C-c f" 'hydra-files/body)
 
 
 ;; ------------------------------
 ;; Packages
 (use-package avy :ensure t
-  :chords (" a" . avy-goto-char))
+  :bind ("C-c a" . avy-goto-char))
 
 (use-package calendar
   :config
@@ -272,8 +264,8 @@ Position the cursor at its beginning, according to the current mode."
                                    company-dabbrev)))
 
 (use-package compile
-  :chords ((" c" . nox/make)
-           ("cn" . hydra-error/next-error))
+  :bind (("<f12>" . nox/make)
+         ("C-c n" . hydra-error/next-error))
   :config
   (defhydra hydra-error ()
     "Errors"
@@ -450,7 +442,7 @@ Position the cursor at its beginning, according to the current mode."
   :bind ("C-=" . er/expand-region))
 
 (use-package find-file
-  :chords (" o" . ff-find-other-file)
+  :bind ("C-c o" . ff-find-other-file)
   :config
   (setq-default ff-always-try-to-create t))
 
@@ -478,7 +470,7 @@ Position the cursor at its beginning, according to the current mode."
 (use-package gnuplot :ensure t)
 
 (use-package gdb-mi
-  :chords ("qd" . hydra-gdb/body)
+  :bind ("C-c d" . hydra-gdb/body)
   :config
   (defvar nox/gdb-frame nil)
   (defvar nox/gdb-last-file nil)
@@ -760,26 +752,26 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   (set 'imenu-auto-rescan t))
 
 (use-package imenu-anywhere :ensure t
-  :chords (" j" . nox/ivy-imenu-center)
+  :bind ("C-c i" . nox/ivy-imenu-center)
   :config
   (defun nox/ivy-imenu-center ()
     (interactive)
     (call-interactively 'ivy-imenu-anywhere)
     (recenter-top-bottom)))
 
-(use-package interleave
+(use-package alt-interleave
   :config
   (setq-default interleave-default-heading-title "Notas da página $p$"))
 
 (use-package magit :ensure t
   :if (executable-find "git")
-  :chords (" g" . magit-status)
+  :bind ("C-c g" . magit-status)
   :config
   (setq-default magit-completing-read-function 'ivy-completing-read))
 
 (use-package multiple-cursors :ensure t
-  :chords (" l" . mc/edit-lines)
-  :bind (("M-»" . mc/mark-next-like-this)
+  :bind (("C-c l" . mc/edit-lines)
+         ("M-»" . mc/mark-next-like-this)
          ("M-«" . mc/mark-previous-like-this)
          ("C-M-«" . mc/mark-all-like-this)
          ("M-<mouse-1>" . mc/add-cursor-on-click))
@@ -787,7 +779,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   (unbind-key "M-<down-mouse-1>"))
 
 (use-package org :ensure t
-  :chords ("qo" . hydra-org/body)
+  :bind ("C-c o" . hydra-org/body)
   :config
   (defhydra hydra-org (:exit t :foreign-keys warn)
     "Org-mode"
@@ -1000,11 +992,6 @@ and append it."
 
   (add-hook 'c-mode-common-hook 'nox/c-hook)
   (setq-default c-hanging-semi&comma-criteria '((lambda () 'stop))))
-
-(use-package go-mode :ensure t
-  :config
-  (add-hook 'go-mode-hook
-            (lambda () (add-hook 'before-save-hook 'gofmt-before-save t t))))
 
 (use-package octave
   :mode (("\\.m\\'" . octave-mode))
