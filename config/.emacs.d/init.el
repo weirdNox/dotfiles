@@ -811,7 +811,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-startup-with-latex-preview t
    org-confirm-babel-evaluate nil
 
-   org-format-latex-options '(:foreground default :background default :scale 2
+   org-format-latex-options '(:foreground default :background default :scale 1.7
                                           :html-foreground "Black" :html-background "Transparent"
                                           :html-scale 1.0
                                           :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
