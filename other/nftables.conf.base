@@ -1,0 +1,66 @@
+#!/sbin/nft -f
+flush ruleset
+
+table inet filter {
+    chain base_checks {
+        # Drop invalid connections and allow established/related connections
+		ct state invalid drop
+		ct state {established, related} accept
+    }
+
+	chain input {
+		type filter hook input priority 0; policy drop;
+
+        jump base_checks
+
+        # Allow from loopback
+		iifname lo accept
+        iifname != lo ip daddr 127.0.0.1/8 drop
+
+        # New UDP traffic will jump to the UDP chain
+		ip protocol udp ct state new jump UDP
+        # New TCP traffic will jump to the TCP chain
+		tcp flags & (fin | syn | rst | ack) == syn ct state new jump TCP
+
+        # Everything else
+		ip protocol udp reject
+		ip protocol tcp reject with tcp reset
+        reject with icmpx type port-unreachable
+	}
+
+	chain forward {
+		type filter hook forward priority 0; policy drop;
+	}
+
+	chain output {
+		type filter hook output priority 0; policy accept;
+	}
+
+    # ---------------------------------------------------------------------------------
+    # In order to add/delete elements to/from these sets while running, execute:
+    # sudo nft add element inet filter ???_accepted {...}
+    # sudo nft delete element inet filter ???_accepted {...}
+
+    # TCP chain
+    set TCP_accepted {
+        type inet_service; flags interval;
+        # Some ports:
+        #   - SSH: ssh
+        #   - Syncthing: 22000
+        #elements = {}
+    }
+	chain TCP {
+        tcp dport @TCP_accepted accept
+	}
+
+    # UDP chain
+    set UDP_accepted {
+        type inet_service; flags interval;
+        # Some ports:
+        #   - Syncthing: 21027
+        #elements = {}
+    }
+	chain UDP {
+        udp dport @UDP_accepted accept
+	}
+}

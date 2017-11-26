@@ -61,14 +61,13 @@
 
 (setq-default truncate-partial-width-windows 70
               word-wrap t)
-(add-hook 'prog-mode-hook (lambda () (setq-default truncate-lines t)))
+(add-hook 'prog-mode-hook (lambda () (setq truncate-lines t)))
 
 (global-hl-line-mode 1)
 (blink-cursor-mode 0)
 
 (setq-default ring-bell-function 'ignore)
 
-;; Mode line
 (line-number-mode t)
 (column-number-mode t)
 (display-time-mode)
@@ -816,7 +815,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                                           :html-scale 1.0
                                           :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
    org-preview-latex-default-process 'imagemagick
-   org-latex-packages-alist '(("" "tikz" t))
+   org-latex-packages-alist '(("" "tikz" t)
+                              ("" "mathtools" t))
    org-latex-preview-ltxpng-directory (locate-user-emacs-file "Latex Previews/"))
 
   (add-hook 'org-mode-hook 'org-hide-block-all)
