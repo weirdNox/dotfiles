@@ -103,6 +103,7 @@
 
  save-interprogram-paste-before-kill t
 
+ delete-by-moving-to-trash t
  backup-directory-alist `((".*" . ,temp-dir))
  auto-save-file-name-transforms `((".*" ,temp-dir t))
  delete-old-versions t
@@ -389,7 +390,8 @@ Position the cursor at its beginning, according to the current mode."
 (use-package ivy-hydra :ensure t
   :defer 2)
 
-(use-package dired
+(use-package dired+
+  :ensure t
   :bind (:map dired-mode-map ("e" . nox/ediff-files))
   :config
   ;; From abo-abo
@@ -416,7 +418,6 @@ Position the cursor at its beginning, according to the current mode."
   (setq-default dired-listing-switches "-alh"
                 dired-recursive-deletes 'always
                 dired-recursive-copies 'always
-                delete-by-moving-to-trash t
                 dired-auto-revert-buffer t
                 dired-dwim-target t))
 
@@ -789,35 +790,33 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     ("q" nil "Quit"))
 
   (setq-default
-   org-agenda-files '("~/Personal/Org/")
-   org-default-notes-file (concat (car org-agenda-files) "Inbox.org")
-   org-refile-targets '((nil . (:maxlevel . 6))
-                        (org-agenda-files . (:maxlevel . 6)))
-
-   org-todo-keywords '((sequence "WAITING(w@/!)" "TODO(t)"  "|" "DONE(d!)" "CANCELED(c@)"))
-
-   org-agenda-skip-deadline-prewarning-if-scheduled t
+   org-startup-indented t
+   org-startup-with-inline-images t
+   org-startup-with-latex-preview t
 
    org-src-fontify-natively t
    org-src-tab-acts-natively t
    org-catch-invisible-edits 'smart
-
-   org-pretty-entities t
    org-list-allow-alphabetical t
+   org-pretty-entities t
 
-   org-startup-indented t
-   org-startup-with-inline-images t
-   org-startup-with-latex-preview t
-   org-confirm-babel-evaluate nil
+   org-agenda-files '("~/Personal/Org/")
+   org-default-notes-file (concat (car org-agenda-files) "Inbox.org")
+   org-todo-keywords '((sequence "TODO(t)" "WAITING(w@/!)" "|" "DONE(d!)" "CANCELED(c@)"))
+   org-refile-targets '((nil . (:maxlevel . 6))
+                        (org-agenda-files . (:maxlevel . 6)))
+   org-agenda-skip-deadline-prewarning-if-scheduled t
 
-   org-format-latex-options '(:foreground default :background default :scale 1.7
-                                          :html-foreground "Black" :html-background "Transparent"
-                                          :html-scale 1.0
-                                          :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
-   org-preview-latex-default-process 'imagemagick
    org-latex-packages-alist '(("" "tikz" t)
                               ("" "mathtools" t))
-   org-latex-preview-ltxpng-directory (locate-user-emacs-file "Latex Previews/"))
+   org-preview-latex-default-process 'imagemagick
+   org-latex-preview-ltxpng-directory (locate-user-emacs-file "Latex Previews/")
+   org-format-latex-options
+   '(:foreground default :background default :scale 1.7
+                 :html-foreground "Black" :html-background "Transparent"
+                 :html-scale 1.0 :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
+
+   org-confirm-babel-evaluate nil)
 
   (add-hook 'org-mode-hook 'org-hide-block-all)
   (set-face-attribute 'org-block nil :inherit 'default)
