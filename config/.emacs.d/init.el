@@ -28,7 +28,6 @@
 
 (eval-when-compile
   (require 'use-package))
-(require 'diminish)
 (require 'bind-key)
 (setq-default use-package-always-defer t)
 
@@ -237,7 +236,7 @@ Position the cursor at its beginning, according to the current mode."
                 calendar-date-display-form calendar-european-date-display-form))
 
 (use-package company :ensure t
-  :diminish company-mode
+  :delight
   :bind
   (:map company-mode-map
         ("<tab>" . company-complete-common))
@@ -336,8 +335,8 @@ Position the cursor at its beginning, according to the current mode."
   (add-hook 'compilation-filter-hook 'nox/colorize-compilation-buffer))
 
 (use-package counsel :ensure t
-  :diminish ivy-mode
-  :diminish counsel-mode
+  :delight
+  :delight (ivy-mode)
   :bind (("C-r" . swiper)
          ("C-s" . counsel-grep-or-swiper)
          ("C-S-s" . isearch-forward))
@@ -387,11 +386,14 @@ Position the cursor at its beginning, according to the current mode."
           (find-alternate-file file-name)
         (find-file file-name)))))
 
+(use-package delight :ensure t)
+
 (use-package ivy-hydra :ensure t
   :defer 2)
 
 (use-package dired+
   :ensure t
+  :after dired
   :bind (:map dired-mode-map ("e" . nox/ediff-files))
   :config
   ;; From abo-abo
