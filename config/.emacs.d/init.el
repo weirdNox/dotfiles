@@ -997,7 +997,9 @@ and append it."
 (use-package octave
   :mode (("\\.m\\'" . octave-mode))
   :config
-  (setq-default inferior-octave-startup-args '("-i" "--line-editing")))
+  (setq-default inferior-octave-startup-args '("-i" "--line-editing"))
+  ;; NOTE(nox): Defining functions on octave sometimes failed without this!
+  (add-hook 'inferior-octave-mode-hook (lambda () (setq eldoc-documentation-function nil))))
 
 (use-package web-mode :ensure t
   :mode (("\\.\\(go\\)?html?\\'" . web-mode)))
