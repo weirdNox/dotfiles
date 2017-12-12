@@ -335,8 +335,7 @@ Position the cursor at its beginning, according to the current mode."
   (add-hook 'compilation-filter-hook 'nox/colorize-compilation-buffer))
 
 (use-package counsel :ensure t
-  :delight
-  :delight (ivy-mode)
+  :delight (ivy-mode) (counsel-mode)
   :bind (("C-r" . swiper)
          ("C-s" . counsel-grep-or-swiper)
          ("C-S-s" . isearch-forward))
@@ -393,6 +392,7 @@ Position the cursor at its beginning, according to the current mode."
 
 (use-package dired+
   :ensure t
+  :demand t
   :after dired
   :bind (:map dired-mode-map ("e" . nox/ediff-files))
   :config
@@ -808,6 +808,10 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-refile-targets '((nil . (:maxlevel . 6))
                         (org-agenda-files . (:maxlevel . 6)))
    org-agenda-skip-deadline-prewarning-if-scheduled t
+
+   org-modules '(org-id)
+
+   org-id-link-to-org-use-id 'create-if-interactive
 
    org-latex-packages-alist '(("" "tikz" t)
                               ("" "mathtools" t))
