@@ -1,7 +1,9 @@
-# Emacs client setup
+#!/usr/bin/env sh
+
+export PATH="$HOME/Binaries/:$PATH"
+
 export EDITOR="emacsclient -c"
 export VISUAL="$EDITOR"
 export ALTERNATE_EDITOR=""
 
-# Go
-export GOPATH=~/Work/Go
+export GOPATH="~/Work/Go"

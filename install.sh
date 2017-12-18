@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cp -vTabs "$DIR/config/" "$HOME/"
+cp -vfasT "$DIR/config/" "$HOME/"

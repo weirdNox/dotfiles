@@ -1,1 +1,1 @@
-alias ec="emacsclient -n"
+# Use this file for aliases
