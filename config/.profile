@@ -2,7 +2,7 @@
 
 export PATH="$HOME/Binaries/:$PATH"
 
-export EDITOR="emacsclient -c"
+export EDITOR="editor"
 export VISUAL="$EDITOR"
 export ALTERNATE_EDITOR=""
 
