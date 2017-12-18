@@ -782,6 +782,12 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
 (use-package org :ensure t
   :bind ("C-c o" . hydra-org/body)
+  :init
+  (defun nox/org-capture-frame ()
+    (modify-frame-parameters nil '((name . "Org Capture")
+                                   (org-capture-frame . t)))
+    (org-capture))
+
   :config
   (defhydra hydra-org (:exit t :foreign-keys warn)
     "Org-mode"
@@ -792,24 +798,30 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     ("q" nil "Quit"))
 
   (setq-default
+   org-directory "~/Personal/Org/"
+   org-agenda-files (list (concat org-directory "Inbox.org")
+                          (concat org-directory "GTD.org"))
+   org-todo-keywords '((sequence "TODO(t)" "NEXT(n@)" "WAITING(w@/!)" "|"
+                                 "DONE(d!)" "CANCELED(c@)"))
+   org-capture-templates
+   '(("t" "Tarefa" entry (file "Inbox.org")
+      "* TODO %i%?"))
+   org-refile-targets '((nil . (:maxlevel . 6))
+                        (org-base-folder . (:maxlevel . 6)))
+   org-agenda-skip-deadline-prewarning-if-scheduled t
+
+   org-modules '(org-id)
+
    org-startup-indented t
    org-startup-with-inline-images t
    org-startup-with-latex-preview t
 
+   org-return-follows-link t
    org-src-fontify-natively t
    org-src-tab-acts-natively t
    org-catch-invisible-edits 'smart
    org-list-allow-alphabetical t
    org-pretty-entities t
-
-   org-agenda-files '("~/Personal/Org/")
-   org-default-notes-file (concat (car org-agenda-files) "Inbox.org")
-   org-todo-keywords '((sequence "TODO(t)" "WAITING(w@/!)" "|" "DONE(d!)" "CANCELED(c@)"))
-   org-refile-targets '((nil . (:maxlevel . 6))
-                        (org-agenda-files . (:maxlevel . 6)))
-   org-agenda-skip-deadline-prewarning-if-scheduled t
-
-   org-modules '(org-id)
 
    org-id-link-to-org-use-id 'create-if-interactive
 
@@ -838,7 +850,20 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
      (octave . t)
      (python . t)
      (latex . t)))
-  (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images))
+  (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images)
+
+  ;; NOTE(nox): Capture frame related
+  (advice-add 'org-switch-to-buffer-other-window :after
+              (lambda (&rest _) (when (frame-parameter nil 'org-capture-frame)
+                                  (delete-other-windows))))
+  (advice-add 'org-capture :around
+              (lambda (capture-function &rest args)
+                (condition-case nil (apply capture-function args)
+                  (error (when (frame-parameter nil 'org-capture-frame)
+                           (delete-frame))))))
+  (add-hook 'org-capture-after-finalize-hook
+            (lambda (&rest _) (when (frame-parameter nil 'org-capture-frame)
+                                (delete-frame)))))
 
 (use-package pdf-tools :ensure t
   :mode (("\\.pdf\\'" . pdf-view-mode))
