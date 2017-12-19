@@ -45,15 +45,22 @@
 
 (setq-default initial-frame-alist '((fullscreen . fullboth)))
 
-(catch 'break
-  (dolist (font-spec '(("DejaVu Sans Mono" . 110) ("Source Code Pro" . 110)))
-    (let ((font-name (car font-spec))
-          (font-size (cdr font-spec)))
-      (when (member font-name (font-family-list))
-        (set-face-attribute 'default nil
-                            :font font-name :height font-size
-                            :weight 'normal :width 'normal)
-        (throw 'break t)))))
+(defun nox/font-setup (&optional frame)
+  (catch 'break
+    (dolist (font '(("DejaVu Sans Mono" . 11)
+                    ("Source Code Pro" . 11)))
+      (let* ((font-name (car font))
+             (font-size (cdr font))
+             (font-setting (format "%s-%d" font-name font-size)))
+        (when (member font-name (font-family-list frame))
+          (set-frame-font font-setting nil t)
+          (add-to-list 'default-frame-alist (cons 'font font-setting))
+          (throw 'break t)))))
+  (remove-hook 'focus-in-hook 'nox/font-setup)
+  (remove-hook 'after-make-frame-functions 'nox/font-setup))
+
+(add-hook 'focus-in-hook 'nox/font-setup)
+(add-hook 'after-make-frame-functions 'nox/font-setup)
 
 (setq-default inhibit-startup-screen t
               initial-scratch-message "")
@@ -807,7 +814,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    '(("t" "Tarefa" entry (file "Inbox.org")
       "* TODO %i%?"))
    org-refile-targets '((nil . (:maxlevel . 6))
-                        (org-base-folder . (:maxlevel . 6)))
+                        (org-agenda-files . (:maxlevel . 6)))
    org-agenda-skip-deadline-prewarning-if-scheduled t
 
    org-modules '(org-id)
@@ -911,8 +918,7 @@ and append it."
 
   (pdf-tools-install)
   (setq-default pdf-view-display-size 'fit-page
-                pdf-cache-image-limit 200
-                pdf-outline-display-labels t))
+                pdf-cache-image-limit 200))
 
 (use-package paren
   :init
