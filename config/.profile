@@ -6,4 +6,4 @@ export EDITOR="editor"
 export VISUAL="$EDITOR"
 export ALTERNATE_EDITOR=""
 
-export GOPATH="~/Work/Go"
+export GOPATH="$HOME/Work/Go"

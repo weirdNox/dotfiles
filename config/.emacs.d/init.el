@@ -401,7 +401,9 @@ Position the cursor at its beginning, according to the current mode."
   :ensure t
   :demand t
   :after dired
-  :bind (:map dired-mode-map ("e" . nox/ediff-files))
+  :bind (:map dired-mode-map
+              ("e" . nox/ediff-files)
+              ("Y" . nox/dired-rsync))
   :config
   ;; From abo-abo
   (defun nox/ediff-files ()
@@ -423,6 +425,28 @@ Position the cursor at its beginning, according to the current mode."
                         (setq ediff-after-quit-hook-internal nil)
                         (set-window-configuration wnd))))
         (error "no more than 2 files should be marked"))))
+
+  (defun nox/dired-rsync (dest)
+    (interactive
+     (list
+      (expand-file-name
+       (read-file-name
+        "Rsync to:"
+        (dired-dwim-target-directory)))))
+    (let ((files (dired-get-marked-files
+                  nil current-prefix-arg))
+          (rsync-command
+           "rsync -arvz --progress "))
+      (dolist (file files)
+        (setq rsync-command
+              (concat rsync-command
+                      (shell-quote-argument file)
+                      " ")))
+      (setq rsync-command
+            (concat rsync-command
+                    (shell-quote-argument dest)))
+      (async-shell-command rsync-command "*rsync*")
+      (other-window 1)))
 
   (setq-default dired-listing-switches "-alh"
                 dired-recursive-deletes 'always
@@ -821,6 +845,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
    org-startup-indented t
    org-startup-with-inline-images t
+   org-image-actual-width '(500)
    org-startup-with-latex-preview t
 
    org-return-follows-link t
@@ -1028,6 +1053,14 @@ and append it."
 
   (add-hook 'c-mode-common-hook 'nox/c-hook)
   (setq-default c-hanging-semi&comma-criteria '((lambda () 'stop))))
+
+(use-package go-mode
+  :ensure t
+  :config
+  (setq-default gofmt-command (substitute-in-file-name "$GOPATH/bin/goimports"))
+  (add-hook 'go-mode-hook
+            (lambda ()
+              (add-hook 'before-save-hook 'gofmt-before-save nil t))))
 
 (use-package octave
   :mode (("\\.m\\'" . octave-mode))
