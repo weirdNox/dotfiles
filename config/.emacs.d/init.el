@@ -792,9 +792,9 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     (call-interactively 'ivy-imenu-anywhere)
     (recenter-top-bottom)))
 
-(use-package alt-interleave
+(use-package noter
   :config
-  (setq-default interleave-default-heading-title "Notas da página $p$"))
+  (setq-default noter-default-heading-title "Notas da página $p$"))
 
 (use-package magit :ensure t
   :if (executable-find "git")
@@ -824,7 +824,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     "Org-mode"
     ("c" org-capture "Capture")
     ("a" org-agenda "Agenda")
-    ("i" interleave "Interleave")
+    ("n" noter "Noter")
     ("l" org-store-link "Store link")
     ("q" nil "Quit"))
 
