@@ -38,9 +38,9 @@
   :demand
   :config (load-theme 'gruvbox-dark-hard t))
 
-(tool-bar-mode -1)
-(menu-bar-mode -1)
-(scroll-bar-mode -1)
+(when (functionp 'scroll-bar-mode) (scroll-bar-mode -1))
+(when (functionp 'tool-bar-mode) (tool-bar-mode -1))
+(when (functionp 'menu-bar-mode) (menu-bar-mode -1))
 (fset 'yes-or-no-p 'y-or-n-p)
 
 (setq-default initial-frame-alist '((fullscreen . fullboth)))
@@ -254,20 +254,31 @@ Position the cursor at its beginning, according to the current mode."
   (:map company-template-nav-map
         ("<tab>" . company-complete-common)
         ("<C-return>" . company-template-forward-field))
-
   :init
-  (global-company-mode)
   (setq-default company-require-match nil
                 company-idle-delay nil
-                company-dabbrev-downcase nil
-                company-dabbrev-ignore-case t
-                company-transformers '(company-sort-by-occurrence company-sort-by-backend-importance)
+                company-transformers '(company-sort-by-occurrence
+                                       company-sort-by-backend-importance)
                 company-backends '((company-capf
                                     company-files
                                     company-keywords
                                     company-gtags
                                     company-dabbrev-code)
-                                   company-dabbrev)))
+                                   company-dabbrev))
+  (global-company-mode))
+
+(use-package company-dabbrev
+  :after company
+  :config
+  (defun nox/company-dabbrev-buffer-check (buffer)
+    (with-current-buffer buffer
+      (or (derived-mode-p 'pdf-view-mode
+                          'doc-view-mode))))
+
+  (setq-default company-dabbrev-downcase nil
+                company-dabbrev-ignore-case t
+                company-dabbrev-ignore-invisible t
+                company-dabbrev-ignore-buffers 'nox/company-dabbrev-buffer-check))
 
 (use-package compile
   :bind (("<f12>" . nox/make)
@@ -792,9 +803,9 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     (call-interactively 'ivy-imenu-anywhere)
     (recenter-top-bottom)))
 
-(use-package noter
+(use-package org-noter :ensure t
   :config
-  (setq-default noter-default-heading-title "Notas da página $p$"))
+  (setq-default org-noter-default-heading-title "Notas da página $p$"))
 
 (use-package magit :ensure t
   :if (executable-find "git")
@@ -824,7 +835,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     "Org-mode"
     ("c" org-capture "Capture")
     ("a" org-agenda "Agenda")
-    ("n" noter "Noter")
+    ("n" org-noter "Noter")
     ("l" org-store-link "Store link")
     ("q" nil "Quit"))
 
@@ -969,6 +980,8 @@ and append it."
                                             (width . 30)
                                             (border-width . 0)
                                             (left-fringe . 0))))
+
+(use-package tex :ensure auctex)
 
 (use-package tramp
   :config
