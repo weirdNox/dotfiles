@@ -242,6 +242,8 @@ Position the cursor at its beginning, according to the current mode."
   (setq-default calendar-week-start-day 1
                 calendar-date-display-form calendar-european-date-display-form))
 
+(use-package cdlatex :ensure t)
+
 (use-package company :ensure t
   :delight
   :bind
@@ -879,7 +881,9 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
    org-confirm-babel-evaluate nil)
 
+  (add-hook 'org-mode-hook 'turn-on-org-cdlatex)
   (add-hook 'org-mode-hook 'org-hide-block-all)
+
   (set-face-attribute 'org-block nil :inherit 'default)
 
   (org-link-set-parameters "pdfview"
