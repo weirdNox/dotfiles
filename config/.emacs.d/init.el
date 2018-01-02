@@ -367,11 +367,12 @@ Position the cursor at its beginning, according to the current mode."
   :init
   (ivy-mode 1)
   (counsel-mode 1)
-  (setq-default ivy-use-virtual-buffers t
-                ivy-virtual-abbreviate 'full
-                ivy-height 10
-                ivy-count-format "(%d/%d) "
+  (setq-default ivy-height 10
+                ivy-use-virtual-buffers t
                 ivy-extra-directories nil
+                ivy-use-selectable-prompt t
+                ivy-count-format "(%d/%d) "
+                ivy-virtual-abbreviate 'full
                 ivy-initial-inputs-alist nil
                 ivy-re-builders-alist '((swiper . ivy--regex-plus)
                                         (t . ivy--regex-fuzzy)))
