@@ -843,19 +843,20 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     ("q" nil "Quit"))
 
   (setq-default
+   org-modules '(org-id)
+
    org-directory "~/Personal/Org/"
    org-agenda-files (list (concat org-directory "Inbox.org")
                           (concat org-directory "GTD.org"))
-   org-todo-keywords '((sequence "TODO(t)" "NEXT(n@)" "WAITING(w@/!)" "|"
-                                 "DONE(d!)" "CANCELED(c@)"))
-   org-capture-templates
-   '(("t" "Tarefa" entry (file "Inbox.org")
-      "* TODO %i%?"))
+   org-capture-templates '(("t" "Tarefa" entry (file "Inbox.org")
+                            "* TODO %i%?"))
    org-refile-targets '((nil . (:maxlevel . 6))
                         (org-agenda-files . (:maxlevel . 6)))
-   org-agenda-skip-deadline-prewarning-if-scheduled t
 
-   org-modules '(org-id)
+   org-todo-keywords '((type "TODO(t)" "WAITING(w@/!)" "|"
+                             "DONE(d)" "CANCELED(c@)"))
+   org-log-done 'time
+   org-agenda-skip-deadline-prewarning-if-scheduled t
 
    org-startup-indented t
    org-startup-with-inline-images t
