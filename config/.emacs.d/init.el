@@ -34,45 +34,47 @@
 
 ;; ------------------------------
 ;; Appearance
-(use-package gruvbox :ensure gruvbox-theme
-  :demand
-  :config (load-theme 'gruvbox-dark-hard t))
+(run-with-idle-timer
+ 0.001 nil
+ (lambda ()
+   (use-package doom-themes :ensure t
+     :demand
+     :config
+     (setq-default doom-themes-enable-bold t
+                   doom-themes-enable-italic t
+                   doom-one-brighter-comments t
+                   doom-one-comment-bg nil
+                   doom-molokai-brighter-comments t
+                   doom-spacegrey-brighter-comments t
+                   doom-spacegrey-comment-bg nil)
+     (load-theme 'doom-one t)
+     (doom-themes-visual-bell-config)
+     (doom-themes-org-config))
+   (catch 'break
+     (dolist (font '(("DejaVu Sans Mono" . 11)
+                     ("Source Code Pro" . 11)))
+       (let* ((font-name (car font))
+              (font-size (cdr font))
+              (font-setting (format "%s-%d" font-name font-size)))
+         (when (member font-name (font-family-list))
+           (set-frame-font font-setting nil t)
+           (add-to-list 'default-frame-alist (cons 'font font-setting))
+           (throw 'break t)))))))
 
 (when (functionp 'scroll-bar-mode) (scroll-bar-mode -1))
 (when (functionp 'tool-bar-mode) (tool-bar-mode -1))
 (when (functionp 'menu-bar-mode) (menu-bar-mode -1))
 (fset 'yes-or-no-p 'y-or-n-p)
 
-(setq-default initial-frame-alist '((fullscreen . fullboth)))
-
-(defun nox/font-setup (&optional frame)
-  (catch 'break
-    (dolist (font '(("DejaVu Sans Mono" . 11)
-                    ("Source Code Pro" . 11)))
-      (let* ((font-name (car font))
-             (font-size (cdr font))
-             (font-setting (format "%s-%d" font-name font-size)))
-        (when (member font-name (font-family-list frame))
-          (set-frame-font font-setting nil t)
-          (add-to-list 'default-frame-alist (cons 'font font-setting))
-          (throw 'break t)))))
-  (remove-hook 'focus-in-hook 'nox/font-setup)
-  (remove-hook 'after-make-frame-functions 'nox/font-setup))
-
-(add-hook 'focus-in-hook 'nox/font-setup)
-(add-hook 'after-make-frame-functions 'nox/font-setup)
-
-(setq-default inhibit-startup-screen t
-              initial-scratch-message "")
-
-(setq-default truncate-partial-width-windows 70
+(setq-default initial-frame-alist '((fullscreen . fullboth))
+              inhibit-startup-screen t
+              initial-scratch-message ""
+              truncate-partial-width-windows 70
               word-wrap t)
 (add-hook 'prog-mode-hook (lambda () (setq truncate-lines t)))
 
 (global-hl-line-mode 1)
 (blink-cursor-mode 0)
-
-(setq-default ring-bell-function 'ignore)
 
 (line-number-mode t)
 (column-number-mode t)
@@ -108,6 +110,7 @@
  large-file-warning-threshold (* 100 1024 1024)
 
  save-interprogram-paste-before-kill t
+ bidi-display-reordering nil
 
  delete-by-moving-to-trash t
  backup-directory-alist `((".*" . ,temp-dir))
@@ -806,6 +809,12 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     (call-interactively 'ivy-imenu-anywhere)
     (recenter-top-bottom)))
 
+(use-package ispell
+  :config
+  (when (executable-find "hunspell")
+    (setq-default ispell-program-name "hunspell")
+    (setq ispell-really-hunspell t)))
+
 (use-package org-noter :ensure t
   :config
   (setq-default org-noter-default-heading-title "Notas da página $p$"))
@@ -814,7 +823,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   :if (executable-find "git")
   :bind ("C-c g" . magit-status)
   :config
-  (setq-default magit-completing-read-function 'ivy-completing-read))
+  (setq-default magit-completing-read-function 'ivy-completing-read
+                magit-diff-refine-hunk t))
 
 (use-package multiple-cursors :ensure t
   :bind (("C-c l" . mc/edit-lines)
