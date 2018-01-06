@@ -31,11 +31,10 @@
 (require 'bind-key)
 (setq-default use-package-always-defer t)
 
-
 ;; ------------------------------
 ;; Appearance
 (run-with-idle-timer
- 0.001 nil
+ 0.1 nil
  (lambda ()
    (use-package doom-themes :ensure t
      :demand
@@ -50,8 +49,12 @@
      (load-theme 'doom-one t)
      (doom-themes-visual-bell-config)
      (doom-themes-org-config))
+
    (catch 'break
-     (dolist (font '(("DejaVu Sans Mono" . 11)
+     (dolist (font '(("PragmataPro" . 12)
+                     ("Hack" . 11)
+                     ("DejaVu Sans Mono" . 11)
+                     ("Inconsolata" . 13)
                      ("Source Code Pro" . 11)))
        (let* ((font-name (car font))
               (font-size (cdr font))
@@ -59,7 +62,11 @@
          (when (member font-name (font-family-list))
            (set-frame-font font-setting nil t)
            (add-to-list 'default-frame-alist (cons 'font font-setting))
-           (throw 'break t)))))))
+           (throw 'break t)))))
+   ;; Fallback
+   (when (member "Symbola" (font-family-list))
+     (set-fontset-font t 'unicode (font-spec :size 25 :name "Symbola")
+                       nil))))
 
 (when (functionp 'scroll-bar-mode) (scroll-bar-mode -1))
 (when (functionp 'tool-bar-mode) (tool-bar-mode -1))
