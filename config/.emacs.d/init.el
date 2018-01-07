@@ -62,11 +62,7 @@
          (when (member font-name (font-family-list))
            (set-frame-font font-setting nil t)
            (add-to-list 'default-frame-alist (cons 'font font-setting))
-           (throw 'break t)))))
-   ;; Fallback
-   (when (member "Symbola" (font-family-list))
-     (set-fontset-font t 'unicode (font-spec :size 25 :name "Symbola")
-                       nil))))
+           (throw 'break t)))))))
 
 (when (functionp 'scroll-bar-mode) (scroll-bar-mode -1))
 (when (functionp 'tool-bar-mode) (tool-bar-mode -1))
@@ -917,6 +913,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
      (python . t)
      (latex . t)))
   (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images)
+
+  (push '("html" . web) org-src-lang-modes)
 
   ;; NOTE(nox): Capture frame related
   (advice-add 'org-switch-to-buffer-other-window :after
