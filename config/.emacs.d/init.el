@@ -133,8 +133,6 @@
 
 (global-auto-revert-mode)
 
-(mouse-avoidance-mode 'jump)
-
 (defun nox/rename-file-and-buffer ()
   "Rename current buffer and the file it is visiting, if any."
   (interactive)
