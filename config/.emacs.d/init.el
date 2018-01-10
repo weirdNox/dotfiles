@@ -384,9 +384,11 @@ Position the cursor at its beginning, according to the current mode."
   (add-to-list 'swiper-font-lock-exclude 'c-mode t)
   (add-to-list 'swiper-font-lock-exclude 'c++-mode t)
 
-  (if (executable-find "rg")
-      (setq-default counsel-grep-base-command
-                    "rg -i -M 120 --no-heading --line-number --color never '%s' %s"))
+  (setq-default
+   counsel-grep-base-command
+   (cond ((executable-find "rg") "rg -S -M 120 --no-heading --line-number --color never %s %s")
+         ((executable-find "ag") "ag --nogroup --nocolor %s %s")
+         (t "grep -i -E -n -e %s %s")))
 
   (defun counsel-find-file-as-root (x)
     "Find file X with root privileges."
@@ -813,8 +815,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 (use-package ispell
   :config
   (when (executable-find "hunspell")
-    (setq-default ispell-program-name "hunspell")
-    (setq ispell-really-hunspell t)))
+    (setq-default ispell-program-name "hunspell"
+                  ispell-really-hunspell t)))
 
 (use-package org-noter :ensure t
   :config
