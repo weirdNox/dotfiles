@@ -861,10 +861,14 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-directory "~/Personal/Org/"
    org-agenda-files (list (concat org-directory "Inbox.org")
                           (concat org-directory "GTD.org"))
+
    org-capture-templates '(("t" "Tarefa" entry (file "Inbox.org")
                             "* TODO %i%?"))
+
+   org-refile-use-outline-path 'file
    org-refile-targets '((nil . (:maxlevel . 6))
                         (org-agenda-files . (:maxlevel . 6)))
+   org-outline-path-complete-in-steps nil
 
    org-todo-keywords '((type "TODO(t)" "WAITING(w@/!)" "|"
                              "DONE(d)" "CANCELED(c@)"))
