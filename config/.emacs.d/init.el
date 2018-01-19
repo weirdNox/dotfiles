@@ -17,7 +17,8 @@
 
 (require 'package)
 (setq-default package-archives '(("gnu" . "https://elpa.gnu.org/packages/")
-                                 ("melpa" . "https://melpa.org/packages/"))
+                                 ("melpa" . "https://melpa.org/packages/")
+                                 ("org" . "https://orgmode.org/elpa/"))
               package-enable-at-startup nil
               load-prefer-newer t)
 (package-initialize)
@@ -855,6 +856,11 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     ("l" org-store-link "Store link")
     ("q" nil "Quit"))
 
+  (defun org-summary-todo (n-done n-not-done)
+    "Switch entry to DONE when all subentries are done, to TODO otherwise."
+    (let (org-log-done org-log-states)   ; turn off logging
+      (org-todo (if (= n-not-done 0) "DONE" "TODO"))))
+
   (setq-default
    org-modules '(org-id)
 
@@ -865,15 +871,14 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-capture-templates '(("t" "Tarefa" entry (file "Inbox.org")
                             "* TODO %i%?"))
 
-   org-refile-use-outline-path 'file
    org-refile-targets '((nil . (:maxlevel . 6))
                         (org-agenda-files . (:maxlevel . 6)))
+   org-refile-use-outline-path 'file
    org-outline-path-complete-in-steps nil
 
    org-todo-keywords '((type "TODO(t)" "WAITING(w@/!)" "|"
                              "DONE(d)" "CANCELED(c@)"))
    org-log-done 'time
-   org-agenda-skip-deadline-prewarning-if-scheduled t
 
    org-startup-indented t
    org-startup-with-inline-images t
@@ -900,10 +905,10 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
    org-confirm-babel-evaluate nil)
 
+  (add-hook 'org-after-todo-statistics-hook 'org-summary-todo)
+
   (add-hook 'org-mode-hook 'turn-on-org-cdlatex)
   (add-hook 'org-mode-hook 'org-hide-block-all)
-
-  (set-face-attribute 'org-block nil :inherit 'default)
 
   (org-link-set-parameters "pdfview"
                            :follow 'org-pdfview-open
@@ -930,8 +935,17 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                   (error (when (frame-parameter nil 'org-capture-frame)
                            (delete-frame))))))
   (add-hook 'org-capture-after-finalize-hook
-            (lambda (&rest _) (when (frame-parameter nil 'org-capture-frame)
-                                (delete-frame)))))
+            (lambda (&rest _) (when (and (not org-capture-is-refiling)
+                                         (frame-parameter nil 'org-capture-frame))
+                                (delete-frame))))
+  (advice-add 'org-capture-refile :after
+              (lambda (&rest _) (when (frame-parameter nil 'org-capture-frame)
+                                  (delete-frame)))))
+
+(use-package org-agenda
+  :config
+  (setq org-agenda-skip-deadline-prewarning-if-scheduled t
+        org-agenda-todo-list-sublevels nil))
 
 (use-package pdf-tools :ensure t
   :mode (("\\.pdf\\'" . pdf-view-mode))
