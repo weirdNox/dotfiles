@@ -210,6 +210,18 @@ Position the cursor at its beginning, according to the current mode."
       (widen)
       (buffer-substring-no-properties (point-min) (point-max)))))
 
+(defun nox/exit-emacs (arg)
+  (interactive "P")
+  (when (or (numberp arg) (eq arg '-))
+    (setq arg (prefix-numeric-value arg)))
+  (let* ((save-without-asking (numberp arg))
+         (kill-server (or (equal arg '(4))
+                          (and save-without-asking
+                               (>= arg 0)))))
+    (if kill-server
+        (save-buffers-kill-emacs save-without-asking)
+      (save-buffers-kill-terminal save-without-asking))))
+
 
 ;; ------------------------------
 ;; Keybindings
@@ -222,7 +234,8 @@ Position the cursor at its beginning, according to the current mode."
  ("<backtab>" . indent-for-tab-command)
  ("<C-tab>" . indent-region)
  ("M-o" . other-window)
- ("M-O" . (lambda () (interactive) (other-window -1))))
+ ("M-O" . (lambda () (interactive) (other-window -1)))
+ ("C-x C-c" . nox/exit-emacs))
 
 (defhydra hydra-files (:exit t :foreign-keys warn)
   "Files"
@@ -413,6 +426,13 @@ Position the cursor at its beginning, according to the current mode."
           (find-alternate-file file-name)
         (find-file file-name)))))
 
+(use-package counsel-projectile :ensure t
+  :demand
+  :config
+  (setq-default projectile-completion-system 'ivy
+                projectile-enable-caching t)
+  (counsel-projectile-mode))
+
 (use-package delight :ensure t)
 
 (use-package ivy-hydra :ensure t
@@ -420,7 +440,7 @@ Position the cursor at its beginning, according to the current mode."
 
 (use-package dired+
   :ensure t
-  :demand t
+  :demand
   :after dired
   :bind (:map dired-mode-map
               ("e" . nox/ediff-files)
@@ -828,7 +848,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   :bind ("C-c g" . magit-status)
   :config
   (setq-default magit-completing-read-function 'ivy-completing-read
-                magit-diff-refine-hunk t))
+                magit-diff-refine-hunk 'all))
 
 (use-package multiple-cursors :ensure t
   :bind (("C-c l" . mc/edit-lines)
@@ -947,6 +967,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   (setq org-agenda-skip-deadline-prewarning-if-scheduled t
         org-agenda-todo-list-sublevels nil))
 
+(use-package org-edit-latex :ensure t)
+
 (use-package pdf-tools :ensure t
   :mode (("\\.pdf\\'" . pdf-view-mode))
   :bind (:map pdf-view-mode-map
@@ -1012,6 +1034,8 @@ and append it."
   :init
   (add-hook 'after-make-frame-functions (lambda (frame) (select-frame-set-input-focus frame)) t))
 
+(use-package smex :ensure t)
+
 (use-package speedbar
   :config
   (setq-default speedbar-frame-parameters '((minibuffer . t)
@@ -1028,6 +1052,8 @@ and append it."
                 tramp-default-proxies-alist
                 '(((regexp-quote (system-name)) nil nil)
                   (nil "\\`root\\'" "/ssh:%h:"))))
+
+(use-package treemacs :ensure t)
 
 (use-package uniquify
   :config
