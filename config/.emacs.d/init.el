@@ -34,36 +34,43 @@
 
 ;; ------------------------------
 ;; Appearance
-(run-with-idle-timer
- 0.1 nil
- (lambda ()
-   (use-package doom-themes :ensure t
-     :demand
-     :config
-     (setq-default doom-themes-enable-bold t
-                   doom-themes-enable-italic t
-                   doom-one-brighter-comments t
-                   doom-one-comment-bg nil
-                   doom-molokai-brighter-comments t
-                   doom-spacegrey-brighter-comments t
-                   doom-spacegrey-comment-bg nil)
-     (load-theme 'doom-one t)
-     (doom-themes-visual-bell-config)
-     (doom-themes-org-config))
+(defun nox/setup-appearance (frame)
+  (with-selected-frame frame
+    (use-package doom-themes :ensure t
+      :demand
+      :config
+      (setq-default doom-themes-enable-bold t
+                    doom-themes-enable-italic t
+                    doom-one-brighter-comments t
+                    doom-one-comment-bg nil
+                    doom-molokai-brighter-comments t
+                    doom-spacegrey-brighter-comments t
+                    doom-spacegrey-comment-bg nil)
+      (load-theme 'doom-one t)
+      (doom-themes-visual-bell-config)
+      (doom-themes-org-config))
 
-   (catch 'break
-     (dolist (font '(("PragmataPro" . 12)
-                     ("Hack" . 11)
-                     ("DejaVu Sans Mono" . 11)
-                     ("Inconsolata" . 13)
-                     ("Source Code Pro" . 11)))
-       (let* ((font-name (car font))
-              (font-size (cdr font))
-              (font-setting (format "%s-%d" font-name font-size)))
-         (when (member font-name (font-family-list))
-           (set-frame-font font-setting nil t)
-           (add-to-list 'default-frame-alist (cons 'font font-setting))
-           (throw 'break t)))))))
+    (catch 'break
+      (dolist (font '(("PragmataPro" . 12)
+                      ("Hack" . 11)
+                      ("DejaVu Sans Mono" . 11)
+                      ("Inconsolata" . 13)
+                      ("Source Code Pro" . 11)))
+        (let* ((font-name (car font))
+               (font-size (cdr font))
+               (font-setting (format "%s-%d" font-name font-size)))
+          (when (member font-name (font-family-list))
+            (set-frame-font font-setting nil t)
+            (add-to-list 'default-frame-alist (cons 'font font-setting))
+            (throw 'break t)))))
+
+    (when (> (window-width) 100)
+      (split-window-right))
+    (remove-hook 'after-make-frame-functions 'nox/setup-appearance)))
+
+(if (daemonp)
+    (add-hook 'after-make-frame-functions 'nox/setup-appearance)
+  (nox/setup-appearance (car (frame-list))))
 
 (when (functionp 'scroll-bar-mode) (scroll-bar-mode -1))
 (when (functionp 'tool-bar-mode) (tool-bar-mode -1))
@@ -429,8 +436,7 @@ Position the cursor at its beginning, according to the current mode."
 (use-package counsel-projectile :ensure t
   :demand
   :config
-  (setq-default projectile-completion-system 'ivy
-                projectile-enable-caching t)
+  (setq-default projectile-completion-system 'ivy)
   (counsel-projectile-mode))
 
 (use-package delight :ensure t)
@@ -860,11 +866,14 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   (unbind-key "M-<down-mouse-1>"))
 
 (use-package org :ensure t
-  :bind ("C-c o" . hydra-org/body)
+  :bind (("C-c o" . hydra-org/body)
+         (:map org-mode-map
+               ("C-c C-q" . counsel-org-tag)))
   :init
   (defun nox/org-capture-frame ()
     (modify-frame-parameters nil '((name . "Org Capture")
-                                   (org-capture-frame . t)))
+                                   (org-capture-frame . t)
+                                   (width . 110) (height . 40)))
     (org-capture))
 
   :config
@@ -882,14 +891,17 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
       (org-todo (if (= n-not-done 0) "DONE" "TODO"))))
 
   (setq-default
-   org-modules '(org-id)
+   org-modules '(org-id
+                 org-protocol)
 
    org-directory "~/Personal/Org/"
    org-agenda-files (list (concat org-directory "Inbox.org")
                           (concat org-directory "GTD.org"))
 
    org-capture-templates '(("t" "Tarefa" entry (file "Inbox.org")
-                            "* TODO %i%?"))
+                            "* TODO %i%?")
+                           ("w" "Web bookmark" entry (file+headline "GTD.org" "Referências")
+                            "* [[%:link][%^{Title|%:description}]]\nCriado em: %u\n%?"))
 
    org-refile-targets '((nil . (:maxlevel . 6))
                         (org-agenda-files . (:maxlevel . 6)))
@@ -900,19 +912,22 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                              "DONE(d)" "CANCELED(c@)"))
    org-log-done 'time
 
-   org-startup-indented t
-   org-startup-with-inline-images t
+   org-catch-invisible-edits 'smart
+   org-confirm-babel-evaluate nil
+   org-id-link-to-org-use-id 'create-if-interactive
    org-image-actual-width '(500)
-   org-startup-with-latex-preview t
-
+   org-list-allow-alphabetical t
+   org-loop-over-headlines-in-active-region t
+   org-pretty-entities t
    org-return-follows-link t
+   org-tags-column 80
+
    org-src-fontify-natively t
    org-src-tab-acts-natively t
-   org-catch-invisible-edits 'smart
-   org-list-allow-alphabetical t
-   org-pretty-entities t
 
-   org-id-link-to-org-use-id 'create-if-interactive
+   org-startup-indented t
+   org-startup-with-inline-images t
+   org-startup-with-latex-preview t
 
    org-latex-packages-alist '(("" "tikz" t)
                               ("" "mathtools" t))
@@ -921,9 +936,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-format-latex-options
    '(:foreground default :background default :scale 1.7
                  :html-foreground "Black" :html-background "Transparent"
-                 :html-scale 1.0 :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
-
-   org-confirm-babel-evaluate nil)
+                 :html-scale 1.0 :matchers ("begin" "$1" "$" "$$" "\\(" "\\[")))
 
   (add-hook 'org-after-todo-statistics-hook 'org-summary-todo)
 
@@ -955,11 +968,13 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                   (error (when (frame-parameter nil 'org-capture-frame)
                            (delete-frame))))))
   (add-hook 'org-capture-after-finalize-hook
-            (lambda (&rest _) (when (and (not org-capture-is-refiling)
-                                         (frame-parameter nil 'org-capture-frame))
+            (lambda (&rest _) (when (and (frame-parameter nil 'org-capture-frame)
+                                         (not org-capture-is-refiling))
+                                (org-save-all-org-buffers)
                                 (delete-frame))))
   (advice-add 'org-capture-refile :after
               (lambda (&rest _) (when (frame-parameter nil 'org-capture-frame)
+                                  (org-save-all-org-buffers)
                                   (delete-frame)))))
 
 (use-package org-agenda

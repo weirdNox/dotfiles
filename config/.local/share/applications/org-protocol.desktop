@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=org-protocol
+Exec=sh -c "emacsclient -e \"(require 'org-protocol)\" && emacsclient -c -F '((name . \"Org Capture\")(org-capture-frame . t)(width . 110)(height . 40))' %u"
+Type=Application
+Terminal=false
+NoDisplay=true
+Categories=System;
+MimeType=x-scheme-handler/org-protocol;

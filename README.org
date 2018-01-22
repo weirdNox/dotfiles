@@ -1,0 +1,9 @@
+* Dotfiles - Notes
+** Refresh .desktop files
+After running =install.sh=, run ~update-desktop-database ~/.local/share/applications/~.
+** Global =org-capture= shortcut
+Must setup a global shortcut that runs ~ec -ce "(nox/org-capture-frame)"~
+** =org-protocol= bookmark
+#+BEGIN_EXAMPLE
+javascript:location.href='org-protocol://capture?template=w&url=' + encodeURIComponent(location.href) + '&title=' + encodeURIComponent(document.title)
+#+END_EXAMPLE
