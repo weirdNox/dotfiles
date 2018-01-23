@@ -12,8 +12,7 @@
 (setq-default default-directory "~/"
               private-settings-file (locate-user-emacs-file "private.el")
               temp-dir (locate-user-emacs-file "temp")
-              custom-file (locate-user-emacs-file "custom.el")
-              trash-directory (locate-user-emacs-file "trash"))
+              custom-file (locate-user-emacs-file "custom.el"))
 
 (require 'package)
 (setq-default package-archives '(("gnu" . "https://elpa.gnu.org/packages/")
@@ -452,6 +451,56 @@ Position the cursor at its beginning, according to the current mode."
               ("e" . nox/ediff-files)
               ("Y" . nox/dired-rsync))
   :config
+  (defun nox/pdf-compress-merge-sentinel (process event)
+    (unless (process-live-p process)
+      (let ((exit-code (process-exit-status process)))
+        (if (/= exit-code 0)
+            (error "Something went wrong with the process! Exit code: %d" exit-code)
+          (let* ((data (process-get process 'data))
+                 (output (car data))
+                 (temp-output-name (car output))
+                 (output-name (cdr output))
+                 (files (cdr data)))
+            (dolist (file files)
+              (move-file-to-trash file))
+            (ignore-errors (rename-file temp-output-name output-name 1))
+            (message "Done compressing/merging PDF(s)."))))))
+
+  (defun nox/pdf-compress-merge (arg)
+    (interactive "P")
+    (let ((files (dired-get-marked-files))
+          (quality "ebook")
+          (color-conv-strat "UseDeviceIndependentColor")
+          (temp-output-name (format "MERGED_FILE_%d.pdf" (random 100000)))
+          output-name)
+      (if (< (length files) 1)
+          (user-error "You must select at least one file!")
+        (when arg
+          (setq quality (completing-read
+                         "Compression type: "
+                         '("default" "screen" "ebook" "printer" "prepress")
+                         nil t nil nil quality)
+                color-conv-strat (completing-read
+                                  "Color conversion strategy: "
+                                  '("LeaveColorUnchanged" "Gray" "RGB" "sRGB" "CMYK" "UseDeviceIndependentColor")
+                                  nil t nil nil color-conv-strat)))
+        (setq output-name (completing-read "Output name: "
+                                           (when (= (length files) 1)
+                                             files)))
+        (when (= (length output-name) 0) (setq output-name "Output.pdf"))
+        (process-put (make-process
+                      :name "PDF Compressor/Merger"
+                      :connection-type 'pipe
+                      :sentinel 'nox/pdf-compress-merge-sentinel
+                      :command
+                      (append
+                       (list "gs" "-dBATCH" "-dNOPAUSE" "-q" "-sDEVICE=pdfwrite"
+                             (concat "-sColorConversionStrategy=/" color-conv-strat)
+                             (concat "-sOutputFile=" temp-output-name)
+                             (concat "-dPDFSETTINGS=/" quality))
+                       files))
+                     'data (cons (cons temp-output-name output-name)  files)))))
+
   ;; From abo-abo
   (defun nox/ediff-files ()
     (interactive)
@@ -851,7 +900,6 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
 (use-package magit :ensure t
   :if (executable-find "git")
-  :bind ("C-c g" . magit-status)
   :config
   (setq-default magit-completing-read-function 'ivy-completing-read
                 magit-diff-refine-hunk 'all))
