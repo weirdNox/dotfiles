@@ -1028,6 +1028,9 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 (use-package org-agenda
   :config
   (setq org-agenda-skip-deadline-prewarning-if-scheduled t
+        org-agenda-todo-ignore-deadlines 'far
+        org-agenda-todo-ignore-scheduled 'future
+        org-agenda-todo-ignore-timestamp 'all
         org-agenda-todo-list-sublevels nil))
 
 (use-package org-edit-latex :ensure t)
