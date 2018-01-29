@@ -6,8 +6,13 @@
   (error "This config requires at least GNU Emacs 25.1, but you're running version %s."
          emacs-version))
 
-(setq-default gc-cons-threshold 100000000)
-(add-hook 'after-init-hook (lambda () (setq-default gc-cons-threshold 1000000)))
+(defvar nox/file-name-handler-alist file-name-handler-alist)
+(setq-default file-name-handler-alist nil
+              gc-cons-threshold 402653184
+              gc-cons-percentage 0.6)
+(add-hook 'emacs-startup-hook (lambda () (setq-default file-name-handler-alist nox/file-name-handler-alist
+                                                       gc-cons-threshold 16777216
+                                                       gc-cons-percentage 0.1)))
 
 (setq-default default-directory "~/"
               private-settings-file (locate-user-emacs-file "private.el")
