@@ -271,6 +271,52 @@ Position the cursor at its beginning, according to the current mode."
   (setq-default calendar-week-start-day 1
                 calendar-date-display-form calendar-european-date-display-form))
 
+(use-package cc-mode
+  :mode (("\\.c\\'" . c-mode)
+         ("\\.cpp\\'" . c++-mode)
+         ("\\.h\\'" . c++-mode)
+         ("\\.hpp\\'" . c++-mode))
+  :config
+  (defun nox/header-format ()
+    (interactive)
+    (let ((definition (concat
+                       (upcase (file-name-sans-extension (file-name-nondirectory buffer-file-name)))
+                       "_H")))
+      (insert (format "#if !defined(%s)\n#define %s\n\n\n\n#endif // %s" definition definition definition))
+      (previous-line 2)))
+
+  (defun nox/c-hook ()
+    (c-add-style
+     "NoxStyle"
+     '((c-tab-always-indent . t)
+       (c-comment-only-line-offset . 0)
+
+       (c-hanging-braces-alist . ((class-open) (class-close) (defun-open) (defun-close)
+                                  (inline-open) (inline-close) (brace-list-open) (brace-list-close)
+                                  (brace-list-intro) (brace-list-entry) (block-open) (block-close)
+                                  (substatement-open) (statement-case-open) (class-open)))
+
+       (c-hanging-colons-alist . ((inher-intro) (case-label) (label) (access-label)
+                                  (access-key) (member-init-intro)))
+
+       (c-cleanup-list . (scope-operator list-close-comma defun-close-semi))
+
+       (c-offsets-alist . ((arglist-close . c-lineup-arglist) (label . -4) (access-label . -4)
+                           (substatement-open . 0) (statement-case-intro . 4) (case-label . 4)
+                           (block-open . 0) (inline-open . 0) (topmost-intro-cont . 0)
+                           (knr-argdecl-intro . -4) (brace-list-open . 0) (brace-list-intro . 4)
+                           (member-init-intro . ++)))
+
+       (c-echo-syntactic-information-p . t))
+     t)
+    (c-toggle-auto-hungry-state -1)
+    (if buffer-file-name
+        (cond ((file-exists-p buffer-file-name) t)
+              ((string-match "[.]h" buffer-file-name) (nox/header-format)))))
+
+  (add-hook 'c-mode-common-hook 'nox/c-hook)
+  (setq-default c-hanging-semi&comma-criteria '((lambda () 'stop))))
+
 (use-package cdlatex :ensure t)
 
 (use-package company :ensure t
@@ -876,6 +922,14 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                 (setq gdb-var-list (nreverse var-list))))))))
     (gdb-speedbar-update)))
 
+(use-package go-mode
+  :ensure t
+  :config
+  (setq-default gofmt-command (substitute-in-file-name "$GOPATH/bin/goimports"))
+  (add-hook 'go-mode-hook
+            (lambda ()
+              (add-hook 'before-save-hook 'gofmt-before-save nil t))))
+
 (use-package help
   :config
   (setq-default help-window-select t))
@@ -917,6 +971,16 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
          ("M-<mouse-1>" . mc/add-cursor-on-click))
   :init
   (unbind-key "M-<down-mouse-1>"))
+
+(use-package nov :ensure t
+  :mode (("\\.epub\\'" . nov-mode)))
+
+(use-package octave
+  :mode (("\\.m\\'" . octave-mode))
+  :config
+  (setq-default inferior-octave-startup-args '("-i" "--line-editing"))
+  ;; NOTE(nox): Defining functions on octave sometimes failed without this!
+  (add-hook 'inferior-octave-mode-hook (lambda () (setq eldoc-documentation-function nil))))
 
 (use-package org :ensure t
   :bind (("C-c o" . hydra-org/body)
@@ -1006,7 +1070,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    '((gnuplot . t)
      (octave . t)
      (python . t)
-     (latex . t)))
+     (latex . t)
+     (shell . t)))
   (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images)
 
   (push '("html" . web) org-src-lang-modes)
@@ -1132,95 +1197,8 @@ and append it."
                 uniquify-separator "/"
                 uniquify-after-kill-buffer-p t))
 
-
-;; ------------------------------
-;; Modes
-(use-package cc-mode
-  :mode (("\\.c\\'" . c-mode)
-         ("\\.cpp\\'" . c++-mode)
-         ("\\.h\\'" . c++-mode)
-         ("\\.hpp\\'" . c++-mode))
-
-  :config
-  (defconst nox/c-style
-    '((c-tab-always-indent . t)
-      (c-comment-only-line-offset . 0)
-
-      (c-hanging-braces-alist . ((class-open)
-                                 (class-close)
-                                 (defun-open)
-                                 (defun-close)
-                                 (inline-open)
-                                 (inline-close)
-                                 (brace-list-open)
-                                 (brace-list-close)
-                                 (brace-list-intro)
-                                 (brace-list-entry)
-                                 (block-open)
-                                 (block-close)
-                                 (substatement-open)
-                                 (statement-case-open)
-                                 (class-open)))
-      (c-hanging-colons-alist . ((inher-intro)
-                                 (case-label)
-                                 (label)
-                                 (access-label)
-                                 (access-key)
-                                 (member-init-intro)))
-      (c-cleanup-list . (scope-operator
-                         list-close-comma
-                         defun-close-semi))
-      (c-offsets-alist . ((arglist-close . c-lineup-arglist)
-                          (label . -4)
-                          (access-label . -4)
-                          (substatement-open . 0)
-                          (statement-case-intro . 4)
-                          (case-label . 4)
-                          (block-open . 0)
-                          (inline-open . 0)
-                          (topmost-intro-cont . 0)
-                          (knr-argdecl-intro . -4)
-                          (brace-list-open . 0)
-                          (brace-list-intro . 4)
-                          (member-init-intro . ++)))
-      (c-echo-syntactic-information-p . t)))
-
-  (defun nox/header-format ()
-    (interactive)
-    (let ((definition (concat
-                       (upcase (file-name-sans-extension (file-name-nondirectory buffer-file-name)))
-                       "_H")))
-      (insert (format "#if !defined(%s)\n#define %s\n\n\n\n#endif // %s" definition definition definition))
-      (previous-line 2)))
-
-  (defun nox/c-hook ()
-    (c-add-style "NoxStyle" nox/c-style t)
-    (c-toggle-auto-hungry-state -1)
-    (if buffer-file-name
-        (cond ((file-exists-p buffer-file-name) t)
-              ((string-match "[.]h" buffer-file-name) (nox/header-format)))))
-
-  (add-hook 'c-mode-common-hook 'nox/c-hook)
-  (setq-default c-hanging-semi&comma-criteria '((lambda () 'stop))))
-
-(use-package go-mode
-  :ensure t
-  :config
-  (setq-default gofmt-command (substitute-in-file-name "$GOPATH/bin/goimports"))
-  (add-hook 'go-mode-hook
-            (lambda ()
-              (add-hook 'before-save-hook 'gofmt-before-save nil t))))
-
-(use-package octave
-  :mode (("\\.m\\'" . octave-mode))
-  :config
-  (setq-default inferior-octave-startup-args '("-i" "--line-editing"))
-  ;; NOTE(nox): Defining functions on octave sometimes failed without this!
-  (add-hook 'inferior-octave-mode-hook (lambda () (setq eldoc-documentation-function nil))))
-
 (use-package web-mode :ensure t
   :mode (("\\.\\(go\\)?html?\\'" . web-mode)))
-
 
 ;; ------------------------------
 ;; Machine specific settings

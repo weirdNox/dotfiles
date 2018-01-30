@@ -1,4 +1,4 @@
-* Dotfiles - Notes
+* Dotfiles - Notes for extra configuration
 ** Refresh .desktop files
 After running =install.sh=, run ~update-desktop-database ~/.local/share/applications/~.
 ** Global =org-capture= shortcut
@@ -7,3 +7,7 @@ Must setup a global shortcut that runs ~ec -ce "(nox/org-capture-frame)"~
 #+BEGIN_EXAMPLE
 javascript:location.href='org-protocol://capture?template=w&url=' + encodeURIComponent(location.href) + '&title=' + encodeURIComponent(document.title)
 #+END_EXAMPLE
+** Remove GNOME screen recording time limit
+#+BEGIN_SRC sh :results none
+  gsettings set org.gnome.settings-daemon.plugins.media-keys max-screencast-length 0
+#+END_SRC
