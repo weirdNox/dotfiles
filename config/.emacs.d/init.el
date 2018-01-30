@@ -38,36 +38,56 @@
 
 ;; ------------------------------
 ;; Appearance
+(defvar nox/fonts '(("PragmataPro" . 12) ("Hack" . 11) ("DejaVu Sans Mono" . 11) ("Inconsolata" . 13)
+                    ("Source Code Pro" . 11))
+  "List of fonts and sizes. The first one available will be used.")
+
+(defun nox/change-font ()
+  (interactive)
+  (let* (available-fonts font-name font-size font-setting)
+    (dolist (font nox/fonts (setq available-fonts (nreverse available-fonts)))
+      (when (member (car font) (font-family-list))
+        (push font available-fonts)))
+
+    (when available-fonts
+      (if (called-interactively-p 'interactive)
+          (let* ((chosen (assoc-string (completing-read "What font to use? " available-fonts nil t)
+                                       available-fonts)))
+            (setq font-name (car chosen)
+                  font-size (read-number "Font size: " (cdr chosen))))
+        (setq font-name (caar available-fonts)
+              font-size (cdar available-fonts)))
+
+      (setq font-setting (format "%s-%d" font-name font-size))
+      (set-frame-font font-setting nil t)
+      (add-to-list 'default-frame-alist (cons 'font font-setting)))))
+
+(use-package solarized :ensure solarized-theme
+  :config
+  (setq-default solarized-use-variable-pitch nil
+                solarized-use-more-italic t
+                solarized-high-contrast-mode-line t))
+
+(use-package zenburn-theme :ensure t)
+
+(use-package doom-themes :ensure t
+  :config
+  (setq-default doom-themes-enable-bold t
+                doom-themes-enable-italic t
+                doom-one-brighter-comments t
+                doom-one-comment-bg nil
+                doom-molokai-brighter-comments t
+                doom-spacegrey-brighter-comments t
+                doom-spacegrey-comment-bg nil)
+  (doom-themes-visual-bell-config)
+  (doom-themes-org-config))
+
+(setq-default custom-safe-themes t)
+
 (defun nox/setup-appearance (frame)
   (with-selected-frame frame
-    (use-package doom-themes :ensure t
-      :demand
-      :config
-      (setq-default doom-themes-enable-bold t
-                    doom-themes-enable-italic t
-                    doom-one-brighter-comments t
-                    doom-one-comment-bg nil
-                    doom-molokai-brighter-comments t
-                    doom-spacegrey-brighter-comments t
-                    doom-spacegrey-comment-bg nil)
-      (load-theme 'doom-one t)
-      (doom-themes-visual-bell-config)
-      (doom-themes-org-config))
-
-    (catch 'break
-      (dolist (font '(("PragmataPro" . 12)
-                      ("Hack" . 11)
-                      ("DejaVu Sans Mono" . 11)
-                      ("Inconsolata" . 13)
-                      ("Source Code Pro" . 11)))
-        (let* ((font-name (car font))
-               (font-size (cdr font))
-               (font-setting (format "%s-%d" font-name font-size)))
-          (when (member font-name (font-family-list))
-            (set-frame-font font-setting nil t)
-            (add-to-list 'default-frame-alist (cons 'font font-setting))
-            (throw 'break t)))))
-
+    (load-theme 'solarized-dark)
+    (nox/change-font)
     (when (> (window-width) 100)
       (split-window-right))
     (remove-hook 'after-make-frame-functions 'nox/setup-appearance)))
