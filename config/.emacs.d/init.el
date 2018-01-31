@@ -954,6 +954,24 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   :config
   (setq-default help-window-select t))
 
+(use-package holidays
+  :config
+  (setq-default calendar-holidays
+                '((holiday-fixed  1  1 "New Year's Day")
+                  (holiday-easter-etc -47 "Carnival")
+                  (holiday-easter-etc  -2 "Good Friday")
+                  (holiday-easter-etc)
+                  (holiday-fixed  4 25 "Freedom Day")
+                  (holiday-fixed  5  1 "Labour Day")
+                  (holiday-easter-etc  60 "Corpus Christi")
+                  (holiday-fixed  6 10 "Portugal Day")
+                  (holiday-fixed  8 15 "Assumption")
+                  (holiday-fixed 10  5 "Republic Day")
+                  (holiday-fixed 11  1 "All Saints Day")
+                  (holiday-fixed 12  1 "Restoration of Independence")
+                  (holiday-fixed 12  8 "Immaculate Conception")
+                  (holiday-fixed 12 25 "Christmas"))))
+
 (use-package imenu
   :config
   (set 'imenu-auto-rescan-maxout 500000)
@@ -1040,14 +1058,16 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                            ("w" "Web bookmark" entry (file+headline "GTD.org" "Referências")
                             "* [[%:link][%^{Title|%:description}]]\nCriado em: %u\n%?"))
 
-   org-refile-targets '((nil . (:maxlevel . 6))
-                        (org-agenda-files . (:maxlevel . 6)))
+   org-refile-targets `((nil . (:maxlevel . 6))
+                        (org-agenda-files . (:maxlevel . 6))
+                        (,(concat org-directory "Someday.org") . (:level . 1)))
    org-refile-use-outline-path 'file
    org-outline-path-complete-in-steps nil
 
-   org-todo-keywords '((type "TODO(t)" "WAITING(w@/!)" "|"
-                             "DONE(d)" "CANCELED(c@)"))
+   org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)")
+                       (sequence "WAITING(w@/!)" "HOLD(h@/!)" "|" "CANCELLED(c@/!)"))
    org-log-done 'time
+   org-log-into-drawer t
 
    org-catch-invisible-edits 'smart
    org-confirm-babel-evaluate nil
@@ -1059,10 +1079,12 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-return-follows-link t
    org-tags-column 80
 
+   org-fontify-quote-and-verse-blocks t
    org-src-fontify-natively t
    org-src-tab-acts-natively t
 
    org-startup-indented t
+   org-hide-leading-stars t
    org-startup-with-inline-images t
    org-startup-with-latex-preview t
 
