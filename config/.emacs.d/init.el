@@ -66,7 +66,8 @@
   :config
   (setq-default solarized-use-variable-pitch nil
                 solarized-use-more-italic t
-                solarized-high-contrast-mode-line t))
+                solarized-high-contrast-mode-line t
+                solarized-scale-org-headlines nil))
 
 (use-package zenburn-theme :ensure t)
 
@@ -104,6 +105,7 @@
 (setq-default initial-frame-alist '((fullscreen . fullboth))
               inhibit-startup-screen t
               initial-scratch-message ""
+              x-underline-at-descent-line t
               truncate-partial-width-windows 70
               word-wrap t)
 (add-hook 'prog-mode-hook (lambda () (setq truncate-lines t)))
@@ -957,20 +959,20 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 (use-package holidays
   :config
   (setq-default calendar-holidays
-                '((holiday-fixed  1  1 "New Year's Day")
+                '((holiday-fixed  1  1    "New Year's Day")
                   (holiday-easter-etc -47 "Carnival")
                   (holiday-easter-etc  -2 "Good Friday")
-                  (holiday-easter-etc)
-                  (holiday-fixed  4 25 "Freedom Day")
-                  (holiday-fixed  5  1 "Labour Day")
+                  (holiday-easter-etc   0 "Easter")
+                  (holiday-fixed  4 25    "Freedom Day")
+                  (holiday-fixed  5  1    "Labour Day")
                   (holiday-easter-etc  60 "Corpus Christi")
-                  (holiday-fixed  6 10 "Portugal Day")
-                  (holiday-fixed  8 15 "Assumption")
-                  (holiday-fixed 10  5 "Republic Day")
-                  (holiday-fixed 11  1 "All Saints Day")
-                  (holiday-fixed 12  1 "Restoration of Independence")
-                  (holiday-fixed 12  8 "Immaculate Conception")
-                  (holiday-fixed 12 25 "Christmas"))))
+                  (holiday-fixed  6 10    "Portugal Day")
+                  (holiday-fixed  8 15    "Assumption")
+                  (holiday-fixed 10  5    "Republic Day")
+                  (holiday-fixed 11  1    "All Saints Day")
+                  (holiday-fixed 12  1    "Restoration of Independence")
+                  (holiday-fixed 12  8    "Immaculate Conception")
+                  (holiday-fixed 12 25    "Christmas"))))
 
 (use-package imenu
   :config
@@ -990,10 +992,6 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   (when (executable-find "hunspell")
     (setq-default ispell-program-name "hunspell"
                   ispell-really-hunspell t)))
-
-(use-package org-noter :ensure t
-  :config
-  (setq-default org-noter-default-heading-title "Notas da página $p$"))
 
 (use-package magit :ensure t
   :if (executable-find "git")
@@ -1047,7 +1045,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
   (setq-default
    org-modules '(org-id
-                 org-protocol)
+                 org-protocol
+                 org-habit)
 
    org-directory "~/Personal/Org/"
    org-agenda-files (list (concat org-directory "Inbox.org")
@@ -1077,14 +1076,13 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-loop-over-headlines-in-active-region t
    org-pretty-entities t
    org-return-follows-link t
-   org-tags-column 80
+   org-tags-column -102
 
    org-fontify-quote-and-verse-blocks t
    org-src-fontify-natively t
    org-src-tab-acts-natively t
 
    org-startup-indented t
-   org-hide-leading-stars t
    org-startup-with-inline-images t
    org-startup-with-latex-preview t
 
@@ -1094,8 +1092,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-latex-preview-ltxpng-directory (locate-user-emacs-file "Latex Previews/")
    org-format-latex-options
    '(:foreground default :background default :scale 1.7
-                 :html-foreground "Black" :html-background "Transparent"
-                 :html-scale 1.0 :matchers ("begin" "$1" "$" "$$" "\\(" "\\[")))
+                 :html-foreground "Black" :html-background "Transparent" :html-scale 1.0
+                 :matchers ("begin" "$1" "$" "$$" "\\(" "\\[")))
 
   (add-hook 'org-after-todo-statistics-hook 'org-summary-todo)
 
@@ -1118,24 +1116,41 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
   (push '("html" . web) org-src-lang-modes)
 
+  ;; NOTE(nox): Get different latex fragments for different themes
+  (defvar nox/org-sha-salt)
+  (advice-add
+   'org-format-latex :around
+   (lambda (orig-function &rest args)
+     (setq nox/org-sha-salt (concat (face-attribute 'default :foreground)
+                                    (face-attribute 'default :background)))
+     (cl-letf (((symbol-function 'sha1)
+                (lambda (object &optional start end binary)
+                  (secure-hash 'sha1 (concat object nox/org-sha-salt)
+                               start end binary))))
+       (apply orig-function args))))
+
   ;; NOTE(nox): Capture frame related
-  (advice-add 'org-switch-to-buffer-other-window :after
-              (lambda (&rest _) (when (frame-parameter nil 'org-capture-frame)
-                                  (delete-other-windows))))
-  (advice-add 'org-capture :around
-              (lambda (capture-function &rest args)
-                (condition-case nil (apply capture-function args)
-                  (error (when (frame-parameter nil 'org-capture-frame)
-                           (delete-frame))))))
-  (add-hook 'org-capture-after-finalize-hook
-            (lambda (&rest _) (when (and (frame-parameter nil 'org-capture-frame)
-                                         (not org-capture-is-refiling))
-                                (org-save-all-org-buffers)
-                                (delete-frame))))
-  (advice-add 'org-capture-refile :after
-              (lambda (&rest _) (when (frame-parameter nil 'org-capture-frame)
-                                  (org-save-all-org-buffers)
-                                  (delete-frame)))))
+  (advice-add
+   'org-switch-to-buffer-other-window :after
+   (lambda (&rest _) (when (frame-parameter nil 'org-capture-frame) (delete-other-windows))))
+  (advice-add
+   'org-capture :around
+   (lambda (capture-function &rest args)
+     (condition-case nil (apply capture-function args)
+       (error (when (frame-parameter nil 'org-capture-frame)
+                (delete-frame))))))
+  (add-hook
+   'org-capture-after-finalize-hook
+   (lambda (&rest _)
+     (when (and (frame-parameter nil 'org-capture-frame) (not org-capture-is-refiling))
+       (org-save-all-org-buffers)
+       (delete-frame))))
+  (advice-add
+   'org-capture-refile :after
+   (lambda (&rest _)
+     (when (frame-parameter nil 'org-capture-frame)
+       (org-save-all-org-buffers)
+       (delete-frame)))))
 
 (use-package org-agenda
   :config
@@ -1146,6 +1161,10 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
         org-agenda-todo-list-sublevels nil))
 
 (use-package org-edit-latex :ensure t)
+
+(use-package org-noter :ensure t
+  :config
+  (setq-default org-noter-default-heading-title "Notas da página $p$"))
 
 (use-package pdf-tools :ensure t
   :mode (("\\.pdf\\'" . pdf-view-mode))
