@@ -66,7 +66,7 @@
   :config
   (setq-default solarized-use-variable-pitch nil
                 solarized-use-more-italic t
-                solarized-high-contrast-mode-line t
+                solarized-high-contrast-mode-line nil
                 solarized-scale-org-headlines nil))
 
 (use-package zenburn-theme :ensure t)
@@ -83,15 +83,47 @@
   (doom-themes-visual-bell-config)
   (doom-themes-org-config))
 
-(setq-default custom-safe-themes t)
+(use-package smart-mode-line :ensure t
+  :config
+  (setq-default sml/position-percentage-format nil
+                sml/pos-id-separator nil
+                sml/use-projectile-p 'before-prefixes))
+
+(setq-default initial-frame-alist '((fullscreen . fullboth))
+              inhibit-startup-screen t
+              initial-scratch-message ""
+
+              ring-bell-function 'ignore
+
+              x-underline-at-descent-line t
+              custom-safe-themes t
+
+              truncate-partial-width-windows 70
+              word-wrap t)
+(add-hook 'prog-mode-hook (lambda () (setq truncate-lines t)))
 
 (defun nox/setup-appearance (frame)
   (with-selected-frame frame
+    (remove-hook 'after-make-frame-functions 'nox/setup-appearance)
+
     (load-theme 'solarized-dark)
     (nox/change-font)
+
+    (when (functionp 'scroll-bar-mode) (scroll-bar-mode -1))
+    (when (functionp 'tool-bar-mode) (tool-bar-mode -1))
+    (when (functionp 'menu-bar-mode) (menu-bar-mode -1))
+
+    (global-hl-line-mode)
+    (blink-cursor-mode -1)
+
+    (sml/setup)
+    (line-number-mode -1)
+    (display-time-mode)
+    (display-battery-mode)
+
     (when (> (window-width) 100)
       (split-window-right))
-    (remove-hook 'after-make-frame-functions 'nox/setup-appearance)
+
     ;; NOTE(nox): This needs to be here, else it doesn't work
     (setq-default system-time-locale "C")))
 
@@ -99,31 +131,9 @@
     (add-hook 'after-make-frame-functions 'nox/setup-appearance)
   (nox/setup-appearance (car (frame-list))))
 
-(when (functionp 'scroll-bar-mode) (scroll-bar-mode -1))
-(when (functionp 'tool-bar-mode) (tool-bar-mode -1))
-(when (functionp 'menu-bar-mode) (menu-bar-mode -1))
-(fset 'yes-or-no-p 'y-or-n-p)
-
-(setq-default initial-frame-alist '((fullscreen . fullboth))
-              inhibit-startup-screen t
-              initial-scratch-message ""
-              x-underline-at-descent-line t
-              truncate-partial-width-windows 70
-              word-wrap t)
-(add-hook 'prog-mode-hook (lambda () (setq truncate-lines t)))
-
-(global-hl-line-mode 1)
-(blink-cursor-mode 0)
-
-(line-number-mode t)
-(column-number-mode t)
-(display-time-mode)
-(setq-default display-time-24hr-format t
-              display-time-load-average-threshold 1.5)
-
 
 ;; ------------------------------
-;; Behaviour
+;; Behavior
 (setq-default
  indent-tabs-mode nil
  tab-width 4
@@ -148,6 +158,7 @@
  global-mark-ring-max 5000
  large-file-warning-threshold (* 100 1024 1024)
 
+ enable-recursive-minibuffers t
  save-interprogram-paste-before-kill t
  bidi-display-reordering nil
 
@@ -164,10 +175,11 @@
 (set-default-coding-systems 'utf-8-unix)
 (setq-default default-input-method "TeX")
 
+(fset 'yes-or-no-p 'y-or-n-p)
+(minibuffer-depth-indicate-mode)
+
 (add-hook 'before-save-hook 'delete-trailing-whitespace)
 (add-hook 'after-save-hook 'executable-make-buffer-file-executable-if-script-p)
-
-(global-auto-revert-mode)
 
 (defun nox/rename-file-and-buffer ()
   "Rename current buffer and the file it is visiting, if any."
@@ -287,13 +299,21 @@ Position the cursor at its beginning, according to the current mode."
 
 ;; ------------------------------
 ;; Packages
+(use-package autorevert
+  :demand
+  :delight (auto-revert-mode)
+  :config (global-auto-revert-mode t))
+
 (use-package avy :ensure t
   :bind ("C-c a" . avy-goto-char))
 
 (use-package calendar
   :config
   (setq-default calendar-week-start-day 1
-                calendar-date-display-form calendar-european-date-display-form))
+                calendar-date-display-form calendar-european-date-display-form
+                calendar-location-name "Porto"
+                calendar-latitude  41.1579
+                calendar-longitude -8.6291))
 
 (use-package cc-mode
   :mode (("\\.c\\'" . c-mode)
@@ -344,6 +364,7 @@ Position the cursor at its beginning, according to the current mode."
 (use-package cdlatex :ensure t)
 
 (use-package company :ensure t
+  :demand
   :delight
   :bind
   (:map company-mode-map
@@ -355,7 +376,7 @@ Position the cursor at its beginning, according to the current mode."
   (:map company-template-nav-map
         ("<tab>" . company-complete-common)
         ("<C-return>" . company-template-forward-field))
-  :init
+  :config
   (setq-default company-require-match nil
                 company-idle-delay nil
                 company-transformers '(company-sort-by-occurrence
@@ -454,37 +475,18 @@ Position the cursor at its beginning, according to the current mode."
   (add-hook 'compilation-filter-hook 'nox/colorize-compilation-buffer))
 
 (use-package counsel :ensure t
+  :demand
   :delight (ivy-mode) (counsel-mode)
+
   :bind (("C-r" . swiper)
          ("C-s" . counsel-grep-or-swiper)
-         ("C-S-s" . isearch-forward))
-  :bind (:map ivy-minibuffer-map
-              ("<return>" . ivy-alt-done)
-              ("C-j" . ivy-done))
-  :bind (:map read-expression-map ("C-r" . counsel-expression-history))
+         ("C-S-s" . isearch-forward)
+         (:map ivy-minibuffer-map
+               ("<return>" . ivy-alt-done)
+               ("C-j" . ivy-done))
+         (:map read-expression-map ("C-r" . counsel-expression-history)))
 
-  :init
-  (ivy-mode 1)
-  (counsel-mode 1)
-  (setq-default ivy-height 10
-                ivy-use-virtual-buffers t
-                ivy-extra-directories nil
-                ivy-use-selectable-prompt t
-                ivy-count-format "(%d/%d) "
-                ivy-virtual-abbreviate 'full
-                ivy-initial-inputs-alist nil
-                ivy-re-builders-alist '((swiper . ivy--regex-plus)
-                                        (t . ivy--regex-fuzzy)))
-  (bind-key "M-y" (lambda () (interactive) (yank-pop)) ivy-minibuffer-map)
-  (add-to-list 'swiper-font-lock-exclude 'c-mode t)
-  (add-to-list 'swiper-font-lock-exclude 'c++-mode t)
-
-  (setq-default
-   counsel-grep-base-command
-   (cond ((executable-find "rg") "rg -S -M 120 --no-heading --line-number --color never %s %s")
-         ((executable-find "ag") "ag --nogroup --nocolor %s %s")
-         (t "grep -i -E -n -e %s %s")))
-
+  :config
   (defun counsel-find-file-as-root (x)
     "Find file X with root privileges."
     (counsel-require-program counsel-root-command)
@@ -505,18 +507,39 @@ Position the cursor at its beginning, according to the current mode."
                                          x))))))
       (if (eq (current-buffer) (get-file-buffer x))
           (find-alternate-file file-name)
-        (find-file file-name)))))
+        (find-file file-name))))
+
+  (setq-default ivy-height 10
+                ivy-use-virtual-buffers t
+                ivy-extra-directories nil
+                ivy-use-selectable-prompt t
+                ivy-count-format "(%d/%d) "
+                ivy-virtual-abbreviate 'full
+                ivy-initial-inputs-alist nil
+                ivy-re-builders-alist '((swiper . ivy--regex-plus)
+                                        (t . ivy--regex-fuzzy))
+                counsel-grep-base-command
+                (cond ((executable-find "rg")
+                       "rg -S -M 120 --no-heading --line-number --color never %s %s")
+                      ((executable-find "ag") "ag --nogroup --nocolor %s %s")
+                      (t "grep -i -E -n -e %s %s")))
+
+  (add-to-list 'swiper-font-lock-exclude 'c-mode t)
+  (add-to-list 'swiper-font-lock-exclude 'c++-mode t)
+
+  (ivy-mode)
+  (counsel-mode))
 
 (use-package counsel-projectile :ensure t
   :demand
+  :delight (projectile-mode)
   :config
   (setq-default projectile-completion-system 'ivy)
   (counsel-projectile-mode))
 
 (use-package delight :ensure t)
 
-(use-package ivy-hydra :ensure t
-  :defer 2)
+(use-package ivy-hydra :ensure t)
 
 (use-package dired+
   :ensure t
@@ -642,6 +665,9 @@ Position the cursor at its beginning, according to the current mode."
               (when (derived-mode-p 'outline-mode)
                 (outline-show-all)))))
 
+(use-package elisp-mode
+  :delight (emacs-lisp-mode "Elisp" :major))
+
 (use-package expand-region :ensure t
   :bind ("C-=" . er/expand-region))
 
@@ -658,9 +684,9 @@ Position the cursor at its beginning, according to the current mode."
   (make-face 'font-lock-important-face)
   (make-face 'font-lock-note-face)
 
-  (modify-face 'font-lock-todo-face "Red" nil nil t nil t nil nil)
-  (modify-face 'font-lock-important-face "Yellow" nil nil t nil t nil nil)
-  (modify-face 'font-lock-note-face "Olive Drab" nil nil t nil t nil nil)
+  (modify-face 'font-lock-todo-face "#dc322f" nil nil t nil t nil nil)
+  (modify-face 'font-lock-important-face "#b58900" nil nil t nil t nil nil)
+  (modify-face 'font-lock-note-face "#228b22" nil nil t nil t nil nil)
 
   (add-hook
    'prog-mode-hook
@@ -1007,7 +1033,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
          ("M-«" . mc/mark-previous-like-this)
          ("C-M-«" . mc/mark-all-like-this)
          ("M-<mouse-1>" . mc/add-cursor-on-click))
-  :init
+  :config
   (unbind-key "M-<down-mouse-1>"))
 
 (use-package nov :ensure t
@@ -1021,6 +1047,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   (add-hook 'inferior-octave-mode-hook (lambda () (setq eldoc-documentation-function nil))))
 
 (use-package org :ensure t
+  :delight (org-cdlatex-mode)
   :bind (("C-c o" . hydra-org/body)
          (:map org-mode-map
                ("C-c C-q" . counsel-org-tag)))
@@ -1046,9 +1073,10 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
       (org-todo (if (= n-not-done 0) "DONE" "TODO"))))
 
   (setq-default
-   org-modules '(org-id
+   org-modules '(org-habit
+                 org-id
                  org-protocol
-                 org-habit)
+                 org-timer)
 
    org-directory "~/Personal/Org/"
    org-agenda-files (list (concat org-directory "Inbox.org")
@@ -1068,6 +1096,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)")
                        (sequence "WAITING(w@/!)" "HOLD(h@/!)" "|" "CANCELLED(c@/!)"))
    org-log-done 'time
+   org-log-reschedule 'time
    org-log-into-drawer t
 
    org-catch-invisible-edits 'smart
@@ -1161,7 +1190,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
         org-agenda-todo-ignore-deadlines 'far
         org-agenda-todo-ignore-scheduled 'future
         org-agenda-todo-ignore-timestamp 'all
-        org-agenda-todo-list-sublevels nil))
+        org-agenda-todo-list-sublevels nil
+        org-agenda-time-grid '((daily today require-timed) nil "......" "----------------")))
 
 (use-package org-edit-latex :ensure t)
 
@@ -1170,9 +1200,12 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   (setq-default org-habit-graph-column 70
                 org-habit-today-glyph ?@))
 
+(use-package org-indent :delight)
+
 (use-package org-noter :ensure t
   :config
-  (setq-default org-noter-default-heading-title "Notas da página $p$"))
+  (setq-default org-noter-default-heading-title "Notas da página $p$"
+                org-noter-hide-other t))
 
 (use-package pdf-tools :ensure t
   :mode (("\\.pdf\\'" . pdf-view-mode))
@@ -1218,25 +1251,28 @@ and append it."
             "::"
             (read-from-minibuffer "Page:" "1")))
 
-  (pdf-tools-install)
   (setq-default pdf-view-display-size 'fit-page
-                pdf-cache-image-limit 200))
+                pdf-cache-image-limit 200
+                pdf-view-use-imagemagick t)
+  (pdf-tools-install))
 
 (use-package paren
-  :init
+  :demand
+  :config
   (show-paren-mode)
   (setq-default show-paren-delay 0))
 
 (use-package recentf
-  :init
-  (recentf-mode 1)
+  :demand
+  :config
+  (recentf-mode)
   (setq-default recentf-auto-cleanup 'never
                 recentf-max-saved-items 150
                 recentf-exclude '("COMMIT_MSG" "COMMIT_EDITMSG"))
   (add-hook 'server-visit-hook 'recentf-save-list))
 
 (use-package server
-  :init
+  :config
   (add-hook 'after-make-frame-functions (lambda (frame) (select-frame-set-input-focus frame)) t))
 
 (use-package smex :ensure t)
@@ -1250,6 +1286,11 @@ and append it."
                                             (left-fringe . 0))))
 
 (use-package tex :ensure auctex)
+
+(use-package time
+  :config
+  (setq-default display-time-24hr-format t
+                display-time-load-average-threshold 1.5))
 
 (use-package tramp
   :config
