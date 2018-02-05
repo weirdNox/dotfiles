@@ -91,7 +91,9 @@
     (nox/change-font)
     (when (> (window-width) 100)
       (split-window-right))
-    (remove-hook 'after-make-frame-functions 'nox/setup-appearance)))
+    (remove-hook 'after-make-frame-functions 'nox/setup-appearance)
+    ;; NOTE(nox): This needs to be here, else it doesn't work
+    (setq-default system-time-locale "C")))
 
 (if (daemonp)
     (add-hook 'after-make-frame-functions 'nox/setup-appearance)
@@ -1097,8 +1099,9 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
   (add-hook 'org-after-todo-statistics-hook 'org-summary-todo)
 
-  (add-hook 'org-mode-hook 'turn-on-org-cdlatex)
-  (add-hook 'org-mode-hook 'org-hide-block-all)
+  (add-hook 'org-mode-hook (lambda ()
+                             (org-hide-block-all)
+                             (turn-on-org-cdlatex)))
 
   (org-link-set-parameters "pdfview"
                            :follow 'org-pdfview-open
@@ -1161,6 +1164,11 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
         org-agenda-todo-list-sublevels nil))
 
 (use-package org-edit-latex :ensure t)
+
+(use-package org-habit
+  :config
+  (setq-default org-habit-graph-column 70
+                org-habit-today-glyph ?@))
 
 (use-package org-noter :ensure t
   :config
