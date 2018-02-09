@@ -14,6 +14,7 @@
                                                        gc-cons-threshold 16777216
                                                        gc-cons-percentage 0.1)))
 
+(push ".emacs.d/lisp" load-path)
 (setq-default default-directory "~/"
               private-settings-file (locate-user-emacs-file "private.el")
               temp-dir (locate-user-emacs-file "temp")
@@ -571,7 +572,6 @@ Position the cursor at its beginning, according to the current mode."
 (use-package ivy-hydra :ensure t)
 
 (use-package dired+
-  :ensure t
   :demand
   :after dired
   :bind (:map dired-mode-map
@@ -982,8 +982,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                 (setq gdb-var-list (nreverse var-list))))))))
     (gdb-speedbar-update)))
 
-(use-package go-mode
-  :ensure t
+(use-package go-mode :ensure t
   :config
   (setq-default gofmt-command (substitute-in-file-name "$GOPATH/bin/goimports"))
   (add-hook 'go-mode-hook
