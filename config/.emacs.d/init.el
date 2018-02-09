@@ -79,9 +79,37 @@
                 doom-one-comment-bg nil
                 doom-molokai-brighter-comments t
                 doom-spacegrey-brighter-comments t
-                doom-spacegrey-comment-bg nil)
-  (doom-themes-visual-bell-config)
-  (doom-themes-org-config))
+                doom-spacegrey-comment-bg nil))
+
+(defface font-lock-todo-face '((t (:foreground "#dc322f"))) "Face for TODO keywords.")
+(defface font-lock-important-face '((t (:foreground "#b58900"))) "Face for IMPORTANT keywords.")
+(defface font-lock-note-face '((t (:foreground "#228b22"))) "Face for NOTE keywords.")
+
+(add-hook
+ 'prog-mode-hook
+ (lambda ()
+   (font-lock-add-keywords
+    nil '(("\\<\\(TODO\\|FIXME\\)" 1 'font-lock-todo-face t)
+          ("\\<\\(IMPORTANT\\)" 1 'font-lock-important-face t)
+          ("\\<\\(NOTE\\)" 1 'font-lock-note-face t)))))
+
+(advice-add
+ 'enable-theme :after
+ (lambda (theme &rest _)
+   (cond
+    ((eq 'solarized-dark theme)
+     (solarized-with-color-variables 'dark
+       (custom-theme-set-faces
+        'solarized-dark
+        `(org-block
+          ((t (:foreground ,(color-lighten-name base0 5) :background ,(color-lighten-name base03 5))))))))
+
+    ((eq 'solarized-light theme)
+     (solarized-with-color-variables 'light
+       (custom-theme-set-faces
+        'solarized-light
+        `(org-block
+          ((t (:foreground ,(color-darken-name base0 7) :background ,(color-darken-name base03 7)))))))))))
 
 (use-package smart-mode-line :ensure t
   :config
@@ -319,7 +347,8 @@ Position the cursor at its beginning, according to the current mode."
   :mode (("\\.c\\'" . c-mode)
          ("\\.cpp\\'" . c++-mode)
          ("\\.h\\'" . c++-mode)
-         ("\\.hpp\\'" . c++-mode))
+         ("\\.hpp\\'" . c++-mode)
+         ("\\.ino\\'" . c++-mode))
   :config
   (defun nox/header-format ()
     (interactive)
@@ -677,25 +706,6 @@ Position the cursor at its beginning, according to the current mode."
   (setq-default ff-always-try-to-create t))
 
 (use-package flx :ensure t)
-
-(use-package font-lock
-  :config
-  (make-face 'font-lock-todo-face)
-  (make-face 'font-lock-important-face)
-  (make-face 'font-lock-note-face)
-
-  (modify-face 'font-lock-todo-face "#dc322f" nil nil t nil t nil nil)
-  (modify-face 'font-lock-important-face "#b58900" nil nil t nil t nil nil)
-  (modify-face 'font-lock-note-face "#228b22" nil nil t nil t nil nil)
-
-  (add-hook
-   'prog-mode-hook
-   (lambda ()
-     (font-lock-add-keywords
-      nil
-      '(("\\<\\(TODO\\|FIXME\\)" 1 'font-lock-todo-face t)
-        ("\\<\\(IMPORTANT\\)" 1 'font-lock-important-face t)
-        ("\\<\\(NOTE\\)" 1 'font-lock-note-face t))))))
 
 (use-package gnuplot :ensure t)
 
@@ -1110,8 +1120,6 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-tags-column -102
 
    org-fontify-quote-and-verse-blocks t
-   org-src-fontify-natively t
-   org-src-tab-acts-natively t
 
    org-startup-indented t
    org-startup-with-inline-images t
@@ -1143,10 +1151,9 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
      (octave . t)
      (python . t)
      (latex . t)
-     (shell . t)))
+     (shell . t)
+     (calc . t)))
   (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images)
-
-  (push '("html" . web) org-src-lang-modes)
 
   ;; NOTE(nox): Get different latex fragments for different themes
   (defvar nox/org-sha-salt)
@@ -1193,6 +1200,13 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
         org-agenda-todo-list-sublevels nil
         org-agenda-time-grid '((daily today require-timed) nil "......" "----------------")))
 
+(use-package org-clock
+  :config
+  (setq-default org-clock-out-remove-zero-time-clocks t
+                org-clock-persist t
+                org-clock-persist-file (locate-user-emacs-file "clock-persist.el")
+                org-clock-in-resume t))
+
 (use-package org-edit-latex :ensure t)
 
 (use-package org-habit
@@ -1206,6 +1220,14 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   :config
   (setq-default org-noter-default-heading-title "Notas da página $p$"
                 org-noter-hide-other t))
+
+(use-package org-src
+  :config
+  (setq-default org-src-fontify-natively t
+                org-src-tab-acts-natively t
+                org-edit-src-content-indentation 0)
+
+  (add-to-list 'org-src-lang-modes '("html" . web)))
 
 (use-package pdf-tools :ensure t
   :mode (("\\.pdf\\'" . pdf-view-mode))
@@ -1265,11 +1287,10 @@ and append it."
 (use-package recentf
   :demand
   :config
-  (recentf-mode)
-  (setq-default recentf-auto-cleanup 'never
-                recentf-max-saved-items 150
+  (setq-default recentf-max-saved-items 300
                 recentf-exclude '("COMMIT_MSG" "COMMIT_EDITMSG"))
-  (add-hook 'server-visit-hook 'recentf-save-list))
+  (run-at-time (current-time) 300 'recentf-save-list)
+  (recentf-mode))
 
 (use-package server
   :config
