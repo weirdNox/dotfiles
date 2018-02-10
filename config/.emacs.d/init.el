@@ -434,7 +434,8 @@ Position the cursor at its beginning, according to the current mode."
 
 (use-package compile
   :bind (("<f12>" . nox/make)
-         ("C-c n" . hydra-error/next-error))
+         ("M-g n" . hydra-error/next-error)
+         ("M-g p" . hydra-error/previous-error))
   :config
   (defhydra hydra-error ()
     "Errors"
@@ -1093,7 +1094,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
    org-capture-templates '(("t" "Tarefa" entry (file "Inbox.org")
                             "* TODO %i%?")
-                           ("w" "Web bookmark" entry (file+headline "GTD.org" "Referências")
+                           ("w" "Web bookmark" entry (file+headline "Reference.org" "Web bookmarks")
                             "* [[%:link][%^{Title|%:description}]]\nCriado em: %u\n%?"))
 
    org-refile-targets `((nil . (:maxlevel . 6))
