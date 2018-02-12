@@ -331,7 +331,7 @@ Position the cursor at its beginning, according to the current mode."
 (use-package autorevert
   :demand
   :delight (auto-revert-mode)
-  :config (global-auto-revert-mode t))
+  :config (global-auto-revert-mode))
 
 (use-package avy :ensure t
   :bind ("C-c a" . avy-goto-char))
@@ -555,8 +555,8 @@ Position the cursor at its beginning, according to the current mode."
                       ((executable-find "ag") "ag --nogroup --nocolor %s %s")
                       (t "grep -i -E -n -e %s %s")))
 
-  (add-to-list 'swiper-font-lock-exclude 'c-mode t)
-  (add-to-list 'swiper-font-lock-exclude 'c++-mode t)
+  (add-to-list 'swiper-font-lock-exclude 'c-mode)
+  (add-to-list 'swiper-font-lock-exclude 'c++-mode)
 
   (ivy-mode)
   (counsel-mode))
@@ -1209,6 +1209,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
 (use-package org-edit-latex :ensure t)
 
+(use-package org-element :commands org-element-update-syntax)
+
 (use-package org-habit
   :config
   (setq-default org-habit-graph-column 70
@@ -1285,12 +1287,9 @@ and append it."
   (setq-default show-paren-delay 0))
 
 (use-package recentf
-  :demand
   :config
   (setq-default recentf-max-saved-items 300
-                recentf-exclude '("COMMIT_MSG" "COMMIT_EDITMSG"))
-  (run-at-time (current-time) 300 'recentf-save-list)
-  (recentf-mode))
+                recentf-exclude '("COMMIT_MSG" "COMMIT_EDITMSG")))
 
 (use-package server
   :config
