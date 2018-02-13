@@ -63,54 +63,49 @@
       (set-frame-font font-setting nil t)
       (add-to-list 'default-frame-alist (cons 'font font-setting)))))
 
+(defvar nox/customize-theme-hook nil "Hook for theme customization, called with the theme name.")
+(advice-add 'enable-theme :after
+            (lambda (theme)
+              (run-hook-with-args-until-success
+               'nox/customize-theme-hook (or theme (car custom-enabled-themes)))))
+
+(defmacro nox/add-customize-theme-hook (target-theme &rest body)
+  (declare (indent defun))
+  `(add-hook 'nox/customize-theme-hook
+             (lambda (theme)
+               ,(if (symbolp (eval target-theme)) `(when (eq theme ,target-theme) ,@body)
+                  `(when (memq theme ,target-theme) ,@body)))))
+
+(defface font-lock-todo-face      '((t (:foreground "#dc322f" :weight bold :underline t))) "Face for TODO keywords.")
+(defface font-lock-important-face '((t (:foreground "#b58900" :weight bold :underline t))) "Face for IMPORTANT keywords.")
+(defface font-lock-note-face      '((t (:foreground "#228b22" :weight bold :underline t))) "Face for NOTE keywords.")
+(add-hook 'prog-mode-hook (lambda () (font-lock-add-keywords
+                                      nil '(("\\<\\(TODO\\|FIXME\\)" 1 'font-lock-todo-face t)
+                                            ("\\<\\(IMPORTANT\\)" 1 'font-lock-important-face t)
+                                            ("\\<\\(NOTE\\)" 1 'font-lock-note-face t)))))
+
+(use-package gruvbox-theme :ensure)
+
 (use-package solarized :ensure solarized-theme
   :config
   (setq-default solarized-use-variable-pitch nil
                 solarized-use-more-italic t
                 solarized-high-contrast-mode-line nil
-                solarized-scale-org-headlines nil))
+                solarized-scale-org-headlines nil)
 
-(use-package zenburn-theme :ensure t)
+  (nox/add-customize-theme-hook 'solarized-dark
+    (solarized-with-color-variables 'dark
+      (custom-theme-set-faces
+       theme
+       `(org-block
+         ((t (:foreground ,(color-lighten-name base0 5) :background ,(color-lighten-name base03 5))))))))
 
-(use-package doom-themes :ensure t
-  :config
-  (setq-default doom-themes-enable-bold t
-                doom-themes-enable-italic t
-                doom-one-brighter-comments t
-                doom-one-comment-bg nil
-                doom-molokai-brighter-comments t
-                doom-spacegrey-brighter-comments t
-                doom-spacegrey-comment-bg nil))
-
-(defface font-lock-todo-face '((t (:foreground "#dc322f"))) "Face for TODO keywords.")
-(defface font-lock-important-face '((t (:foreground "#b58900"))) "Face for IMPORTANT keywords.")
-(defface font-lock-note-face '((t (:foreground "#228b22"))) "Face for NOTE keywords.")
-
-(add-hook
- 'prog-mode-hook
- (lambda ()
-   (font-lock-add-keywords
-    nil '(("\\<\\(TODO\\|FIXME\\)" 1 'font-lock-todo-face t)
-          ("\\<\\(IMPORTANT\\)" 1 'font-lock-important-face t)
-          ("\\<\\(NOTE\\)" 1 'font-lock-note-face t)))))
-
-(advice-add
- 'enable-theme :after
- (lambda (theme &rest _)
-   (cond
-    ((eq 'solarized-dark theme)
-     (solarized-with-color-variables 'dark
-       (custom-theme-set-faces
-        'solarized-dark
-        `(org-block
-          ((t (:foreground ,(color-lighten-name base0 5) :background ,(color-lighten-name base03 5))))))))
-
-    ((eq 'solarized-light theme)
-     (solarized-with-color-variables 'light
-       (custom-theme-set-faces
-        'solarized-light
-        `(org-block
-          ((t (:foreground ,(color-darken-name base0 7) :background ,(color-darken-name base03 7)))))))))))
+  (nox/add-customize-theme-hook 'solarized-light
+    (solarized-with-color-variables 'light
+      (custom-theme-set-faces
+       theme
+       `(org-block
+         ((t (:foreground ,(color-darken-name base0 7) :background ,(color-darken-name base03 7)))))))))
 
 (use-package smart-mode-line :ensure t
   :config
