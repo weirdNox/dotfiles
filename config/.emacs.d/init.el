@@ -452,7 +452,8 @@ Position the cursor at its beginning, according to the current mode."
     "List of build script names to run when calling `nox/make'.")
   (defvar nox/should-close-compile-window nil)
   (defconst nox/compile-buffer-name "*nox/compilation*")
-  (defconst nox/compile-last-make nil)
+  ;; TODO(nox): This should be an alist of the target build script
+  (defvar nox/compile-last-make nil)
 
   (defun nox/make (arg)
     (interactive "P")
