@@ -1108,7 +1108,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-catch-invisible-edits 'smart
    org-confirm-babel-evaluate nil
    org-id-link-to-org-use-id 'create-if-interactive
-   org-image-actual-width '(500)
+   org-image-actual-width nil
    org-list-allow-alphabetical t
    org-loop-over-headlines-in-active-region t
    org-pretty-entities t
@@ -1121,14 +1121,61 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
    org-startup-with-inline-images t
    org-startup-with-latex-preview t
 
+   org-preview-latex-default-process 'dvisvgm
    org-latex-packages-alist '(("" "tikz" t)
+                              ("american,siunitx,smartlabels" "circuitikz" t)
                               ("" "mathtools" t))
-   org-preview-latex-default-process 'imagemagick
    org-latex-preview-ltxpng-directory (locate-user-emacs-file "Latex Previews/")
    org-format-latex-options
    '(:foreground default :background default :scale 1.7
                  :html-foreground "Black" :html-background "Transparent" :html-scale 1.0
-                 :matchers ("begin" "$1" "$" "$$" "\\(" "\\[")))
+                 :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
+   org-preview-latex-process-alist
+   '((dvisvgm :programs ("latex" "dvisvgm")
+              :description "dvi > svg"
+              :message "you need to install the programs: latex and dvisvgm."
+              :use-xcolor t
+              :image-input-type "dvi"
+              :image-output-type "svg"
+              :image-size-adjust (1.7 . 1.5)
+              :latex-compiler ("latex -interaction nonstopmode -output-directory %o %f")
+              :image-converter ("dvisvgm %f -n -b 1 -c %S -o %O"))
+     (imagemagick :programs ("latex" "convert")
+                  :description "pdf > png"
+                  :message "you need to install the programs: latex and imagemagick."
+                  :use-xcolor t
+                  :image-input-type "pdf"
+                  :image-output-type "png"
+                  :image-size-adjust (1.0 . 1.0)
+                  :latex-compiler ("pdflatex -interaction nonstopmode -output-directory %o %f")
+                  :image-converter ("convert -density %D -trim -antialias %f -quality 100 %O"))
+     (dvipng :programs ("latex" "dvipng")
+             :description "dvi > png"
+             :message "you need to install the programs: latex and dvipng."
+             :image-input-type "dvi"
+             :image-output-type "png"
+             :image-size-adjust (1.0 . 1.0)
+             :latex-compiler ("latex -interaction nonstopmode -output-directory %o %f")
+             :image-converter ("dvipng -fg %F -bg %B -D %D -T tight -o %O %f")))
+   org-format-latex-header
+   "\\documentclass{article}
+\\usepackage[usenames]{color}
+[PACKAGES]
+[DEFAULT-PACKAGES]
+\\pagestyle{empty}
+\\setlength{\\textwidth}{\\paperwidth}
+\\addtolength{\\textwidth}{-3cm}
+\\setlength{\\oddsidemargin}{1.5cm}
+\\addtolength{\\oddsidemargin}{-2.54cm}
+\\setlength{\\evensidemargin}{\\oddsidemargin}
+\\setlength{\\textheight}{\\paperheight}
+\\addtolength{\\textheight}{-\\headheight}
+\\addtolength{\\textheight}{-\\headsep}
+\\addtolength{\\textheight}{-\\footskip}
+\\addtolength{\\textheight}{-3cm}
+\\setlength{\\topmargin}{1.5cm}
+\\addtolength{\\topmargin}{-2.54cm}
+\\tikzset{every picture/.style={color=fg}}")
 
   (add-hook 'org-after-todo-statistics-hook 'org-summary-todo)
 
