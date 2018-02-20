@@ -441,46 +441,89 @@ Position the cursor at its beginning, according to the current mode."
 
   (setq-default compilation-ask-about-save nil
                 compilation-always-kill t
-                compilation-context-lines 0
+                compilation-context-lines 2
                 compilation-environment '("TERM=xterm"))
 
-  (defvar-local nox/build-script-names
-    (append (if (eq system-type 'windows-nt)
-                '("build-nox.bat" "build.bat")
-              '("build-nox.sh" "build.sh"))
-            '("Makefile"))
+  (defconst nox/build-script-names
+    (append
+     (if (eq system-type 'windows-nt)
+         '("build-nox.bat" "build.bat")
+       '("build-nox.sh" "build.sh"))
+     '("Makefile"))
     "List of build script names to run when calling `nox/make'.")
+
   (defvar nox/should-close-compile-window nil)
-  (defconst nox/compile-buffer-name "*nox/compilation*")
-  ;; TODO(nox): This should be an alist of the target build script
-  (defvar nox/compile-last-make nil)
+
+  (defun nox/compilation-buffer-name (&rest _)
+    ;; TODO(nox): Return (buffer-name) when inside compilation buffer
+    (let ((project-name (projectile-project-name)))
+      (if project-name
+          (format "*[%s] - Compilation*" project-name)
+        (format "*"))))
+
+  (cl-defstruct nox/compile-info path last-time last-arguments)
+  (defvar nox/compile-table (make-hash-table :test 'equal))
 
   (defun nox/make (arg)
     (interactive "P")
-    (catch 'break
-      (dolist (build-script-name nox/build-script-names)
-        (let ((script-dir (locate-dominating-file default-directory build-script-name)))
-          (when script-dir
-            (let ((file (buffer-file-name))
-                  (compilation-buffer-name-function
-                   (lambda (mode) nox/compile-buffer-name))
-                  (window (get-buffer-window nox/compile-buffer-name)))
-              (if (= (length (window-list)) 1)
-                  (setq nox/should-close-compile-window t)
-                (unless window
-                  (setq nox/should-close-compile-window nil)))
-              (unless window
-                (setq window (display-buffer (get-buffer-create nox/compile-buffer-name) t)))
-              (with-selected-window window
-                (cd script-dir)
-                (if (not (string= build-script-name "Makefile"))
-                    (compile (concat "\"" (expand-file-name build-script-name script-dir)
-                                     "\" \"" file "\""))
-                  (when (or arg (not nox/compile-last-make))
-                    (setq nox/compile-last-make
-                          (read-string "Command: " nil nil (or nox/compile-last-make "make -k"))))
-                  (compile nox/compile-last-make)))
-              (throw 'break t)))))))
+    ;; TODO(nox): restore command if in compilation buffer
+    (let (script script-list default-script command)
+      (dolist (test-script nox/build-script-names (setq script-list (nreverse script-list)))
+        (let ((found-script-dir (locate-dominating-file default-directory test-script))
+              full-path info)
+          (when found-script-dir
+            (setq full-path (expand-file-name test-script found-script-dir)
+                  info (or (gethash full-path nox/compile-table)
+                           (make-nox/compile-info :path full-path :last-time '(0 0 0 0))))
+            (push (cons (nox/compile-info-path info) info) script-list)
+            (when (or (not default-script)
+                      (time-less-p (nox/compile-info-last-time (cdr default-script))
+                                   (nox/compile-info-last-time info)))
+              (setq default-script (car script-list))))))
+
+      (when script-list
+        (if (or (not arg) (= (length script-list) 1)) (setq script (cdr default-script))
+          (setq script (cdr (assoc
+                             (completing-read "Which build script? "
+                                              script-list nil t nil nil (car default-script))
+                             script-list))))
+
+        (setf (nox/compile-info-last-time script) (current-time))
+        (save-some-buffers t)
+        ;; TODO(nox): Setup compilation buffer, and save the command there!!
+
+        ;; (compilation-start )
+
+        ;; TODO(nox): Set compile arguments before registering
+        (puthash (nox/compile-info-path script) script nox/compile-table))))
+
+    ;; (catch 'break
+    ;;     (let (
+    ;;           compilation-buffer window)
+    ;;       (when script-dir
+    ;;         (setq window (get-buffer-window (nox/compilation-buffer-name)))
+    ;;         (if (= (length (window-list)) 1)
+    ;;             (setq nox/should-close-compile-window t)
+    ;;           (unless window
+    ;;             (setq nox/should-close-compile-window nil)))
+
+    ;;         (unless window
+    ;;           (setq window (display-buffer (get-buffer-create nox/compile-buffer-name) t)))
+
+    ;;         (with-selected-window window
+    ;;           (cd script-dir)
+
+    ;;           (if (not (string= build-script-name "Makefile"))
+    ;;               (compile (concat "\"" (expand-file-name build-script-name script-dir)
+    ;;                                "\" \"" (buffer-file-name) "\""))
+
+    ;;             (when (or arg (not nox/compile-last-make))
+    ;;               (setq nox/compile-last-make
+    ;;                     (read-string "Command: " nil nil
+    ;;                                  (or nox/compile-last-make "make -k"))))
+
+    ;;             (compile nox/compile-last-make)))
+    ;;         (throw 'break t))))
 
   (defun nox/bury-compilation-buffer (buffer string)
     "Bury compilation buffer if it succeeded."
