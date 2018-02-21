@@ -428,7 +428,7 @@ Position the cursor at its beginning, according to the current mode."
                 company-dabbrev-ignore-buffers 'nox/company-dabbrev-buffer-check))
 
 (use-package compile
-  :bind (("<f12>" . nox/make)
+  :bind (("<f12>" . nox/compile)
          ("M-g n" . hydra-error/next-error)
          ("M-g p" . hydra-error/previous-error))
   :config
@@ -439,110 +439,119 @@ Position the cursor at its beginning, according to the current mode."
     ("p" previous-error "Previous")
     ("q" nil "Quit"))
 
-  (setq-default compilation-ask-about-save nil
-                compilation-always-kill t
-                compilation-context-lines 2
-                compilation-environment '("TERM=xterm"))
+  (cl-defstruct nox/compile-info type path last-args last-time buffer-name should-close)
+  (defvar-local nox/compile-info nil)
+  (defvar nox/compile-info-table (make-hash-table :test 'equal))
 
-  (defconst nox/build-script-names
-    (append
-     (if (eq system-type 'windows-nt)
-         '("build-nox.bat" "build.bat")
-       '("build-nox.sh" "build.sh"))
-     '("Makefile"))
-    "List of build script names to run when calling `nox/make'.")
+  (defconst nox/compile-sh-names (if (eq system-type 'windows-nt)
+                                     '("build-nox.bat" "build.bat")
+                                   '("build-nox.sh" "build.sh")))
+  (defconst nox/compile-makefile-names '("makefile" "Makefile"))
+  (defconst nox/compile-script-names (append nox/compile-sh-names nox/compile-makefile-names))
 
-  (defvar nox/should-close-compile-window nil)
+  (defun nox/compile-buffer-name (arg)
+    ;; NOTE(nox): This serves 2 purposes: one is creating the buffer name itself, called
+    ;; from nox/make with arg = info; the other is returning the buffer name when called
+    ;; from compilation-start, which is returned from the local info in the compilation
+    ;; buffer.
+    (if nox/compile-info (nox/compile-info-buffer-name nox/compile-info)
+      (let ((project-name (projectile-project-name)))
+        (if project-name
+            (format "*[%s] - Compile %s*" project-name (file-name-nondirectory (nox/compile-info-path arg)))
+          (format "*Compile %s*" (nox/compile-info-path arg))))))
 
-  (defun nox/compilation-buffer-name (&rest _)
-    ;; TODO(nox): Return (buffer-name) when inside compilation buffer
-    (let ((project-name (projectile-project-name)))
-      (if project-name
-          (format "*[%s] - Compilation*" project-name)
-        (format "*"))))
-
-  (cl-defstruct nox/compile-info path last-time last-arguments)
-  (defvar nox/compile-table (make-hash-table :test 'equal))
-
-  (defun nox/make (arg)
+  (defun nox/compile (arg)
     (interactive "P")
-    ;; TODO(nox): restore command if in compilation buffer
-    (let (script script-list default-script command)
-      (dolist (test-script nox/build-script-names (setq script-list (nreverse script-list)))
+    (let ((default-script (when nox/compile-info (cons (nox/compile-info-path nox/compile-info)
+                                                       nox/compile-info)))
+          (start-file-name (or (buffer-file-name) ""))
+          script script-list  buffer)
+      (dolist (test-script nox/compile-script-names (setq script-list (nreverse script-list)))
         (let ((found-script-dir (locate-dominating-file default-directory test-script))
               full-path info)
           (when found-script-dir
             (setq full-path (expand-file-name test-script found-script-dir)
-                  info (or (gethash full-path nox/compile-table)
-                           (make-nox/compile-info :path full-path :last-time '(0 0 0 0))))
+                  info
+                  (or
+                   (gethash full-path nox/compile-info-table)
+                   (make-nox/compile-info :type (if (member test-script nox/compile-makefile-names) 'make 'sh)
+                                          :path full-path
+                                          :last-time '(0 0 0 0))))
+
             (push (cons (nox/compile-info-path info) info) script-list)
-            (when (or (not default-script)
-                      (time-less-p (nox/compile-info-last-time (cdr default-script))
-                                   (nox/compile-info-last-time info)))
+            (when (and (not nox/compile-info)
+                       (or (not default-script) (time-less-p (nox/compile-info-last-time (cdr default-script))
+                                                             (nox/compile-info-last-time info))))
               (setq default-script (car script-list))))))
 
       (when script-list
-        (if (or (not arg) (= (length script-list) 1)) (setq script (cdr default-script))
+        (if (or (not arg) (= (length script-list) 1))
+            (setq script (cdr default-script))
           (setq script (cdr (assoc
                              (completing-read "Which build script? "
                                               script-list nil t nil nil (car default-script))
                              script-list))))
 
-        (setf (nox/compile-info-last-time script) (current-time))
-        (save-some-buffers t)
-        ;; TODO(nox): Setup compilation buffer, and save the command there!!
+        (setf (nox/compile-info-last-time script) (current-time)
+              (nox/compile-info-buffer-name script) (nox/compile-buffer-name script))
+        (setq buffer (get-buffer-create (nox/compile-info-buffer-name script)))
 
-        ;; (compilation-start )
+        (if (projectile-project-p) (projectile-save-project-buffers) (save-some-buffers t))
 
-        ;; TODO(nox): Set compile arguments before registering
-        (puthash (nox/compile-info-path script) script nox/compile-table))))
+        (if (= (length (window-list)) 1)
+            (setf (nox/compile-info-should-close script) t)
+          (unless (get-buffer-window buffer) (setf (nox/compile-info-should-close script) nil)))
 
-    ;; (catch 'break
-    ;;     (let (
-    ;;           compilation-buffer window)
-    ;;       (when script-dir
-    ;;         (setq window (get-buffer-window (nox/compilation-buffer-name)))
-    ;;         (if (= (length (window-list)) 1)
-    ;;             (setq nox/should-close-compile-window t)
-    ;;           (unless window
-    ;;             (setq nox/should-close-compile-window nil)))
+        (with-current-buffer buffer
+          (cd (file-name-directory (nox/compile-info-path script)))
+          (let (command command-args)
+            (if (eq (nox/compile-info-type script) 'make)
+                (setq command "make"
+                      command-args (or (nox/compile-info-last-args script) "-k"))
 
-    ;;         (unless window
-    ;;           (setq window (display-buffer (get-buffer-create nox/compile-buffer-name) t)))
+              (setq command (shell-quote-argument
+                             (concat "./" (file-name-nondirectory (nox/compile-info-path script))))
+                    command-args (or (nox/compile-info-last-args script) "%f")))
 
-    ;;         (with-selected-window window
-    ;;           (cd script-dir)
+            (when arg (setq command-args (read-string "Arguments: " command-args)))
 
-    ;;           (if (not (string= build-script-name "Makefile"))
-    ;;               (compile (concat "\"" (expand-file-name build-script-name script-dir)
-    ;;                                "\" \"" (buffer-file-name) "\""))
+            (setf (nox/compile-info-last-args script) command-args)
+            (setq command-args (replace-regexp-in-string
+                                (regexp-quote "%f") (shell-quote-argument start-file-name) command-args))
 
-    ;;             (when (or arg (not nox/compile-last-make))
-    ;;               (setq nox/compile-last-make
-    ;;                     (read-string "Command: " nil nil
-    ;;                                  (or nox/compile-last-make "make -k"))))
+            (setq nox/compile-info script)
+            (compilation-start (concat command " " command-args) nil 'nox/compile-buffer-name)
+            ;; NOTE(nox): Need to set it again in order to persist after changing the
+            ;; major mode
+            (setq nox/compile-info script)))
 
-    ;;             (compile nox/compile-last-make)))
-    ;;         (throw 'break t))))
+        (puthash (nox/compile-info-path script) script nox/compile-info-table))))
 
-  (defun nox/bury-compilation-buffer (buffer string)
+  (defun nox/compile-bury-buffer (buffer string)
     "Bury compilation buffer if it succeeded."
-    (when (and (string= (buffer-name buffer) nox/compile-buffer-name)
-               (string= string "finished\n")
-               (save-excursion (not (ignore-errors (compilation-next-error 1 nil 1)))))
-      (let ((window (get-buffer-window buffer)))
-        (when window
-          (if nox/should-close-compile-window
-              (delete-window window)
-            (switch-to-prev-buffer window)))
-        (bury-buffer buffer))))
-  (add-hook 'compilation-finish-functions 'nox/bury-compilation-buffer)
+    (with-current-buffer buffer
+      (when nox/compile-info
+        (when (and (string= string "finished\n")
+                   (save-excursion (not (ignore-errors (compilation-next-error 1 nil 1)))))
+          (let ((windows (get-buffer-window-list buffer t)))
+            (dolist (window windows)
+              (if (and (> (length (window-list (window-frame window))) 1)
+                       (nox/compile-info-should-close nox/compile-info))
+                  (delete-window window)
+                (switch-to-prev-buffer window))))
+          (bury-buffer buffer)))))
+  (add-hook 'compilation-finish-functions 'nox/compile-bury-buffer)
 
   (require 'ansi-color)
   (defun nox/colorize-compilation-buffer ()
     (let ((inhibit-read-only t))
       (ansi-color-apply-on-region compilation-filter-start (point))))
-  (add-hook 'compilation-filter-hook 'nox/colorize-compilation-buffer))
+  (add-hook 'compilation-filter-hook 'nox/colorize-compilation-buffer)
+
+  (setq-default compilation-ask-about-save nil
+                compilation-always-kill t
+                compilation-context-lines 2
+                compilation-environment '("TERM=xterm")))
 
 (use-package counsel :ensure t
   :demand
