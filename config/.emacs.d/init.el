@@ -282,6 +282,11 @@ Position the cursor at its beginning, according to the current mode."
       (buffer-substring-no-properties (point-min) (point-max)))))
 
 (defun nox/exit-emacs (arg)
+  "Exit Emacs, possibly killing the daemon and/or saving buffer.
+When ARG is:
+- nil or negative, it will kill the current terminal
+- `universal-argument' or positive, it will kill the daemon
+- a number, it will save all buffers automatically"
   (interactive "P")
   (when (or (numberp arg) (eq arg '-))
     (setq arg (prefix-numeric-value arg)))
@@ -556,7 +561,6 @@ Position the cursor at its beginning, according to the current mode."
 (use-package counsel :ensure t
   :demand
   :delight (ivy-mode) (counsel-mode)
-
   :bind (("C-r" . swiper)
          ("C-s" . counsel-grep-or-swiper)
          ("C-S-s" . isearch-forward)
@@ -564,7 +568,6 @@ Position the cursor at its beginning, according to the current mode."
                ("<return>" . ivy-alt-done)
                ("C-j" . ivy-done))
          (:map read-expression-map ("C-r" . counsel-expression-history)))
-
   :config
   (defun counsel-find-file-as-root (x)
     "Find file X with root privileges."
@@ -1109,13 +1112,6 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   :bind (("C-c o" . hydra-org/body)
          (:map org-mode-map
                ("C-c C-q" . counsel-org-tag)))
-  :init
-  (defun nox/org-capture-frame ()
-    (modify-frame-parameters nil '((name . "Org Capture")
-                                   (org-capture-frame . t)
-                                   (width . 110) (height . 40)))
-    (org-capture))
-
   :config
   (defhydra hydra-org (:exit t :foreign-keys warn)
     "Org-mode"
@@ -1125,92 +1121,166 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     ("l" org-store-link "Store link")
     ("q" nil "Quit"))
 
-  (defun org-summary-todo (n-done n-not-done)
+  ;; NOTE(nox): General setup
+  (setq-default org-modules '(org-habit org-id org-protocol org-timer)
+                org-directory "~/Personal/Org/"
+                org-default-notes-file (concat org-directory "Inbox.org")
+                org-agenda-files (list org-default-notes-file
+                                       (concat org-directory "GTD.org")))
+
+  ;; NOTE(nox): Appearance & behavior
+  (setq-default org-startup-indented t
+                org-startup-with-inline-images t
+                org-startup-with-latex-preview t
+                org-pretty-entities t
+                org-image-actual-width nil
+                org-fontify-quote-and-verse-blocks t
+
+                org-tags-column -102
+                org-catch-invisible-edits 'smart
+                org-return-follows-link t
+                org-list-allow-alphabetical t
+                org-loop-over-headlines-in-active-region t)
+
+  (add-hook 'org-mode-hook (lambda () (org-hide-block-all) (turn-on-org-cdlatex)))
+
+  ;; NOTE(nox): Tasks & states
+  (setq-default org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)")
+                                    (sequence "WAITING(w@/!)" "HOLD(h@/!)" "|" "CANCELLED(c@/!)"))
+                org-treat-S-cursor-todo-selection-as-state-change nil
+                org-todo-state-tags-triggers
+                '((todo ("CANCELLED"))
+                  (done ("HOLD") ("WAITING"))
+                  ("TODO" ("HOLD") ("WAITING"))
+                  ("NEXT" ("HOLD") ("WAITING"))
+                  ("DONE" ("CANCELLED"))
+                  ("WAITING" ("WAITING" . t) ("HOLD"))
+                  ("HOLD" ("WAITING") ("HOLD" . t))
+                  ("CANCELLED" ("CANCELLED" . t))))
+
+  (defun nox/org-summary-todo (n-done n-not-done)
     "Switch entry to DONE when all subentries are done, to TODO otherwise."
-    (let (org-log-done org-log-states)   ; turn off logging
-      (org-todo (if (= n-not-done 0) "DONE" "TODO"))))
+    (let (org-log-done org-log-states) (org-todo (if (= n-not-done 0) "DONE" "TODO"))))
+  (add-hook 'org-after-todo-statistics-hook 'nox/org-summary-todo)
 
-  (setq-default
-   org-modules '(org-habit
-                 org-id
-                 org-protocol
-                 org-timer)
+  ;; NOTE(nox): Refiling
+  (setq-default org-refile-targets `((nil . (:maxlevel . 9))
+                                     (org-agenda-files . (:maxlevel . 9))
+                                     (,(concat org-directory "Someday.org") . (:level . 1)))
+                org-refile-use-outline-path 'file
+                org-outline-path-complete-in-steps nil
+                org-refile-allow-creating-parent-nodes 'confirm)
 
-   org-directory "~/Personal/Org/"
-   org-agenda-files (list (concat org-directory "Inbox.org")
-                          (concat org-directory "GTD.org"))
+  (defun nox/verify-refile-target ()
+    (if (member (nth 2 (org-heading-components)) org-done-keywords)
+        (progn (org-end-of-subtree t t) nil)
+      t))
+  (setq-default org-refile-target-verify-function 'nox/verify-refile-target)
 
-   org-capture-templates '(("t" "Tarefa" entry (file "Inbox.org")
-                            "* TODO %i%?")
-                           ("w" "Web bookmark" entry (file+headline "Reference.org" "Web bookmarks")
-                            "* [[%:link][%^{Title|%:description}]]\nCriado em: %u\n%?"))
+  ;; NOTE(nox): Logging
+  (setq-default org-log-done 'time
+                org-log-reschedule 'time
+                org-log-into-drawer t)
 
-   org-refile-targets `((nil . (:maxlevel . 6))
-                        (org-agenda-files . (:maxlevel . 6))
-                        (,(concat org-directory "Someday.org") . (:level . 1)))
-   org-refile-use-outline-path 'file
-   org-outline-path-complete-in-steps nil
+  ;; NOTE(nox): Helper functions
+  (defun nox/org-has-subtasks-p (&optional todo-keywords)
+    "_Any heading_ with subtasks.
+TODO-KEYWORDS is a list to restrict the search of the subtasks
+to. When nil, any keyword will do."
+    (org-with-wide-buffer
+     (let ((subtree-end (save-excursion (org-end-of-subtree t)))
+           (keywords (or (when (listp todo-keywords) todo-keywords) org-todo-keywords-1))
+           has-subtask)
+       (forward-line)
+       (while (and (not has-subtask) (< (point) subtree-end)
+                   (re-search-forward "^\*+ " subtree-end t))
+         (when (member (org-get-todo-state) keywords) (setq has-subtask t)))
+       has-subtask)))
 
-   org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)")
-                       (sequence "WAITING(w@/!)" "HOLD(h@/!)" "|" "CANCELLED(c@/!)"))
-   org-log-done 'time
-   org-log-reschedule 'time
-   org-log-into-drawer t
+  (defun nox/org-project-p (&optional todo-keywords)
+    "Any task that has subtasks.
+TODO-KEYWORDS is a list to restrict the search of the subtasks
+to. When nil, any keyword will do."
+    (let ((is-task (member (nth 2 (org-heading-components)) org-todo-keywords-1)))
+      (and is-task (nox/org-has-subtasks-p todo-keywords))))
 
-   org-catch-invisible-edits 'smart
-   org-confirm-babel-evaluate nil
-   org-id-link-to-org-use-id 'create-if-interactive
-   org-image-actual-width nil
-   org-list-allow-alphabetical t
-   org-loop-over-headlines-in-active-region t
-   org-pretty-entities t
-   org-return-follows-link t
-   org-tags-column -102
+  (defun nox/org-not-project-p ()
+    "Any task that doesn't have subtasks."
+    (let ((is-task (member (nth 2 (org-heading-components)) org-todo-keywords-1)))
+      (and is-task (not (nox/org-has-subtasks-p)))))
 
-   org-fontify-quote-and-verse-blocks t
+  (defun nox/org-find-project ()
+    "Return point of the parent project, if any."
+    (let (project)
+      (org-with-wide-buffer
+       (org-back-to-heading 'invisible-ok)
+       (while (org-up-heading-safe)
+         (when (member (nth 2 (org-heading-components)) org-todo-keywords-1) (setq project (point)))))
+      project))
 
-   org-startup-indented t
-   org-startup-with-inline-images t
-   org-startup-with-latex-preview t
+  (defun nox/org-task-from-project-p ()
+    "Any task that is a subtask inside a project."
+    (let ((is-task (member (nth 2 (org-heading-components)) org-todo-keywords-1)))
+      (when is-task (nox/org-find-project))))
 
-   org-preview-latex-default-process 'dvisvgm
-   org-latex-packages-alist '(("" "tikz" t)
-                              ("american,siunitx,smartlabels" "circuitikz" t)
-                              ("" "mathtools" t))
-   org-latex-preview-ltxpng-directory (locate-user-emacs-file "Latex Previews/")
-   org-format-latex-options
-   '(:foreground default :background default :scale 1.7
-                 :html-foreground "Black" :html-background "Transparent" :html-scale 1.0
-                 :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
-   org-preview-latex-process-alist
-   '((dvisvgm :programs ("latex" "dvisvgm")
-              :description "dvi > svg"
-              :message "you need to install the programs: latex and dvisvgm."
-              :use-xcolor t
-              :image-input-type "dvi"
-              :image-output-type "svg"
-              :image-size-adjust (1.7 . 1.5)
-              :latex-compiler ("latex -interaction nonstopmode -output-directory %o %f")
-              :image-converter ("dvisvgm %f -n -b 1 -c %S -o %O"))
-     (imagemagick :programs ("latex" "convert")
-                  :description "pdf > png"
-                  :message "you need to install the programs: latex and imagemagick."
-                  :use-xcolor t
-                  :image-input-type "pdf"
-                  :image-output-type "png"
-                  :image-size-adjust (1.0 . 1.0)
-                  :latex-compiler ("pdflatex -interaction nonstopmode -output-directory %o %f")
-                  :image-converter ("convert -density %D -trim -antialias %f -quality 100 %O"))
-     (dvipng :programs ("latex" "dvipng")
-             :description "dvi > png"
-             :message "you need to install the programs: latex and dvipng."
-             :image-input-type "dvi"
-             :image-output-type "png"
-             :image-size-adjust (1.0 . 1.0)
-             :latex-compiler ("latex -interaction nonstopmode -output-directory %o %f")
-             :image-converter ("dvipng -fg %F -bg %B -D %D -T tight -o %O %f")))
-   org-format-latex-header
-   "\\documentclass{article}
+  (defun nox/org-stuck-project-p ()
+    "A project that is stuck."
+    (let ((is-task (member (nth 2 (org-heading-components)) org-todo-keywords-1)))
+      (when is-task
+        (org-with-wide-buffer
+         (let ((subtree-end (save-excursion (org-end-of-subtree t)))
+               has-subtasks has-next)
+           (forward-line)
+           (while (and (not has-next) (< (point) subtree-end)
+                       (re-search-forward "^\*+ " subtree-end t))
+             (let ((todo (nth 2 (org-heading-components)))
+                   (tags (org-get-tags)))
+               (when (member todo org-todo-keywords-1) (setq has-subtasks t))
+               (if (or (member "CANCELLED" tags) (member "HOLD" tags) (member "WAITING" tags))
+                   (goto-char (org-end-of-subtree t t))
+                 (when (string= (nth 2 (org-heading-components)) "NEXT")
+                   (setq has-next t)))))
+           (and has-subtasks (not has-next)))))))
+
+  ;; NOTE(nox): LaTeX
+  (setq-default org-preview-latex-default-process 'dvisvgm
+                org-latex-packages-alist '(("" "tikz" t)
+                                           ("american,siunitx,smartlabels" "circuitikz" t)
+                                           ("" "mathtools" t))
+                org-latex-preview-ltxpng-directory (locate-user-emacs-file "Latex Previews/")
+                org-format-latex-options
+                '(:foreground default :background default :scale 1.7
+                              :html-foreground "Black" :html-background "Transparent" :html-scale 1.0
+                              :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
+                org-preview-latex-process-alist
+                '((dvisvgm :programs ("latex" "dvisvgm")
+                           :description "dvi > svg"
+                           :message "you need to install the programs: latex and dvisvgm."
+                           :use-xcolor t
+                           :image-input-type "dvi"
+                           :image-output-type "svg"
+                           :image-size-adjust (1.7 . 1.5)
+                           :latex-compiler ("latex -interaction nonstopmode -output-directory %o %f")
+                           :image-converter ("dvisvgm %f -n -b 1 -c %S -o %O"))
+                  (imagemagick :programs ("latex" "convert")
+                               :description "pdf > png"
+                               :message "you need to install the programs: latex and imagemagick."
+                               :use-xcolor t
+                               :image-input-type "pdf"
+                               :image-output-type "png"
+                               :image-size-adjust (1.0 . 1.0)
+                               :latex-compiler ("pdflatex -interaction nonstopmode -output-directory %o %f")
+                               :image-converter ("convert -density %D -trim -antialias %f -quality 100 %O"))
+                  (dvipng :programs ("latex" "dvipng")
+                          :description "dvi > png"
+                          :message "you need to install the programs: latex and dvipng."
+                          :image-input-type "dvi"
+                          :image-output-type "png"
+                          :image-size-adjust (1.0 . 1.0)
+                          :latex-compiler ("latex -interaction nonstopmode -output-directory %o %f")
+                          :image-converter ("dvipng -fg %F -bg %B -D %D -T tight -o %O %f")))
+                org-format-latex-header
+                "\\documentclass{article}
 \\usepackage[usenames]{color}
 [PACKAGES]
 [DEFAULT-PACKAGES]
@@ -1229,27 +1299,6 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 \\addtolength{\\topmargin}{-2.54cm}
 \\tikzset{every picture/.style={color=fg}}")
 
-  (add-hook 'org-after-todo-statistics-hook 'org-summary-todo)
-
-  (add-hook 'org-mode-hook (lambda ()
-                             (org-hide-block-all)
-                             (turn-on-org-cdlatex)))
-
-  (org-link-set-parameters "pdfview"
-                           :follow 'org-pdfview-open
-                           :complete 'org-pdfview-complete-link
-                           :store 'org-pdfview-store-link)
-
-  (org-babel-do-load-languages
-   'org-babel-load-languages
-   '((gnuplot . t)
-     (octave . t)
-     (python . t)
-     (latex . t)
-     (shell . t)
-     (calc . t)))
-  (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images)
-
   ;; NOTE(nox): Get different latex fragments for different themes
   (defvar nox/org-sha-salt)
   (advice-add
@@ -1263,7 +1312,129 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                                start end binary))))
        (apply orig-function args))))
 
-  ;; NOTE(nox): Capture frame related
+  ;; NOTE(nox): Babel
+  (setq-default org-confirm-babel-evaluate nil)
+
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '((gnuplot . t)
+     (octave . t)
+     (python . t)
+     (latex . t)
+     (shell . t)
+     (calc . t)))
+
+  (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images)
+
+  ;; NOTE(nox): PDF Tools support
+  (org-link-set-parameters "pdfview"
+                           :follow 'org-pdfview-open
+                           :complete 'org-pdfview-complete-link
+                           :store 'org-pdfview-store-link))
+
+(use-package org-agenda
+  :config
+  (defun nox/org-agenda-remove-empty-blocks ()
+    (save-excursion
+      (let ((prev (if (get-text-property (point-min) 'org-agenda-structural-header)
+                      (point-min)
+                    (next-single-property-change (point-min) 'org-agenda-structural-header)))
+            next)
+        (while (and prev (/= prev (point-max)))
+          (setq next
+                (or (next-single-property-change (next-single-property-change prev 'org-agenda-structural-header)
+                                                 'org-agenda-structural-header)
+                    (point-max)))
+          (if (< (count-lines prev next) 2)
+              (delete-region prev next)
+            (setq prev next))))))
+  (add-hook 'org-agenda-finalize-hook 'nox/org-agenda-remove-empty-blocks)
+
+  (defun nox/org-agenda-skip-non-stuck-projects ()
+    (org-with-wide-buffer
+     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
+       (if (nox/org-project-p)
+           (unless (nox/org-stuck-project-p) next-heading)
+         next-heading))))
+
+  (defun nox/org-agenda-skip-for-next-projects ()
+    (org-with-wide-buffer
+     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
+       (when (and (or (not (nox/org-project-p)) (nox/org-stuck-project-p))
+                  (not (and (string= (nth 2 (org-heading-components)) "NEXT")
+                            (nox/org-task-from-project-p))))
+         next-heading))))
+
+  (defun nox/org-agenda-skip-project-tasks ()
+    (org-with-wide-buffer
+     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
+       (when (or (nox/org-project-p)
+                 (nox/org-task-from-project-p))
+         next-heading))))
+
+  (setq-default
+   org-agenda-custom-commands
+   '(("n" "Agenda"
+      ((agenda "")
+       (tags "REFILE"
+             ((org-agenda-overriding-header "Coisas por organizar")
+              (org-tags-match-list-sublevels nil)))
+       (tags-todo "-CANCELLED/!"
+                  ((org-agenda-overriding-header "Projetos estagnados")
+                   (org-agenda-skip-function 'nox/org-agenda-skip-non-stuck-projects)
+                   (org-agenda-sorting-strategy '(category-keep))))
+       (tags-todo "-HOLD-CANCELLED/!"
+                  ((org-agenda-overriding-header "Ações seguintes de projetos")
+                   (org-agenda-skip-function 'nox/org-agenda-skip-for-next-projects)
+                   (org-tags-match-list-sublevels 'indented)
+                   (org-agenda-sorting-strategy '(category-keep))))
+       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD/!"
+                  ((org-agenda-overriding-header "Tarefas")
+                   (org-agenda-skip-function 'nox/org-agenda-skip-project-tasks)
+                   (org-agenda-sorting-strategy '(category-keep))))
+       ;; (tags-todo "-CANCELLED+WAITING|HOLD/!"
+       ;;            ((org-agenda-overriding-header "Waiting and Postponed Tasks")
+       ;;             (org-agenda-skip-function 'bh/skip-non-tasks)
+       ;;             (org-tags-match-list-sublevels nil)))
+       ;; (tags "-REFILE/"
+       ;;       ((org-agenda-overriding-header "Tasks to Archive")
+       ;;        (org-agenda-skip-function 'bh/skip-non-archivable-tasks)
+       ;;        (org-tags-match-list-sublevels nil)))
+       )))
+   org-agenda-span 'day
+   org-agenda-skip-deadline-prewarning-if-scheduled 'pre-scheduled
+   org-agenda-tags-todo-honor-ignore-options t
+   org-agenda-todo-ignore-scheduled 'all
+   org-agenda-todo-ignore-deadlines 'far
+   org-agenda-skip-scheduled-if-done t
+   org-agenda-skip-deadline-if-done t
+   org-agenda-dim-blocked-tasks nil
+   org-agenda-todo-list-sublevels nil
+   org-agenda-block-separator nil
+   org-agenda-time-grid '((daily today require-timed) nil "......" "----------------")))
+
+(use-package org-capture
+  :init
+  (defun nox/org-capture-frame ()
+    (modify-frame-parameters nil '((name . "Org Capture")
+                                   (org-capture-frame . t)
+                                   (width . 110) (height . 40)))
+    (org-capture))
+
+  :config
+  (setq-default
+   org-capture-templates '(("t" "Tarefa" entry (file "")
+                            "* NEXT %i%?\n%U" :clock-in t :clock-resume t)
+                           ("c" "Calendário" entry (file "")
+                            "* %?\n%^t")
+                           ("n" "Nota" entry (file "")
+                            "* %?\n%U\n" :clock-in t :clock-resume t)
+                           ("d" "Diário" entry (file+olp+datetree "Diário.org")
+                            "* %?\n%U\n" :clock-in t :clock-resume t)
+                           ("w" "Web bookmark" entry (file "")
+                            "* [[%:link][%^{Title|%:description}]]\n%u\n%?" :clock-in t :clock-resume t)))
+
+  ;; NOTE(nox): Handle capture frame
   (advice-add
    'org-switch-to-buffer-other-window :after
    (lambda (&rest _) (when (frame-parameter nil 'org-capture-frame) (delete-other-windows))))
@@ -1286,21 +1457,26 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
        (org-save-all-org-buffers)
        (delete-frame)))))
 
-(use-package org-agenda
-  :config
-  (setq org-agenda-skip-deadline-prewarning-if-scheduled t
-        org-agenda-todo-ignore-deadlines 'far
-        org-agenda-todo-ignore-scheduled 'future
-        org-agenda-todo-ignore-timestamp 'all
-        org-agenda-todo-list-sublevels nil
-        org-agenda-time-grid '((daily today require-timed) nil "......" "----------------")))
-
 (use-package org-clock
   :config
-  (setq-default org-clock-out-remove-zero-time-clocks t
+  (defun nox/org-clock-in-switch-state (current)
+    "Switch a task from TODO to NEXT when clocking in.
+Skips capture tasks, projects, and subprojects.
+Switch projects and subprojects from NEXT back to TODO"
+    (when (not (and (boundp 'org-capture-mode) org-capture-mode))
+      (cond ((and (string= current "TODO") (nox/org-not-project-p))
+             "NEXT")
+            ((and (string= current "NEXT") (nox/org-project-p))
+             "TODO"))))
+
+  (setq-default org-clock-in-resume t
+                org-clock-in-switch-to-state 'nox/org-clock-in-switch-state
+                org-clock-out-remove-zero-time-clocks t
+                org-clock-report-include-clocking-task t
                 org-clock-persist t
                 org-clock-persist-file (locate-user-emacs-file "clock-persist.el")
-                org-clock-in-resume t))
+                org-clock-history-length 25)
+  (org-clock-persistence-insinuate))
 
 (use-package org-edit-latex :ensure t)
 
@@ -1310,6 +1486,10 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   :config
   (setq-default org-habit-graph-column 70
                 org-habit-today-glyph ?@))
+
+(use-package org-id
+  :config
+  (setq-default org-id-link-to-org-use-id 'create-if-interactive))
 
 (use-package org-indent :delight)
 
