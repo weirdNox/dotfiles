@@ -1359,7 +1359,6 @@ Else, return full list of projects."
           (if (< (count-lines prev next) 4)
               (delete-region prev next)
             (setq prev next))))))
-  (add-hook 'org-agenda-finalize-hook 'nox/org-agenda-finalize)
 
   (defun nox/org-agenda-stuck-skip-function ()
     (org-with-wide-buffer
@@ -1402,15 +1401,18 @@ Else, return full list of projects."
                   ((org-agenda-overriding-header "Projetos estagnados")
                    (org-agenda-skip-function 'nox/org-agenda-stuck-skip-function)
                    (org-agenda-sorting-strategy '(category-keep))))
+       (tags-todo "-CANCELLED+PRIORITY=\"A\"/!"
+                  ((org-agenda-overriding-header "Prioritário")
+                   (org-agenda-sorting-strategy '(time-up category-keep))))
        (tags-todo "-REFILE-CANCELLED-WAITING-HOLD/!"
                   ((org-agenda-overriding-header "Projetos")
                    (org-agenda-skip-function 'nox/org-agenda-projects-next-skip-function)
                    (org-agenda-prefix-format "%(nox/org-agenda-projects-next-prefix)")
                    (org-agenda-sorting-strategy '(category-keep))))
-       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD/!"
+       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD-PRIORITY=\"A\"/!"
                   ((org-agenda-overriding-header "Tarefas isoladas")
                    (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
-                   (org-agenda-sorting-strategy '(category-keep))))
+                   (org-agenda-sorting-strategy '(deadline-up priority-up effort-up category-keep))))
        ;; (tags-todo "-CANCELLED+WAITING|HOLD/!"
        ;;            ((org-agenda-overriding-header "Waiting and Postponed Tasks")
        ;;             (org-agenda-skip-function 'bh/skip-non-tasks)
@@ -1419,7 +1421,8 @@ Else, return full list of projects."
        ;;       ((org-agenda-overriding-header "Tasks to Archive")
        ;;        (org-agenda-skip-function 'bh/skip-non-archivable-tasks)
        ;;        (org-tags-match-list-sublevels nil)))
-       )))
+       )
+      ((org-agenda-finalize-hook 'nox/org-agenda-finalize))))
    org-agenda-span 'day
    org-agenda-prefix-format '((agenda . "  %?-12t% s")
                               (todo   . "  ")
