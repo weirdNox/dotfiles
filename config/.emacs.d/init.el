@@ -70,6 +70,7 @@
                'nox/customize-theme-hook (or theme (car custom-enabled-themes)))))
 
 (defmacro nox/add-customize-theme-hook (target-theme &rest body)
+  "TARGET-THEME may be a list or a symbol."
   (declare (indent defun))
   `(add-hook 'nox/customize-theme-hook
              (lambda (theme)
@@ -107,7 +108,15 @@
        `(org-block
          ((t (:foreground ,(color-darken-name base0 7) :background ,(color-darken-name base03 7)))))))))
 
-(use-package smart-mode-line :ensure t
+(use-package color-theme-sanityinc-tomorrow :ensure
+  :config
+  (nox/add-customize-theme-hook '(sanityinc-tomorrow-blue sanityinc-tomorrow-eighties sanityinc-tomorrow-bright
+                                                          sanityinc-tomorrow-night sanityinc-tomorrow-day)
+    (custom-theme-set-faces
+     theme
+     `(org-special-keyword ((t (:inherit shadow)))))))
+
+(use-package smart-mode-line :ensure
   :config
   (setq-default sml/position-percentage-format nil
                 sml/pos-id-separator nil
@@ -130,20 +139,20 @@
   (with-selected-frame frame
     (remove-hook 'after-make-frame-functions 'nox/setup-appearance)
 
-    (load-theme 'solarized-dark)
-    (nox/change-font)
-
     (when (functionp 'scroll-bar-mode) (scroll-bar-mode -1))
     (when (functionp 'tool-bar-mode) (tool-bar-mode -1))
     (when (functionp 'menu-bar-mode) (menu-bar-mode -1))
 
-    (global-hl-line-mode)
-    (blink-cursor-mode -1)
+    (load-theme 'sanityinc-tomorrow-eighties t)
+    (nox/change-font)
 
     (sml/setup)
     (line-number-mode -1)
     (display-time-mode)
     (display-battery-mode)
+
+    (global-hl-line-mode)
+    (blink-cursor-mode -1)
 
     (when (> (window-width) 100)
       (split-window-right))
@@ -301,7 +310,7 @@ When ARG is:
 
 ;; ------------------------------
 ;; Keybindings
-(use-package hydra :ensure t
+(use-package hydra :ensure
   :config (setq-default lv-use-separator t))
 
 (bind-keys
@@ -333,7 +342,7 @@ When ARG is:
   :delight (auto-revert-mode)
   :config (global-auto-revert-mode))
 
-(use-package avy :ensure t
+(use-package avy :ensure
   :bind ("C-c a" . avy-goto-char))
 
 (use-package calendar
@@ -357,7 +366,7 @@ When ARG is:
                        (upcase (file-name-sans-extension (file-name-nondirectory buffer-file-name)))
                        "_H")))
       (insert (format "#if !defined(%s)\n#define %s\n\n\n\n#endif // %s" definition definition definition))
-      (previous-line 2)))
+      (forward-line -2)))
 
   (defun nox/c-hook ()
     (c-add-style
@@ -391,9 +400,9 @@ When ARG is:
   (add-hook 'c-mode-common-hook 'nox/c-hook)
   (setq-default c-hanging-semi&comma-criteria '((lambda () 'stop))))
 
-(use-package cdlatex :ensure t)
+(use-package cdlatex :ensure)
 
-(use-package company :ensure t
+(use-package company :ensure
   :demand
   :delight
   :bind
@@ -558,7 +567,7 @@ When ARG is:
                 compilation-context-lines 2
                 compilation-environment '("TERM=xterm")))
 
-(use-package counsel :ensure t
+(use-package counsel :ensure
   :demand
   :delight (ivy-mode) (counsel-mode)
   :bind (("C-r" . swiper)
@@ -612,16 +621,16 @@ When ARG is:
   (ivy-mode)
   (counsel-mode))
 
-(use-package counsel-projectile :ensure t
+(use-package counsel-projectile :ensure
   :demand
   :delight (projectile-mode)
   :config
   (setq-default projectile-completion-system 'ivy)
   (counsel-projectile-mode))
 
-(use-package delight :ensure t)
+(use-package delight :ensure)
 
-(use-package ivy-hydra :ensure t)
+(use-package ivy-hydra :ensure)
 
 (use-package dired+
   :demand
@@ -729,7 +738,11 @@ When ARG is:
                 dired-auto-revert-buffer t
                 dired-dwim-target t))
 
-(use-package dumb-jump :ensure t
+(use-package diredfl :ensure
+  :after dired
+  :init (diredfl-global-mode))
+
+(use-package dumb-jump :ensure
   :bind (("M-g j" . dumb-jump-go)
          ("M-g o" . dumb-jump-go-other-window)
          ("M-g i" . dumb-jump-go-prompt)
@@ -749,7 +762,7 @@ When ARG is:
 (use-package elisp-mode
   :delight (emacs-lisp-mode "Elisp" :major))
 
-(use-package expand-region :ensure t
+(use-package expand-region :ensure
   :bind ("C-=" . er/expand-region))
 
 (use-package find-file
@@ -757,9 +770,9 @@ When ARG is:
   :config
   (setq-default ff-always-try-to-create t))
 
-(use-package flx :ensure t)
+(use-package flx :ensure)
 
-(use-package gnuplot :ensure t)
+(use-package gnuplot :ensure)
 
 (use-package gdb-mi
   :bind ("C-c d" . hydra-gdb/body)
@@ -1034,7 +1047,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                 (setq gdb-var-list (nreverse var-list))))))))
     (gdb-speedbar-update)))
 
-(use-package go-mode :ensure t
+(use-package go-mode :ensure
   :config
   (setq-default gofmt-command (substitute-in-file-name "$GOPATH/bin/goimports"))
   (add-hook 'go-mode-hook
@@ -1068,7 +1081,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   (set 'imenu-auto-rescan-maxout 500000)
   (set 'imenu-auto-rescan t))
 
-(use-package imenu-anywhere :ensure t
+(use-package imenu-anywhere :ensure
   :bind ("C-c i" . nox/ivy-imenu-center)
   :config
   (defun nox/ivy-imenu-center ()
@@ -1082,13 +1095,13 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     (setq-default ispell-program-name "hunspell"
                   ispell-really-hunspell t)))
 
-(use-package magit :ensure t
+(use-package magit :ensure
   :if (executable-find "git")
   :config
   (setq-default magit-completing-read-function 'ivy-completing-read
                 magit-diff-refine-hunk 'all))
 
-(use-package multiple-cursors :ensure t
+(use-package multiple-cursors :ensure
   :bind (("C-c l" . mc/edit-lines)
          ("M-»" . mc/mark-next-like-this)
          ("M-«" . mc/mark-previous-like-this)
@@ -1097,7 +1110,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   :config
   (unbind-key "M-<down-mouse-1>"))
 
-(use-package nov :ensure t
+(use-package nov :ensure
   :mode (("\\.epub\\'" . nov-mode)))
 
 (use-package octave
@@ -1107,7 +1120,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   ;; NOTE(nox): Defining functions on octave sometimes failed without this!
   (add-hook 'inferior-octave-mode-hook (lambda () (setq eldoc-documentation-function nil))))
 
-(use-package org :ensure t
+(use-package org :ensure
   :delight (org-cdlatex-mode)
   :bind (("C-c o" . hydra-org/body)
          (:map org-mode-map
@@ -1183,64 +1196,58 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                 org-log-into-drawer t)
 
   ;; NOTE(nox): Helper functions
-  (defun nox/org-has-subtasks-p (&optional todo-keywords)
-    "_Any heading_ with subtasks.
-TODO-KEYWORDS is a list to restrict the search of the subtasks
-to. When nil, any keyword will do."
+  (defun nox/org-has-subtasks-p (&optional specific-keywords ignore-keywords)
+    "Any heading with subtasks.
+When SPECIFIC-KEYWORDS is nil, returns t when has subtasks, and nil otherwise.
+When it is a list of keywords, returns (HAS-SUBTASKS . HAS-SPECIFIC).
+Subtrees whose todo keyword is in IGNORE-KEYWORDS are ignored."
     (org-with-wide-buffer
      (let ((subtree-end (save-excursion (org-end-of-subtree t)))
-           (keywords (or (when (listp todo-keywords) todo-keywords) org-todo-keywords-1))
-           has-subtask)
+           has-subtasks has-specific)
        (forward-line)
-       (while (and (not has-subtask) (< (point) subtree-end)
-                   (re-search-forward "^\*+ " subtree-end t))
-         (when (member (org-get-todo-state) keywords) (setq has-subtask t)))
-       has-subtask)))
+       (while (and (< (point) subtree-end)
+                   (or (not has-subtasks)
+                       (and specific-keywords (not has-specific)))
+                   (re-search-forward org-todo-line-regexp subtree-end t))
+         (let ((keyword (match-string 2)))
+           (if (member keyword ignore-keywords)
+               (org-end-of-subtree t)
+             (if (member keyword specific-keywords)
+                 (setq has-subtasks t
+                       has-specific t)
+               (when (member keyword org-todo-keywords-1) (setq has-subtasks t))))))
+       (if specific-keywords
+           (cons has-subtasks has-specific)
+         has-subtasks))))
 
-  (defun nox/org-project-p (&optional todo-keywords)
-    "Any task that has subtasks.
-TODO-KEYWORDS is a list to restrict the search of the subtasks
-to. When nil, any keyword will do."
-    (let ((is-task (member (nth 2 (org-heading-components)) org-todo-keywords-1)))
-      (and is-task (nox/org-has-subtasks-p todo-keywords))))
+  (defun nox/org-project-p ()
+    "Any task that has subtasks."
+    (and (org-get-todo-state) (nox/org-has-subtasks-p)))
 
   (defun nox/org-not-project-p ()
     "Any task that doesn't have subtasks."
-    (let ((is-task (member (nth 2 (org-heading-components)) org-todo-keywords-1)))
-      (and is-task (not (nox/org-has-subtasks-p)))))
+    (and (org-get-todo-state) (not (nox/org-has-subtasks-p))))
 
-  (defun nox/org-find-project ()
-    "Return point of the parent project, if any."
-    (let (project)
+  (defun nox/org-parent-projects (&optional first)
+    "Get projects that enclose this heading, each specified by (NAME . POS).
+When FIRST is non-nil, return only the closest parent project that contains this heading.
+Else, return full list of projects."
+    (let (projects components)
       (org-with-wide-buffer
        (org-back-to-heading 'invisible-ok)
-       (while (org-up-heading-safe)
-         (when (member (nth 2 (org-heading-components)) org-todo-keywords-1) (setq project (point)))))
-      project))
+       (while (and (not (and first projects))
+                   (org-up-heading-safe))
+         (setq components (org-heading-components))
+         (when (org-get-todo-state)
+           (push (cons (substring-no-properties (org-get-heading t t t t)) (point)) projects))))
+      (if first (car projects) projects)))
 
-  (defun nox/org-task-from-project-p ()
-    "Any task that is a subtask inside a project."
-    (let ((is-task (member (nth 2 (org-heading-components)) org-todo-keywords-1)))
-      (when is-task (nox/org-find-project))))
-
-  (defun nox/org-stuck-project-p ()
-    "A project that is stuck."
-    (let ((is-task (member (nth 2 (org-heading-components)) org-todo-keywords-1)))
-      (when is-task
-        (org-with-wide-buffer
-         (let ((subtree-end (save-excursion (org-end-of-subtree t)))
-               has-subtasks has-next)
-           (forward-line)
-           (while (and (not has-next) (< (point) subtree-end)
-                       (re-search-forward "^\*+ " subtree-end t))
-             (let ((todo (nth 2 (org-heading-components)))
-                   (tags (org-get-tags)))
-               (when (member todo org-todo-keywords-1) (setq has-subtasks t))
-               (if (or (member "CANCELLED" tags) (member "HOLD" tags) (member "WAITING" tags))
-                   (goto-char (org-end-of-subtree t t))
-                 (when (string= (nth 2 (org-heading-components)) "NEXT")
-                   (setq has-next t)))))
-           (and has-subtasks (not has-next)))))))
+  (defun nox/org-project-status ()
+    "Return nil when heading is not project, `stuck' or `not-stuck'"
+    (when (org-get-todo-state)
+        (let ((subtasks-p (nox/org-has-subtasks-p '("NEXT") '("CANCELLED" "HOLD"))))
+          (when (car subtasks-p)
+            (if (cdr subtasks-p) 'not-stuck 'stuck)))))
 
   ;; NOTE(nox): LaTeX
   (setq-default org-preview-latex-default-process 'dvisvgm
@@ -1334,7 +1341,11 @@ to. When nil, any keyword will do."
 
 (use-package org-agenda
   :config
-  (defun nox/org-agenda-remove-empty-blocks ()
+  (defun nox/org-agenda-finalize ()
+    ;; NOTE(nox): Reset project hierarchy builder helper variable
+    (setq nox/org-agenda-first-project t)
+
+    ;; NOTE(nox): Remove empty blocks
     (save-excursion
       (let ((prev (if (get-text-property (point-min) 'org-agenda-structural-header)
                       (point-min)
@@ -1345,32 +1356,40 @@ to. When nil, any keyword will do."
                 (or (next-single-property-change (next-single-property-change prev 'org-agenda-structural-header)
                                                  'org-agenda-structural-header)
                     (point-max)))
-          (if (< (count-lines prev next) 2)
+          (if (< (count-lines prev next) 4)
               (delete-region prev next)
             (setq prev next))))))
-  (add-hook 'org-agenda-finalize-hook 'nox/org-agenda-remove-empty-blocks)
+  (add-hook 'org-agenda-finalize-hook 'nox/org-agenda-finalize)
 
-  (defun nox/org-agenda-skip-non-stuck-projects ()
+  (defun nox/org-agenda-stuck-skip-function ()
     (org-with-wide-buffer
      (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
-       (if (nox/org-project-p)
-           (unless (nox/org-stuck-project-p) next-heading)
-         next-heading))))
+       (when (not (eq (nox/org-project-status) 'stuck)) next-heading))))
 
-  (defun nox/org-agenda-skip-for-next-projects ()
+  (defun nox/org-agenda-projects-next-skip-function ()
     (org-with-wide-buffer
      (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
-       (when (and (or (not (nox/org-project-p)) (nox/org-stuck-project-p))
-                  (not (and (string= (nth 2 (org-heading-components)) "NEXT")
-                            (nox/org-task-from-project-p))))
+       (unless (or (eq (nox/org-project-status) 'not-stuck)
+                   (and (string= (org-get-todo-state) "NEXT")
+                        (nox/org-parent-projects t)))
          next-heading))))
 
-  (defun nox/org-agenda-skip-project-tasks ()
+  (defvar nox/org-agenda-first-project t)
+  (defun nox/org-agenda-projects-next-prefix ()
+    (let* ((is-project (nox/org-project-p))
+           (parent-projects (nox/org-parent-projects))
+           (number-of-proj (length parent-projects))
+           result)
+      (if is-project
+          (setq result (concat "  " (make-string number-of-proj ?|)))
+        (setq result (concat "  " (make-string (1- number-of-proj) ?|) "├─⮞ ")))
+      (setq nox/org-agenda-first-project nil)
+      result))
+
+  (defun nox/org-agenda-tasks-skip-function ()
     (org-with-wide-buffer
      (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
-       (when (or (nox/org-project-p)
-                 (nox/org-task-from-project-p))
-         next-heading))))
+       (when (or (nox/org-project-p) (nox/org-parent-projects t)) next-heading))))
 
   (setq-default
    org-agenda-custom-commands
@@ -1381,16 +1400,16 @@ to. When nil, any keyword will do."
               (org-tags-match-list-sublevels nil)))
        (tags-todo "-CANCELLED/!"
                   ((org-agenda-overriding-header "Projetos estagnados")
-                   (org-agenda-skip-function 'nox/org-agenda-skip-non-stuck-projects)
-                   (org-agenda-sorting-strategy '(category-keep))))
-       (tags-todo "-HOLD-CANCELLED/!"
-                  ((org-agenda-overriding-header "Ações seguintes de projetos")
-                   (org-agenda-skip-function 'nox/org-agenda-skip-for-next-projects)
-                   (org-tags-match-list-sublevels 'indented)
+                   (org-agenda-skip-function 'nox/org-agenda-stuck-skip-function)
                    (org-agenda-sorting-strategy '(category-keep))))
        (tags-todo "-REFILE-CANCELLED-WAITING-HOLD/!"
-                  ((org-agenda-overriding-header "Tarefas")
-                   (org-agenda-skip-function 'nox/org-agenda-skip-project-tasks)
+                  ((org-agenda-overriding-header "Projetos")
+                   (org-agenda-skip-function 'nox/org-agenda-projects-next-skip-function)
+                   (org-agenda-prefix-format "%(nox/org-agenda-projects-next-prefix)")
+                   (org-agenda-sorting-strategy '(category-keep))))
+       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD/!"
+                  ((org-agenda-overriding-header "Tarefas isoladas")
+                   (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
                    (org-agenda-sorting-strategy '(category-keep))))
        ;; (tags-todo "-CANCELLED+WAITING|HOLD/!"
        ;;            ((org-agenda-overriding-header "Waiting and Postponed Tasks")
@@ -1402,6 +1421,10 @@ to. When nil, any keyword will do."
        ;;        (org-tags-match-list-sublevels nil)))
        )))
    org-agenda-span 'day
+   org-agenda-prefix-format '((agenda . "  %?-12t% s")
+                              (todo   . "  ")
+                              (tags   . "  ")
+                              (search . "  "))
    org-agenda-skip-deadline-prewarning-if-scheduled 'pre-scheduled
    org-agenda-tags-todo-honor-ignore-options t
    org-agenda-todo-ignore-scheduled 'all
@@ -1410,7 +1433,7 @@ to. When nil, any keyword will do."
    org-agenda-skip-deadline-if-done t
    org-agenda-dim-blocked-tasks nil
    org-agenda-todo-list-sublevels nil
-   org-agenda-block-separator nil
+   org-agenda-block-separator ""
    org-agenda-time-grid '((daily today require-timed) nil "......" "----------------")))
 
 (use-package org-capture
@@ -1478,7 +1501,7 @@ Switch projects and subprojects from NEXT back to TODO"
                 org-clock-history-length 25)
   (org-clock-persistence-insinuate))
 
-(use-package org-edit-latex :ensure t)
+(use-package org-edit-latex :ensure)
 
 (use-package org-element :commands org-element-update-syntax)
 
@@ -1493,7 +1516,7 @@ Switch projects and subprojects from NEXT back to TODO"
 
 (use-package org-indent :delight)
 
-(use-package org-noter :ensure t
+(use-package org-noter :ensure
   :config
   (setq-default org-noter-default-heading-title "Notas da página $p$"
                 org-noter-hide-other t))
@@ -1506,7 +1529,7 @@ Switch projects and subprojects from NEXT back to TODO"
 
   (add-to-list 'org-src-lang-modes '("html" . web)))
 
-(use-package pdf-tools :ensure t
+(use-package pdf-tools :ensure
   :mode (("\\.pdf\\'" . pdf-view-mode))
   :bind (:map pdf-view-mode-map
               ("C-s" . isearch-forward))
@@ -1570,7 +1593,7 @@ and append it."
   :config
   (add-hook 'after-make-frame-functions (lambda (frame) (select-frame-set-input-focus frame)) t))
 
-(use-package smex :ensure t)
+(use-package smex :ensure)
 
 (use-package speedbar
   :config
@@ -1594,7 +1617,7 @@ and append it."
                 '(((regexp-quote (system-name)) nil nil)
                   (nil "\\`root\\'" "/ssh:%h:"))))
 
-(use-package treemacs :ensure t)
+(use-package treemacs :ensure)
 
 (use-package uniquify
   :config
@@ -1602,7 +1625,7 @@ and append it."
                 uniquify-separator "/"
                 uniquify-after-kill-buffer-p t))
 
-(use-package web-mode :ensure t
+(use-package web-mode :ensure
   :mode (("\\.\\(go\\)?html?\\'" . web-mode)))
 
 ;; ------------------------------
