@@ -1448,17 +1448,22 @@ Else, return full list of projects."
     (org-capture))
 
   :config
+  (defun nox/org-capture-add-created-property ()
+    (org-set-property "CREATED" (format-time-string
+                                 (concat "[" (substring (cdr org-time-stamp-formats) 1 -1) "]"))))
+  (add-hook 'org-capture-before-finalize-hook 'nox/org-capture-add-created-property)
+
   (setq-default
    org-capture-templates '(("t" "Tarefa" entry (file "")
-                            "* NEXT %i%?\n%U" :clock-in t :clock-resume t)
+                            "* NEXT %i%?" :clock-in t :clock-resume t)
                            ("c" "Calendário" entry (file "")
                             "* %?\n%^t")
                            ("n" "Nota" entry (file "")
-                            "* %?\n%U\n" :clock-in t :clock-resume t)
+                            "* %?" :clock-in t :clock-resume t)
                            ("d" "Diário" entry (file+olp+datetree "Diário.org")
-                            "* %?\n%U\n" :clock-in t :clock-resume t)
+                            "* %?" :clock-in t :clock-resume t)
                            ("w" "Web bookmark" entry (file "")
-                            "* [[%:link][%^{Title|%:description}]]\n%u\n%?" :clock-in t :clock-resume t)))
+                            "* [[%:link][%^{Title|%:description}]]\n%?" :clock-in t :clock-resume t)))
 
   ;; NOTE(nox): Handle capture frame
   (advice-add
