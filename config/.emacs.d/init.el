@@ -118,6 +118,23 @@
 
 (use-package smart-mode-line :ensure
   :config
+  (defvar nox/require-smart-mode-line-theme
+    '((light . (sanityinc-tomorrow-day))
+      (dark  . (sanityinc-tomorrow-blue sanityinc-tomorrow-eighties sanityinc-tomorrow-bright
+                                        sanityinc-tomorrow-night))))
+
+  (defun nox/update-smart-mode-line-theme (theme)
+    (unless (memq theme '(smart-mode-line-light smart-mode-line-dark user))
+      (let (chosen)
+        (if (or (and (setq chosen 'smart-mode-line-light)
+                     (memq theme (alist-get 'light nox/require-smart-mode-line-theme)))
+                (and (setq chosen 'smart-mode-line-dark)
+                     (memq theme (alist-get 'dark nox/require-smart-mode-line-theme))))
+            (load-theme chosen)
+          (disable-theme 'smart-mode-line-light)
+          (disable-theme 'smart-mode-line-dark)))))
+  (advice-add 'enable-theme :after 'nox/update-smart-mode-line-theme)
+
   (setq-default sml/position-percentage-format nil
                 sml/pos-id-separator nil
                 sml/use-projectile-p 'before-prefixes))
@@ -194,6 +211,8 @@
  enable-recursive-minibuffers t
  save-interprogram-paste-before-kill t
  bidi-display-reordering nil
+
+ auto-window-vscroll nil ;; https://emacs.stackexchange.com/a/28746
 
  delete-by-moving-to-trash t
  backup-directory-alist `((".*" . ,temp-dir))
