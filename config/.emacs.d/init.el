@@ -1157,8 +1157,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   (setq-default org-modules '(org-habit org-id org-protocol org-timer)
                 org-directory "~/Personal/Org/"
                 org-default-notes-file (concat org-directory "Inbox.org")
-                org-agenda-files (list org-default-notes-file
-                                       (concat org-directory "GTD.org")))
+                org-agenda-files (list org-directory))
 
   ;; NOTE(nox): Appearance & behavior
   (setq-default org-startup-indented t
@@ -1188,7 +1187,9 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                   ("DONE" ("CANCELLED"))
                   ("WAITING" ("WAITING" . t) ("HOLD"))
                   ("HOLD" ("WAITING") ("HOLD" . t))
-                  ("CANCELLED" ("CANCELLED" . t))))
+                  ("CANCELLED" ("CANCELLED" . t)))
+                org-columns-default-format "%80ITEM(Task) %10Effort(Effort){:} %10CLOCKSUM"
+                org-global-properties '(("Effort_ALL" . "0 0:15 0:30 0:45 1:00 2:00 3:00 4:00 5:00 7:00")))
 
   (defun nox/org-summary-todo (n-done n-not-done)
     "Switch entry to DONE when all subentries are done, to TODO otherwise."
@@ -1197,8 +1198,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
   ;; NOTE(nox): Refiling
   (setq-default org-refile-targets `((nil . (:maxlevel . 9))
-                                     (org-agenda-files . (:maxlevel . 9))
-                                     (,(concat org-directory "Someday.org") . (:level . 1)))
+                                     (org-agenda-files . (:maxlevel . 9)))
                 org-refile-use-outline-path 'file
                 org-outline-path-complete-in-steps nil
                 org-refile-allow-creating-parent-nodes 'confirm)
@@ -1399,8 +1399,8 @@ Else, return full list of projects."
            (number-of-proj (length parent-projects))
            result)
       (if is-project
-          (setq result (concat "  " (make-string number-of-proj ?|)))
-        (setq result (concat "  " (make-string (1- number-of-proj) ?|) "├─⮞ ")))
+          (setq result (concat "  " (apply 'concat (make-list number-of-proj "| "))))
+        (setq result (concat "  " (apply 'concat (make-list (1- number-of-proj) "| ")) "├─⮞ ")))
       (setq nox/org-agenda-first-project nil)
       result))
 
@@ -1416,7 +1416,7 @@ Else, return full list of projects."
        (tags "REFILE"
              ((org-agenda-overriding-header "Coisas por organizar")
               (org-tags-match-list-sublevels nil)))
-       (tags-todo "-CANCELLED/!"
+       (tags-todo "-CANCELLED-HOLD/!"
                   ((org-agenda-overriding-header "Projetos estagnados")
                    (org-agenda-skip-function 'nox/org-agenda-stuck-skip-function)
                    (org-agenda-sorting-strategy '(category-keep))))
@@ -1453,6 +1453,7 @@ Else, return full list of projects."
    org-agenda-todo-ignore-deadlines 'far
    org-agenda-skip-scheduled-if-done t
    org-agenda-skip-deadline-if-done t
+   org-agenda-clockreport-parameter-plist '(:link t :maxlevel 5 :fileskip0 t :compact t :narrow 80)
    org-agenda-dim-blocked-tasks nil
    org-agenda-todo-list-sublevels nil
    org-agenda-block-separator ""
