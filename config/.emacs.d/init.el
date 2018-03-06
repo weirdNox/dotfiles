@@ -1180,7 +1180,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
   ;; NOTE(nox): Tasks & states
   (setq-default org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)")
-                                    (sequence "WAITING(w@/!)" "HOLD(h@/!)" "|" "CANCELLED(c@/!)"))
+                                    (sequence "HOLD(h@/!)" "WAITING(w@/!)" "|" "CANCELLED(c@/!)"))
                 org-treat-S-cursor-todo-selection-as-state-change nil
                 org-todo-state-tags-triggers
                 '((todo ("CANCELLED"))
@@ -1192,7 +1192,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                   ("HOLD" ("WAITING") ("HOLD" . t))
                   ("CANCELLED" ("CANCELLED" . t)))
                 org-columns-default-format "%80ITEM(Task) %10Effort(Effort){:} %10CLOCKSUM"
-                org-global-properties '(("Effort_ALL" . "0 0:15 0:30 0:45 1:00 2:00 3:00 4:00 5:00 7:00")))
+                org-global-properties '(("Effort_ALL" . "0:15 0:30 0:45 1:00 1:30 2:00 3:00 4:00 5:00 7:00")))
 
   (defun nox/org-summary-todo (n-done n-not-done)
     "Switch entry to DONE when all subentries are done, to TODO otherwise."
@@ -1434,7 +1434,7 @@ Else, return full list of projects."
        (tags-todo "-REFILE-CANCELLED-WAITING-HOLD-PRIORITY=\"A\"/!"
                   ((org-agenda-overriding-header "Tarefas isoladas")
                    (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
-                   (org-agenda-sorting-strategy '(deadline-up priority-up effort-up category-keep))))
+                   (org-agenda-sorting-strategy '(deadline-down priority-down effort-up category-keep))))
        ;; (tags-todo "-CANCELLED+WAITING|HOLD/!"
        ;;            ((org-agenda-overriding-header "Waiting and Postponed Tasks")
        ;;             (org-agenda-skip-function 'bh/skip-non-tasks)
@@ -1457,6 +1457,7 @@ Else, return full list of projects."
    org-agenda-skip-scheduled-if-done t
    org-agenda-skip-deadline-if-done t
    org-agenda-clockreport-parameter-plist '(:link t :maxlevel 5 :fileskip0 t :compact t :narrow 80)
+   org-agenda-columns-add-appointments-to-effort-sum t
    org-agenda-dim-blocked-tasks nil
    org-agenda-todo-list-sublevels nil
    org-agenda-block-separator ""
@@ -1475,6 +1476,8 @@ Else, return full list of projects."
     (org-set-property "CREATED" (format-time-string
                                  (concat "[" (substring (cdr org-time-stamp-formats) 1 -1) "]"))))
   (add-hook 'org-capture-before-finalize-hook 'nox/org-capture-add-created-property)
+
+  (add-hook 'org-capture-mode-hook (lambda () (setq-local org-complete-tags-always-offer-all-agenda-tags t)))
 
   (setq-default
    org-capture-templates '(("t" "Tarefa" entry (file "")
