@@ -14,7 +14,6 @@
                                                        gc-cons-threshold 16777216
                                                        gc-cons-percentage 0.1)))
 
-(push ".emacs.d/lisp" load-path)
 (setq-default default-directory "~/"
               private-settings-file (locate-user-emacs-file "private.el")
               temp-dir (locate-user-emacs-file "temp")
@@ -37,6 +36,8 @@
 (require 'bind-key)
 (setq-default use-package-always-defer t)
 
+(push (locate-user-emacs-file "lisp") load-path)
+
 ;; ------------------------------
 ;; Appearance
 (defvar nox/fonts '(("PragmataPro" . 12) ("Hack" . 11) ("DejaVu Sans Mono" . 11) ("Inconsolata" . 13)
@@ -50,7 +51,8 @@
       (when (member (car font) (font-family-list))
         (push font available-fonts)))
 
-    (when available-fonts
+    (if (not available-fonts)
+        (error "No fonts from the chosen set are available")
       (if (called-interactively-p 'interactive)
           (let* ((chosen (assoc-string (completing-read "What font to use? " available-fonts nil t)
                                        available-fonts)))
@@ -85,7 +87,13 @@
                                             ("\\<\\(IMPORTANT\\)" 1 'font-lock-important-face t)
                                             ("\\<\\(NOTE\\)" 1 'font-lock-note-face t)))))
 
-(use-package gruvbox-theme :ensure)
+(use-package color-theme-sanityinc-tomorrow :ensure
+  :config
+  (nox/add-customize-theme-hook '(sanityinc-tomorrow-blue sanityinc-tomorrow-eighties sanityinc-tomorrow-bright
+                                                          sanityinc-tomorrow-night sanityinc-tomorrow-day)
+    (custom-theme-set-faces
+     theme
+     `(org-special-keyword ((t (:inherit shadow)))))))
 
 (use-package solarized :ensure solarized-theme
   :config
@@ -108,13 +116,7 @@
        `(org-block
          ((t (:foreground ,(color-darken-name base0 7) :background ,(color-darken-name base03 7)))))))))
 
-(use-package color-theme-sanityinc-tomorrow :ensure
-  :config
-  (nox/add-customize-theme-hook '(sanityinc-tomorrow-blue sanityinc-tomorrow-eighties sanityinc-tomorrow-bright
-                                                          sanityinc-tomorrow-night sanityinc-tomorrow-day)
-    (custom-theme-set-faces
-     theme
-     `(org-special-keyword ((t (:inherit shadow)))))))
+(use-package gruvbox-theme :ensure)
 
 (use-package smart-mode-line :ensure
   :config
@@ -517,7 +519,8 @@ When ARG is:
                                                              (nox/compile-info-last-time info))))
               (setq default-script (car script-list))))))
 
-      (when script-list
+      (if (not script-list)
+          (error "No build script found")
         (if (or (not arg) (= (length script-list) 1))
             (setq script (cdr default-script))
           (setq script (cdr (assoc
