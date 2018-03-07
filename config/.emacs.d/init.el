@@ -781,6 +781,8 @@ When ARG is:
               (when (derived-mode-p 'outline-mode)
                 (outline-show-all)))))
 
+(use-package eldoc :delight)
+
 (use-package elisp-mode
   :delight (emacs-lisp-mode "Elisp" :major))
 
