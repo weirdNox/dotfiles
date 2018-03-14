@@ -1273,6 +1273,9 @@ Else, return full list of projects."
           (when (car subtasks-p)
             (if (cdr subtasks-p) 'not-stuck 'stuck)))))
 
+  (defun nox/org-offer-all-agenda-tags ()
+    (setq-local org-complete-tags-always-offer-all-agenda-tags t))
+
   ;; NOTE(nox): LaTeX
   (setq-default org-preview-latex-default-process 'dvisvgm
                 org-latex-packages-alist '(("" "tikz" t)
@@ -1364,6 +1367,8 @@ Else, return full list of projects."
                            :store 'org-pdfview-store-link))
 
 (use-package org-agenda
+  :bind ((:map org-agenda-mode-map
+               ("C-c C-q" . counsel-org-tag)))
   :config
   (defun nox/org-agenda-finalize ()
     ;; NOTE(nox): Reset project hierarchy builder helper variable
@@ -1463,7 +1468,9 @@ Else, return full list of projects."
    org-agenda-dim-blocked-tasks nil
    org-agenda-todo-list-sublevels nil
    org-agenda-block-separator ""
-   org-agenda-time-grid '((daily today require-timed) nil "......" "----------------")))
+   org-agenda-time-grid '((daily today require-timed) nil "......" "----------------"))
+
+  (add-hook 'org-agenda-mode-hook 'nox/org-offer-all-agenda-tags))
 
 (use-package org-capture
   :init
@@ -1479,8 +1486,6 @@ Else, return full list of projects."
                                  (concat "[" (substring (cdr org-time-stamp-formats) 1 -1) "]"))))
   (add-hook 'org-capture-before-finalize-hook 'nox/org-capture-add-created-property)
 
-  (add-hook 'org-capture-mode-hook (lambda () (setq-local org-complete-tags-always-offer-all-agenda-tags t)))
-
   (setq-default
    org-capture-templates '(("t" "Tarefa" entry (file "")
                             "* NEXT %i%?" :clock-in t :clock-resume t)
@@ -1492,6 +1497,8 @@ Else, return full list of projects."
                             "* %?" :clock-in t :clock-resume t)
                            ("w" "Web bookmark" entry (file "")
                             "* [[%:link][%^{Title|%:description}]]\n%?" :clock-in t :clock-resume t)))
+
+  (add-hook 'org-capture-mode-hook 'nox/org-offer-all-agenda-tags)
 
   ;; NOTE(nox): Handle capture frame
   (advice-add
