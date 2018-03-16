@@ -1222,24 +1222,29 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   ;; NOTE(nox): Helper functions
   (defun nox/org-has-subtasks-p (&optional specific-keywords ignore-keywords)
     "Any heading with subtasks.
-When SPECIFIC-KEYWORDS is nil, returns t when has subtasks, and nil otherwise.
+When SPECIFIC-KEYWORDS is nil, returns t or `all-planned' when has subtasks, and nil otherwise.
 When it is a list of keywords, returns (HAS-SUBTASKS . HAS-SPECIFIC).
-Subtrees whose todo keyword is in IGNORE-KEYWORDS are ignored."
+HAS-SPECIFIC is t or `all-planned'.
+`all-planned' is returned when every subtask found will not be shown in the agenda because of
+scheduling/deadline.
+Subtrees whose parent todo keyword is in IGNORE-KEYWORDS are ignored."
     (org-with-wide-buffer
      (let ((subtree-end (save-excursion (org-end-of-subtree t)))
            has-subtasks has-specific)
        (forward-line)
        (while (and (< (point) subtree-end)
-                   (or (not has-subtasks)
-                       (and specific-keywords (not has-specific)))
+                   (or (not (eq has-subtasks t))
+                       (and specific-keywords (not (eq has-specific t))))
                    (re-search-forward org-todo-line-regexp subtree-end t))
-         (let ((keyword (match-string 2)))
+         (let ((keyword (match-string 2))
+               (planned (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item)))
            (if (member keyword ignore-keywords)
                (org-end-of-subtree t)
              (if (member keyword specific-keywords)
-                 (setq has-subtasks t
-                       has-specific t)
-               (when (member keyword org-todo-keywords-1) (setq has-subtasks t))))))
+                 (setq has-subtasks (or (eq has-subtasks t) (if planned 'all-planned t))
+                       has-specific (or (eq has-specific t) (if planned 'all-planned t)))
+               (when (member keyword org-todo-keywords-1)
+                 (setq has-subtasks (or (eq has-subtasks t) (if planned 'all-planned t))))))))
        (if specific-keywords
            (cons has-subtasks has-specific)
          has-subtasks))))
@@ -1267,11 +1272,13 @@ Else, return full list of projects."
       (if first (car projects) projects)))
 
   (defun nox/org-project-status ()
-    "Return nil when heading is not project, `stuck' or `not-stuck'"
+    "Return nil when heading is not project. When it is, returns `stuck', `planned' or `has-next'."
     (when (org-get-todo-state)
         (let ((subtasks-p (nox/org-has-subtasks-p '("NEXT") '("CANCELLED" "HOLD"))))
           (when (car subtasks-p)
-            (if (cdr subtasks-p) 'not-stuck 'stuck)))))
+            (if (cdr subtasks-p)
+                (if (eq (cdr subtasks-p) 'all-planned) 'planned 'has-next)
+              'stuck)))))
 
   (defun nox/org-offer-all-agenda-tags ()
     (setq-local org-complete-tags-always-offer-all-agenda-tags t))
@@ -1397,9 +1404,11 @@ Else, return full list of projects."
   (defun nox/org-agenda-projects-next-skip-function ()
     (org-with-wide-buffer
      (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
-       (unless (or (eq (nox/org-project-status) 'not-stuck)
-                   (and (string= (org-get-todo-state) "NEXT")
-                        (nox/org-parent-projects t)))
+       (if (or (eq (nox/org-project-status) 'has-next)
+               (and (string= (org-get-todo-state) "NEXT")
+                    (nox/org-parent-projects t)))
+           (when (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item)
+             (org-end-of-subtree t))
          next-heading))))
 
   (defvar nox/org-agenda-first-project t)
@@ -1437,7 +1446,9 @@ Else, return full list of projects."
                   ((org-agenda-overriding-header "Projetos")
                    (org-agenda-skip-function 'nox/org-agenda-projects-next-skip-function)
                    (org-agenda-prefix-format "%(nox/org-agenda-projects-next-prefix)")
-                   (org-agenda-sorting-strategy '(category-keep))))
+                   (org-agenda-sorting-strategy '(category-keep))
+                   (org-agenda-tags-todo-honor-ignore-options nil)
+                   (org-agenda-todo-ignore-scheduled 'future)))
        (tags-todo "-REFILE-CANCELLED-WAITING-HOLD-PRIORITY=\"A\"/!"
                   ((org-agenda-overriding-header "Tarefas isoladas")
                    (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
