@@ -1163,6 +1163,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                 org-directory "~/Personal/Org/"
                 org-default-notes-file (concat org-directory "Inbox.org")
                 org-agenda-files (list org-directory))
+  (defconst nox/org-agenda-main-file (concat org-directory "GTD.org"))
+  (defconst nox/org-agenda-journal-file (concat org-directory "Diário.org"))
 
   ;; NOTE(nox): Appearance & behavior
   (setq-default org-startup-indented t
@@ -1383,6 +1385,7 @@ Else, return full list of projects."
 
     ;; NOTE(nox): Remove empty blocks
     (save-excursion
+      (goto-char (point-min))
       (let ((prev (if (get-text-property (point-min) 'org-agenda-structural-header)
                       (point-min)
                     (next-single-property-change (point-min) 'org-agenda-structural-header)))
@@ -1392,7 +1395,8 @@ Else, return full list of projects."
                 (or (next-single-property-change (next-single-property-change prev 'org-agenda-structural-header)
                                                  'org-agenda-structural-header)
                     (point-max)))
-          (if (< (count-lines prev next) 4)
+          (if (or (and (< next (point-max)) (< (count-lines prev next) 4))
+                  (and (= next (point-max)) (< (count-lines prev next) 2)))
               (delete-region prev next)
             (setq prev next))))))
 
@@ -1428,13 +1432,36 @@ Else, return full list of projects."
      (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
        (when (or (nox/org-project-p) (nox/org-parent-projects t)) next-heading))))
 
+  (defun nox/org-agenda-waiting-skip-function ()
+    (org-with-wide-buffer
+     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
+       (unless (member (org-get-todo-state) org-todo-keywords-1) next-heading))))
+
+  (defun nox/org-agenda-archivable-skip-function ()
+    (org-with-wide-buffer
+     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max))))
+           (subtree-end (save-excursion (org-end-of-subtree t)))
+           (keyword (org-get-todo-state)))
+       (if (member keyword org-todo-keywords-1)
+           (if (member keyword org-done-keywords)
+               (let* ((day (nth 3 (decode-time)))
+                      (this-month (format-time-string "%Y-%m-" (current-time)))
+                      (last-month (format-time-string "%Y-%m-" (time-subtract (current-time) (seconds-to-time (* 60 60 24 (+ day 1)))))))
+                 (forward-line 1)
+                 (when (and (< (point) subtree-end)
+                            (re-search-forward (concat last-month "\\|" this-month) subtree-end t))
+                   subtree-end))
+             subtree-end)
+         next-heading))))
+
   (setq-default
    org-agenda-custom-commands
    '(("n" "Agenda"
       ((agenda "")
        (tags "REFILE"
              ((org-agenda-overriding-header "Coisas por organizar")
-              (org-tags-match-list-sublevels nil)))
+              (org-tags-match-list-sublevels nil)
+              (org-agenda-files (list org-default-notes-file))))
        (tags-todo "-CANCELLED-HOLD/!"
                   ((org-agenda-overriding-header "Projetos estagnados")
                    (org-agenda-skip-function 'nox/org-agenda-stuck-skip-function)
@@ -1453,16 +1480,17 @@ Else, return full list of projects."
                   ((org-agenda-overriding-header "Tarefas isoladas")
                    (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
                    (org-agenda-sorting-strategy '(deadline-down priority-down effort-up category-keep))))
-       ;; (tags-todo "-CANCELLED+WAITING|HOLD/!"
-       ;;            ((org-agenda-overriding-header "Waiting and Postponed Tasks")
-       ;;             (org-agenda-skip-function 'bh/skip-non-tasks)
-       ;;             (org-tags-match-list-sublevels nil)))
-       ;; (tags "-REFILE/"
-       ;;       ((org-agenda-overriding-header "Tasks to Archive")
-       ;;        (org-agenda-skip-function 'bh/skip-non-archivable-tasks)
-       ;;        (org-tags-match-list-sublevels nil)))
-       )
-      ((org-agenda-finalize-hook 'nox/org-agenda-finalize))))
+       (tags "-REFILE/"
+             ((org-agenda-overriding-header "Tarefas a arquivar")
+              (org-agenda-skip-function 'nox/org-agenda-archivable-skip-function)
+              (org-tags-match-list-sublevels nil)
+              (org-agenda-files (list nox/org-agenda-main-file))))
+       (tags-todo "-CANCELLED+WAITING|HOLD/!"
+                  ((org-agenda-overriding-header "Tarefas em pausa ou à espera")
+                   (org-agenda-skip-function 'nox/org-agenda-waiting-skip-function)
+                   (org-tags-match-list-sublevels nil))))
+      ((org-agenda-finalize-hook 'nox/org-agenda-finalize)
+       (org-agenda-files (list org-default-notes-file nox/org-agenda-main-file)))))
    org-agenda-span 'day
    org-agenda-prefix-format '((agenda . "  %?-12t% s")
                               (todo   . "  ")
@@ -1474,7 +1502,8 @@ Else, return full list of projects."
    org-agenda-todo-ignore-deadlines 'far
    org-agenda-skip-scheduled-if-done t
    org-agenda-skip-deadline-if-done t
-   org-agenda-clockreport-parameter-plist '(:link t :maxlevel 5 :fileskip0 t :compact t :narrow 80)
+   org-agenda-clockreport-parameter-plist `(:scope ,(list nox/org-agenda-main-file nox/org-agenda-journal-file org-default-notes-file)
+                                                   :link t :maxlevel 5 :fileskip0 t :compact t :narrow 80)
    org-agenda-columns-add-appointments-to-effort-sum t
    org-agenda-dim-blocked-tasks nil
    org-agenda-todo-list-sublevels nil
@@ -1504,7 +1533,7 @@ Else, return full list of projects."
                             "* %?\n%^t")
                            ("n" "Nota" entry (file "")
                             "* %?" :clock-in t :clock-resume t)
-                           ("d" "Diário" entry (file+olp+datetree "Diário.org")
+                           ("d" "Diário" entry (file+olp+datetree nox/org-agenda-journal-file)
                             "* %?" :clock-in t :clock-resume t)
                            ("w" "Web bookmark" entry (file "")
                             "* [[%:link][%^{Title|%:description}]]\n%?" :clock-in t :clock-resume t)))
