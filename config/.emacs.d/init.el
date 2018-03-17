@@ -63,7 +63,11 @@
 
       (setq font-setting (format "%s-%d" font-name font-size))
       (set-frame-font font-setting nil t)
-      (add-to-list 'default-frame-alist (cons 'font font-setting)))))
+      (add-to-list 'default-frame-alist (cons 'font font-setting))
+
+      (cond ((string= font-name "PragmataPro")
+             (custom-theme-set-faces
+              'user `(org-table ((t (:family ,(format "PragmataPro Mono-%d" font-size)))))))))))
 
 (defvar nox/customize-theme-hook nil "Hook for theme customization, called with the theme name.")
 (advice-add 'enable-theme :after
@@ -652,7 +656,8 @@ When ARG is:
 
 (use-package delight :ensure)
 
-(use-package ivy-hydra :ensure)
+(use-package ivy-hydra :ensure
+  :demand :after ivy)
 
 (use-package dired+
   :demand
