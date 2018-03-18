@@ -1,9 +1,4 @@
 * Dotfiles - Notes for extra configuration
-** Remove GNOME screen recording time limit
-#+BEGIN_SRC sh :results none
-  gsettings set org.gnome.settings-daemon.plugins.media-keys max-screencast-length 0
-#+END_SRC
-
 ** Refresh .desktop files
 After running =install.sh=, run ~update-desktop-database ~/.local/share/applications/~.
 
@@ -15,12 +10,3 @@ Must setup a global shortcut that runs ~ec -ce "(nox/org-capture-frame)"~
 #+BEGIN_EXAMPLE
 javascript:location.href='org-protocol://capture?template=w&url=' + encodeURIComponent(location.href) + '&title=' + encodeURIComponent(document.title)
 #+END_EXAMPLE
-
-*** $\LaTeX$ snippets
-**** Image with white background
-#+HEADER: :file Image.png :imoutoptions -geometry 150 -flatten
-#+BEGIN_src latex :results raw :imagemagick yes :fit yes :iminoptions -density 600
-\begin{circuitikz}
-\draw (0,0) to[R=100<\ohm>,v=5<\volt>] (2,0)
-\end{circuitikz}
-#+END_src

@@ -1281,11 +1281,11 @@ Else, return full list of projects."
   (defun nox/org-project-status ()
     "Return nil when heading is not project. When it is, returns `stuck', `planned' or `has-next'."
     (when (org-get-todo-state)
-        (let ((subtasks-p (nox/org-has-subtasks-p '("NEXT") '("CANCELLED" "HOLD"))))
-          (when (car subtasks-p)
-            (if (cdr subtasks-p)
-                (if (eq (cdr subtasks-p) 'all-planned) 'planned 'has-next)
-              'stuck)))))
+      (let ((subtasks-p (nox/org-has-subtasks-p '("NEXT") '("CANCELLED" "HOLD"))))
+        (when (car subtasks-p)
+          (if (cdr subtasks-p)
+              (if (eq (cdr subtasks-p) 'all-planned) 'planned 'has-next)
+            'stuck)))))
 
   (defun nox/org-offer-all-agenda-tags ()
     (setq-local org-complete-tags-always-offer-all-agenda-tags t))
@@ -1439,8 +1439,13 @@ Else, return full list of projects."
 
   (defun nox/org-agenda-waiting-skip-function ()
     (org-with-wide-buffer
-     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
-       (unless (member (org-get-todo-state) org-todo-keywords-1) next-heading))))
+     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max))))
+           (keyword (org-get-todo-state))
+           (project-status (nox/org-project-status)))
+       (unless (or (eq project-status 'planned)
+                   (and project-status (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item))
+                   (member keyword '("WAITING" "HOLD")))
+         next-heading))))
 
   (defun nox/org-agenda-archivable-skip-function ()
     (org-with-wide-buffer
@@ -1473,7 +1478,8 @@ Else, return full list of projects."
                    (org-agenda-sorting-strategy '(category-keep))))
        (tags-todo "-CANCELLED+PRIORITY=\"A\"/!"
                   ((org-agenda-overriding-header "Prioritário")
-                   (org-agenda-sorting-strategy '(time-up category-keep))))
+                   (org-agenda-sorting-strategy '(time-up category-keep))
+                   (org-agenda-todo-ignore-scheduled 'future)))
        (tags-todo "-REFILE-CANCELLED-WAITING-HOLD/!"
                   ((org-agenda-overriding-header "Projetos")
                    (org-agenda-skip-function 'nox/org-agenda-projects-next-skip-function)
@@ -1490,10 +1496,12 @@ Else, return full list of projects."
               (org-agenda-skip-function 'nox/org-agenda-archivable-skip-function)
               (org-tags-match-list-sublevels nil)
               (org-agenda-files (list nox/org-agenda-main-file))))
-       (tags-todo "-CANCELLED+WAITING|HOLD/!"
-                  ((org-agenda-overriding-header "Tarefas em pausa ou à espera")
+       (tags-todo "-CANCELLED/!"
+                  ((org-agenda-overriding-header "Tarefas à espera ou em pausa")
                    (org-agenda-skip-function 'nox/org-agenda-waiting-skip-function)
-                   (org-tags-match-list-sublevels nil))))
+                   (org-tags-match-list-sublevels nil)
+                   (org-agenda-tags-todo-honor-ignore-options nil)
+                   (org-agenda-todo-ignore-scheduled 'future))))
       ((org-agenda-finalize-hook 'nox/org-agenda-finalize)
        (org-agenda-files (list org-default-notes-file nox/org-agenda-main-file)))))
    org-agenda-span 'day
