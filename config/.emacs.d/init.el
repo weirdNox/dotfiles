@@ -1216,7 +1216,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                 org-refile-allow-creating-parent-nodes 'confirm)
 
   (defun nox/verify-refile-target ()
-    (if (member (nth 2 (org-heading-components)) org-done-keywords)
+    (if (member (org-get-todo-state) org-done-keywords)
         (progn (org-end-of-subtree t t) nil)
       t))
   (setq-default org-refile-target-verify-function 'nox/verify-refile-target)
@@ -1286,6 +1286,33 @@ Else, return full list of projects."
           (if (cdr subtasks-p)
               (if (eq (cdr subtasks-p) 'all-planned) 'planned 'has-next)
             'stuck)))))
+
+  (defun nox/org-project-set-next-after-done ()
+    "Ask to TODO to NEXT when changing previous states to DONE."
+    (let ((done-keywords (or org-done-keywords org-done-keywords-for-agenda))
+          target break)
+      (when (and (member org-state done-keywords) (nox/org-parent-projects t))
+        (org-with-wide-buffer
+         (org-back-to-heading t)
+         (save-excursion
+           (while (and (not target) (org-get-next-sibling))
+             (let ((keyword (org-get-todo-state)))
+               (if (string= keyword "TODO")
+                   (setq target (cons (point) (org-get-heading t t t t)))
+                 (unless (member keyword done-keywords)
+                   (setq target 'cancel))))))
+         (save-excursion
+           (while (and (consp target) (not break) (org-get-last-sibling))
+             (let ((keyword (org-get-todo-state)))
+               (if (string= keyword "NEXT")
+                   (setq target nil)
+                 (when (member keyword org-todo-keywords)
+                   (setq break t))))))
+         (when (consp target)
+           (when (y-or-n-p (concat "Do you want to set " (cdr target) " to NEXT?"))
+             (goto-char (car target))
+             (org-todo "NEXT")))))))
+  (add-hook 'org-after-todo-state-change-hook 'nox/org-project-set-next-after-done)
 
   (defun nox/org-offer-all-agenda-tags ()
     (setq-local org-complete-tags-always-offer-all-agenda-tags t))
@@ -1514,7 +1541,6 @@ Else, return full list of projects."
    org-agenda-todo-ignore-scheduled 'all
    org-agenda-todo-ignore-deadlines 'far
    org-agenda-skip-scheduled-if-done t
-   org-agenda-skip-deadline-if-done t
    org-agenda-clockreport-parameter-plist `(:scope ,(list nox/org-agenda-main-file nox/org-agenda-journal-file org-default-notes-file)
                                                    :link t :maxlevel 5 :fileskip0 t :compact t :narrow 80)
    org-agenda-columns-add-appointments-to-effort-sum t
