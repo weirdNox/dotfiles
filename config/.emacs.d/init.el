@@ -1297,10 +1297,12 @@ Else, return full list of projects."
          (save-excursion
            (while (and (not target) (org-get-next-sibling))
              (let ((keyword (org-get-todo-state)))
-               (if (string= keyword "TODO")
-                   (setq target (cons (point) (org-get-heading t t t t)))
-                 (unless (member keyword done-keywords)
-                   (setq target 'cancel))))))
+               (if (nox/org-project-p)
+                   (setq target 'cancel)
+                 (if (string= keyword "TODO")
+                     (setq target (cons (point) (org-get-heading t t t t)))
+                   (unless (member keyword done-keywords)
+                     (setq target 'cancel)))))))
          (save-excursion
            (while (and (consp target) (not break) (org-get-last-sibling))
              (let ((keyword (org-get-todo-state)))
