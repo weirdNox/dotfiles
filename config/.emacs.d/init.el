@@ -16,8 +16,8 @@
 
 (setq-default default-directory "~/"
               private-settings-file (locate-user-emacs-file "private.el")
-              temp-dir (locate-user-emacs-file "temp")
-              custom-file (locate-user-emacs-file "custom.el"))
+              custom-file (locate-user-emacs-file "custom.el")
+              temp-dir (locate-user-emacs-file "temp/"))
 
 (require 'package)
 (setq-default package-archives '(("gnu" . "https://elpa.gnu.org/packages/")
@@ -36,7 +36,7 @@
 (require 'bind-key)
 (setq-default use-package-always-defer t)
 
-(push (locate-user-emacs-file "lisp") load-path)
+(push (locate-user-emacs-file "lisp/") load-path)
 
 ;; ------------------------------
 ;; Appearance
@@ -221,11 +221,11 @@
  auto-window-vscroll nil ;; https://emacs.stackexchange.com/a/28746
 
  delete-by-moving-to-trash t
- backup-directory-alist `((".*" . ,temp-dir))
+ backup-directory-alist `(("^" . ,temp-dir))
  auto-save-file-name-transforms `((".*" ,temp-dir t))
  delete-old-versions t
- kept-new-versions 6
- kept-old-versions 2
+ kept-new-versions 10
+ kept-old-versions 0
  version-control t)
 
 (set-language-environment "UTF-8")
@@ -1740,7 +1740,8 @@ and append it."
   (setq-default tramp-default-method "ssh"
                 tramp-default-proxies-alist
                 '(((regexp-quote (system-name)) nil nil)
-                  (nil "\\`root\\'" "/ssh:%h:"))))
+                  (nil "\\`root\\'" "/ssh:%h:"))
+                tramp-backup-directory-alist '(("." . "/tmp/"))))
 
 (use-package treemacs :ensure)
 
