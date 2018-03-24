@@ -1643,6 +1643,7 @@ Switch projects and subprojects from NEXT back to TODO"
 (use-package org-noter :ensure
   :config
   (setq-default org-noter-default-heading-title "Notas da página $p$"
+                org-noter-default-notes-file-names '("Notes.org" "Notas.org")
                 org-noter-hide-other t))
 
 (use-package org-src
