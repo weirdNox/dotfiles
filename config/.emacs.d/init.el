@@ -1166,10 +1166,10 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   ;; NOTE(nox): General setup
   (setq-default org-modules '(org-habit org-id org-protocol org-timer)
                 org-directory "~/Personal/Org/"
-                org-default-notes-file (concat org-directory "Inbox.org")
-                org-agenda-files (list org-directory))
+                org-default-notes-file (concat org-directory "Inbox.org"))
   (defconst nox/org-agenda-main-file (concat org-directory "GTD.org"))
   (defconst nox/org-agenda-journal-file (concat org-directory "Diário.org"))
+  (setq-default org-agenda-files (list org-default-notes-file nox/org-agenda-main-file))
 
   ;; NOTE(nox): Appearance & behavior
   (setq-default org-startup-indented t
@@ -1496,7 +1496,9 @@ Else, return full list of projects."
   (setq-default
    org-agenda-custom-commands
    '(("n" "Agenda"
-      ((agenda "")
+      ((agenda ""
+               ((org-agenda-files (list org-default-notes-file nox/org-agenda-main-file
+                                        nox/org-agenda-journal-file))))
        (tags "REFILE"
              ((org-agenda-overriding-header "Coisas por organizar")
               (org-tags-match-list-sublevels nil)
@@ -1516,10 +1518,14 @@ Else, return full list of projects."
                    (org-agenda-sorting-strategy '(category-keep))
                    (org-agenda-tags-todo-honor-ignore-options nil)
                    (org-agenda-todo-ignore-scheduled 'future)))
-       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD-PRIORITY=\"A\"/!"
+       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD-PRIORITY=\"A\"-PRIORITY=\"C\"/!"
                   ((org-agenda-overriding-header "Tarefas isoladas")
                    (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
                    (org-agenda-sorting-strategy '(deadline-down priority-down effort-up category-keep))))
+       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD+PRIORITY=\"C\"/!"
+                  ((org-agenda-overriding-header "Tarefas de baixa prioridade")
+                   (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
+                   (org-agenda-sorting-strategy '(deadline-down effort-up category-keep))))
        (tags "-REFILE/"
              ((org-agenda-overriding-header "Tarefas a arquivar")
               (org-agenda-skip-function 'nox/org-agenda-archivable-skip-function)
@@ -1531,8 +1537,7 @@ Else, return full list of projects."
                    (org-tags-match-list-sublevels nil)
                    (org-agenda-tags-todo-honor-ignore-options nil)
                    (org-agenda-todo-ignore-scheduled 'future))))
-      ((org-agenda-finalize-hook 'nox/org-agenda-finalize)
-       (org-agenda-files (list org-default-notes-file nox/org-agenda-main-file)))))
+      ((org-agenda-finalize-hook 'nox/org-agenda-finalize))))
    org-agenda-span 'day
    org-agenda-prefix-format '((agenda . "  %?-12t% s")
                               (todo   . "  ")
@@ -1543,8 +1548,7 @@ Else, return full list of projects."
    org-agenda-todo-ignore-scheduled 'all
    org-agenda-todo-ignore-deadlines 'far
    org-agenda-skip-scheduled-if-done t
-   org-agenda-clockreport-parameter-plist `(:scope ,(list nox/org-agenda-main-file nox/org-agenda-journal-file org-default-notes-file)
-                                                   :link t :maxlevel 5 :fileskip0 t :compact t :narrow 80)
+   org-agenda-clockreport-parameter-plist `(:link t :maxlevel 6 :fileskip0 t :compact t :narrow 100)
    org-agenda-columns-add-appointments-to-effort-sum t
    org-agenda-dim-blocked-tasks nil
    org-agenda-todo-list-sublevels nil
