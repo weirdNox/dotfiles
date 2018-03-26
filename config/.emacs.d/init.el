@@ -1432,7 +1432,15 @@ Else, return full list of projects."
           (if (or (and (< next (point-max)) (< (count-lines prev next) 4))
                   (and (= next (point-max)) (< (count-lines prev next) 2)))
               (delete-region prev next)
-            (setq prev next))))))
+            (setq prev next)))))
+
+    ;; NOTE(nox): Check for sync conflicts!
+    (catch 'break
+      (message
+       (dolist (file (directory-files org-directory))
+         (when (string-match-p "sync-conflict" file)
+           (message-box "AVISO: Há conflitos de sincronização!")
+           (throw 'break t))))))
 
   (defun nox/org-agenda-stuck-skip-function ()
     (org-with-wide-buffer
