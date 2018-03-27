@@ -1168,7 +1168,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                 org-directory "~/Personal/Org/"
                 org-default-notes-file (concat org-directory "Inbox.org"))
   (defconst nox/org-agenda-main-file (concat org-directory "GTD.org"))
-  (defconst nox/org-agenda-journal-file (concat org-directory "Diário.org"))
+  (defconst nox/org-agenda-journal-file (concat org-directory "Journal.org"))
+  (defconst nox/org-reference-file (concat org-directory "Reference.org"))
   (setq-default org-agenda-files (list org-default-notes-file nox/org-agenda-main-file))
 
   ;; NOTE(nox): Appearance & behavior
@@ -1210,7 +1211,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 
   ;; NOTE(nox): Refiling
   (setq-default org-refile-targets `((nil . (:maxlevel . 9))
-                                     (org-agenda-files . (:maxlevel . 9)))
+                                     (org-agenda-files . (:maxlevel . 9))
+                                     (,nox/org-reference-file . (:maxlevel . 9)))
                 org-refile-use-outline-path 'file
                 org-outline-path-complete-in-steps nil
                 org-refile-allow-creating-parent-nodes 'confirm)

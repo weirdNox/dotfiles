@@ -6,7 +6,10 @@ After running =install.sh=, run ~update-desktop-database ~/.local/share/applicat
 *** Global =org-capture= shortcut
 Must setup a global shortcut that runs ~ec -ce "(nox/org-capture-frame)"~
 
-*** =org-protocol= bookmark
+*** =org-protocol= setup
+In order to update the desktop database, run ~update-desktop-database .local/share/applications/~
+
+Bookmark:
 #+BEGIN_EXAMPLE
 javascript:location.href='org-protocol://capture?template=w&url=' + encodeURIComponent(location.href) + '&title=' + encodeURIComponent(document.title)
 #+END_EXAMPLE
