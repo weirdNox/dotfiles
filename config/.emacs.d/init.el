@@ -1281,13 +1281,17 @@ Else, return full list of projects."
       (if first (car projects) projects)))
 
   (defun nox/org-project-status ()
-    "Return nil when heading is not project. When it is, returns `stuck', `planned' or `has-next'."
-    (when (org-get-todo-state)
-      (let ((subtasks-p (nox/org-has-subtasks-p '("NEXT") '("CANCELLED" "HOLD"))))
+    "Return nil when heading is not project. When it is, returns `done', `stuck', `planned' or `has-next'."
+    (let ((todo-state (org-get-todo-state))
+          subtasks-p)
+      (when todo-state
+        (setq subtasks-p (nox/org-has-subtasks-p '("NEXT") '("CANCELLED" "HOLD")))
         (when (car subtasks-p)
-          (if (cdr subtasks-p)
-              (if (eq (cdr subtasks-p) 'all-planned) 'planned 'has-next)
-            'stuck)))))
+          (if (member todo-state org-done-keywords)
+              'done
+            (if (cdr subtasks-p)
+                (if (eq (cdr subtasks-p) 'all-planned) 'planned 'has-next)
+              'stuck))))))
 
   (defun nox/org-project-set-next-after-done ()
     "Ask to TODO to NEXT when changing previous states to DONE."
@@ -1451,13 +1455,16 @@ Else, return full list of projects."
 
   (defun nox/org-agenda-projects-next-skip-function ()
     (org-with-wide-buffer
-     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
-       (if (or (eq (nox/org-project-status) 'has-next)
-               (and (string= (org-get-todo-state) "NEXT")
-                    (nox/org-parent-projects t)))
-           (when (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item)
-             (org-end-of-subtree t))
-         next-heading))))
+     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max))))
+           (project-status (nox/org-project-status)))
+       (if (eq project-status 'done)
+           (org-end-of-subtree t)
+         (if (or (eq project-status 'has-next)
+                 (and (string= (org-get-todo-state) "NEXT")
+                      (nox/org-parent-projects t)))
+             (when (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item)
+               (org-end-of-subtree t))
+           next-heading)))))
 
   (defvar nox/org-agenda-first-project t)
   (defun nox/org-agenda-projects-next-prefix ()
@@ -1521,13 +1528,13 @@ Else, return full list of projects."
                   ((org-agenda-overriding-header "Prioritário")
                    (org-agenda-sorting-strategy '(time-up category-keep))
                    (org-agenda-todo-ignore-scheduled 'future)))
-       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD/!"
-                  ((org-agenda-overriding-header "Projetos")
-                   (org-agenda-skip-function 'nox/org-agenda-projects-next-skip-function)
-                   (org-agenda-prefix-format "%(nox/org-agenda-projects-next-prefix)")
-                   (org-agenda-sorting-strategy '(category-keep))
-                   (org-agenda-tags-todo-honor-ignore-options nil)
-                   (org-agenda-todo-ignore-scheduled 'future)))
+       (tags "-REFILE-CANCELLED-WAITING-HOLD"
+             ((org-agenda-overriding-header "Projetos")
+              (org-agenda-skip-function 'nox/org-agenda-projects-next-skip-function)
+              (org-agenda-prefix-format "%(nox/org-agenda-projects-next-prefix)")
+              (org-agenda-sorting-strategy '(category-keep))
+              (org-agenda-tags-todo-honor-ignore-options nil)
+              (org-agenda-todo-ignore-scheduled 'future)))
        (tags-todo "-REFILE-CANCELLED-WAITING-HOLD-PRIORITY=\"A\"-PRIORITY=\"C\"/!"
                   ((org-agenda-overriding-header "Tarefas isoladas")
                    (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
@@ -1536,6 +1543,10 @@ Else, return full list of projects."
                   ((org-agenda-overriding-header "Tarefas de baixa prioridade")
                    (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
                    (org-agenda-sorting-strategy '(deadline-down effort-up category-keep))))
+       (tags "+Interessante+Level=2"
+             ((org-agenda-overriding-header "Coisas interessantes")
+              (org-agenda-sorting-strategy '(effort-up category-keep))
+              (org-agenda-show-inherited-tags nil)))
        (tags "-REFILE/"
              ((org-agenda-overriding-header "Tarefas a arquivar")
               (org-agenda-skip-function 'nox/org-agenda-archivable-skip-function)
