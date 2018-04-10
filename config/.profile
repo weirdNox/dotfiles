@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 
-export PATH="$HOME/Binaries/:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 
 export EDITOR="editor"
 export VISUAL="$EDITOR"
