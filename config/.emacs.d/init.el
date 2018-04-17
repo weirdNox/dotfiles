@@ -145,7 +145,8 @@
                 sml/pos-id-separator nil
                 sml/use-projectile-p 'before-prefixes))
 
-(setq-default initial-frame-alist '((fullscreen . fullboth))
+(setq-default initial-frame-alist '((fullscreen . fullboth)
+                                    (fullscreen-restore . maximized))
               inhibit-startup-screen t
               initial-scratch-message ""
 
@@ -1569,6 +1570,7 @@ Else, return full list of projects."
    org-agenda-todo-ignore-scheduled 'all
    org-agenda-todo-ignore-deadlines 'far
    org-agenda-skip-scheduled-if-done t
+   org-agenda-skip-deadline-if-done t
    org-agenda-clockreport-parameter-plist `(:link t :maxlevel 6 :fileskip0 t :compact t :narrow 100)
    org-agenda-columns-add-appointments-to-effort-sum t
    org-agenda-dim-blocked-tasks nil
