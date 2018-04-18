@@ -1516,7 +1516,8 @@ Else, return full list of projects."
    '(("n" "Agenda"
       ((agenda ""
                ((org-agenda-files (list org-default-notes-file nox/org-agenda-main-file
-                                        nox/org-agenda-journal-file))))
+                                        nox/org-agenda-journal-file))
+                (org-agenda-skip-scheduled-if-deadline-is-shown t)))
        (tags "REFILE"
              ((org-agenda-overriding-header "Coisas por organizar")
               (org-tags-match-list-sublevels nil)
@@ -1539,6 +1540,7 @@ Else, return full list of projects."
        (tags-todo "-REFILE-CANCELLED-WAITING-HOLD-PRIORITY=\"A\"-PRIORITY=\"C\"/!"
                   ((org-agenda-overriding-header "Tarefas isoladas")
                    (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
+                   (org-agenda-todo-ignore-with-date t)
                    (org-agenda-sorting-strategy '(deadline-down priority-down effort-up category-keep))))
        (tags-todo "-REFILE-CANCELLED-WAITING-HOLD+PRIORITY=\"C\"/!"
                   ((org-agenda-overriding-header "Tarefas de baixa prioridade")
