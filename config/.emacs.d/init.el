@@ -1217,6 +1217,9 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                 org-refile-use-outline-path 'file
                 org-outline-path-complete-in-steps nil
                 org-refile-allow-creating-parent-nodes 'confirm)
+  (add-hook 'org-after-refile-insert-hook (lambda ()
+                                            (org-update-statistics-cookies t)
+                                            (org-save-all-org-buffers)))
 
   (defun nox/verify-refile-target ()
     (if (member (org-get-todo-state) org-done-keywords)
@@ -1441,6 +1444,11 @@ Else, return full list of projects."
               (delete-region prev next)
             (setq prev next)))))
 
+    ;; NOTE(nox): Turn root projects bold
+    (save-excursion
+      (while (search-forward (char-to-string ?\u200B) nil t)
+        (add-face-text-property (line-beginning-position) (1+ (line-end-position)) '(:weight bold))))
+
     ;; NOTE(nox): Check for sync conflicts!
     (catch 'break
       (message
@@ -1473,9 +1481,11 @@ Else, return full list of projects."
            (parent-projects (nox/org-parent-projects))
            (number-of-proj (length parent-projects))
            result)
-      (if is-project
-          (setq result (concat "  " (apply 'concat (make-list number-of-proj "| "))))
-        (setq result (concat "  " (apply 'concat (make-list (1- number-of-proj) "| ")) "├─⮞ ")))
+      (if (eq number-of-proj 0)
+          (setq result (string ?  ?  ?\u200B))
+        (if is-project
+            (setq result (concat "  " (apply 'concat (make-list number-of-proj "| "))))
+          (setq result (concat "  " (apply 'concat (make-list (1- number-of-proj) "| ")) "├─⮞ "))))
       (setq nox/org-agenda-first-project nil)
       result))
 
@@ -1483,16 +1493,6 @@ Else, return full list of projects."
     (org-with-wide-buffer
      (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
        (when (or (nox/org-project-p) (nox/org-parent-projects t)) next-heading))))
-
-  (defun nox/org-agenda-waiting-skip-function ()
-    (org-with-wide-buffer
-     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max))))
-           (keyword (org-get-todo-state))
-           (project-status (nox/org-project-status)))
-       (unless (or (eq project-status 'planned)
-                   (and project-status (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item))
-                   (member keyword '("WAITING" "HOLD")))
-         next-heading))))
 
   (defun nox/org-agenda-archivable-skip-function ()
     (org-with-wide-buffer
@@ -1509,6 +1509,16 @@ Else, return full list of projects."
                             (re-search-forward (concat last-month "\\|" this-month) subtree-end t))
                    subtree-end))
              subtree-end)
+         next-heading))))
+
+  (defun nox/org-agenda-waiting-skip-function ()
+    (org-with-wide-buffer
+     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max))))
+           (keyword (org-get-todo-state))
+           (project-status (nox/org-project-status)))
+       (unless (or (eq project-status 'planned)
+                   (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item)
+                   (member keyword '("WAITING" "HOLD")))
          next-heading))))
 
   (setq-default
@@ -1555,7 +1565,7 @@ Else, return full list of projects."
               (org-agenda-skip-function 'nox/org-agenda-archivable-skip-function)
               (org-tags-match-list-sublevels nil)
               (org-agenda-files (list nox/org-agenda-main-file))))
-       (tags-todo "-CANCELLED/!"
+       (tags-todo "-CANCELLED-TICKLER/!"
                   ((org-agenda-overriding-header "Tarefas à espera ou em pausa")
                    (org-agenda-skip-function 'nox/org-agenda-waiting-skip-function)
                    (org-tags-match-list-sublevels nil)
