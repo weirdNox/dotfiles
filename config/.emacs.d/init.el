@@ -706,6 +706,7 @@ When ARG is:
         (when (= (length output-name) 0) (setq output-name "Output.pdf"))
         (process-put (make-process
                       :name "PDF Compressor/Merger"
+                      :buffer "*PDF Compress*"
                       :connection-type 'pipe
                       :sentinel 'nox/pdf-compress-merge-sentinel
                       :command
@@ -1539,6 +1540,10 @@ Else, return full list of projects."
        (tags-todo "-CANCELLED+PRIORITY=\"A\"/!"
                   ((org-agenda-overriding-header "Prioritário")
                    (org-agenda-sorting-strategy '(time-up category-keep))
+                   (org-agenda-todo-ignore-scheduled 'future)))
+       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD+EFFORT>\"0\"+EFFORT<=\"0:30\""
+                  ((org-agenda-overriding-header "Coisas rápidas")
+                   (org-agenda-sorting-strategy '(priority-down effort-up))
                    (org-agenda-todo-ignore-scheduled 'future)))
        (tags "-REFILE-CANCELLED-WAITING-HOLD"
              ((org-agenda-overriding-header "Projetos")
