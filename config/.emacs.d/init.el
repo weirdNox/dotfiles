@@ -1219,8 +1219,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                 org-outline-path-complete-in-steps nil
                 org-refile-allow-creating-parent-nodes 'confirm)
   (add-hook 'org-after-refile-insert-hook (lambda ()
-                                            (org-update-statistics-cookies t)
-                                            (org-save-all-org-buffers)))
+                                            (org-up-heading-safe)
+                                            (org-update-statistics-cookies nil)))
 
   (defun nox/verify-refile-target ()
     (if (member (org-get-todo-state) org-done-keywords)
