@@ -1742,6 +1742,20 @@ and append it."
             "::"
             (read-from-minibuffer "Page:" "1")))
 
+  ;; NOTE(nox): Show page number
+  (define-pdf-cache-function pagelabels)
+  (add-hook 'pdf-view-mode-hook
+            (lambda ()
+              (setq-local mode-line-position
+                          '(" ["
+                            (:eval (nth (1- (pdf-view-current-page))
+                                        (pdf-cache-pagelabels)))
+                            "/"
+                            (:eval (number-to-string (pdf-view-current-page)))
+                            "/"
+                            (:eval (number-to-string (pdf-cache-number-of-pages)))
+                            "]"))))
+
   (setq-default pdf-view-display-size 'fit-page
                 pdf-cache-image-limit 200
                 pdf-view-use-imagemagick t)
