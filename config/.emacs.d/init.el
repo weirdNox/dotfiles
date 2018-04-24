@@ -1448,7 +1448,8 @@ Else, return full list of projects."
     ;; NOTE(nox): Turn root projects bold
     (save-excursion
       (while (search-forward (char-to-string ?\u200B) nil t)
-        (add-face-text-property (line-beginning-position) (1+ (line-end-position)) '(:weight bold))))
+        (let ((overlay (make-overlay (line-beginning-position) (1+ (line-end-position)))))
+          (overlay-put overlay 'face '(:weight bold)))))
 
     ;; NOTE(nox): Check for sync conflicts!
     (catch 'break
