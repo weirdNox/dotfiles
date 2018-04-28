@@ -713,6 +713,51 @@ When ARG is:
                        files))
                      'data (cons (cons temp-output-name output-name)  files)))))
 
+  (defun nox/whiteboard ()
+    (interactive)
+    (unless (executable-find "whiteboard") (error "No whiteboard script :("))
+    (let ((window-config (current-window-configuration))
+          (files (dired-get-marked-files)))
+      (dolist (file files)
+        (let ((result-name (file-name-sans-extension file))
+              (pos (make-vector 4 nil))
+              (command-arguments "whiteboard")
+              image-spec orig-size size proportion)
+          (find-file file)
+
+          (if (not (eq major-mode 'image-mode))
+              (message "%s is not an image!" file)
+
+            (setq image-spec (create-image file)
+                  orig-size (image-size image-spec t)
+                  size (image-size (image-get-display-property) t)
+                  proportion (cons (/ (car orig-size) (float (car size)))
+                                   (/ (cdr orig-size) (float (cdr size)))))
+            (plist-put (cdr (image-get-display-property)) :pointer 'arrow)
+
+            (let ((index 0)
+                  event)
+              (while (and (not (eq event 'return)) (not (aref pos 3)))
+                (setq event (read-event "Next corner..."))
+                (when (and (listp event) (eq 'mouse-1 (car event))
+                           (eq (selected-window) (posn-window (event-start event))))
+                  (setf (aref pos index) (cons (* (car (posn-x-y (event-start event))) (car proportion))
+                                               (* (cdr (posn-x-y (event-start event))) (cdr proportion))))
+                  (setq index (1+ index)))))
+
+            (when (aref pos 3)
+              (setq command-arguments
+                    (concat command-arguments " -c \""
+                            (mapconcat (lambda (x) (format "%d,%d" (car x) (cdr x)))
+                                       pos " ")
+                            "\"")))
+
+            (setq command-arguments (concat command-arguments " " (read-string "Extra arguments: ") " "
+                                            (shell-quote-argument file) " " result-name "-whiteboard.png"))
+
+            (async-shell-command command-arguments))))
+      (set-window-configuration window-config)))
+
   ;; From abo-abo
   (defun nox/ediff-files ()
     (interactive)
@@ -1479,7 +1524,7 @@ Else, return full list of projects."
            (number-of-proj (length parent-projects))
            result)
       (if (eq number-of-proj 0)
-          (setq result (string ?  ?  ?\u200B))
+          (setq result (string ?  ?⮞ ?\u200B))
         (if is-project
             (setq result (concat "  " (apply 'concat (make-list number-of-proj "| "))))
           (setq result (concat "  " (apply 'concat (make-list (1- number-of-proj) "| ")) "├─⮞ "))))
