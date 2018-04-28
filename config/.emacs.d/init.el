@@ -132,7 +132,8 @@
   (nox/add-customize-theme-hook "^doom-"
     (custom-theme-set-faces
      theme
-     `(org-special-keyword ((t (:inherit shadow)))))))
+     '(org-special-keyword ((t (:inherit shadow))))
+     '(git-commit-overlong-summary ((t (:inherit shadow)))))))
 
 (use-package smart-mode-line :ensure
   :config
