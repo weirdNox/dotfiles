@@ -122,27 +122,13 @@
 
 (use-package gruvbox-theme :ensure)
 
+(use-package doom-themes :ensure
+  :config
+  (doom-themes-org-config))
+
 (use-package smart-mode-line :ensure
   :config
-  (defvar nox/require-smart-mode-line-theme
-    '((light . (sanityinc-tomorrow-day))
-      (dark  . (sanityinc-tomorrow-blue sanityinc-tomorrow-eighties sanityinc-tomorrow-bright
-                                        sanityinc-tomorrow-night))))
-
-  (defun nox/update-smart-mode-line-theme (theme)
-    (unless (memq theme '(smart-mode-line-light smart-mode-line-dark user))
-      (let (chosen)
-        (if (or (and (setq chosen 'smart-mode-line-light)
-                     (memq theme (alist-get 'light nox/require-smart-mode-line-theme)))
-                (and (setq chosen 'smart-mode-line-dark)
-                     (memq theme (alist-get 'dark nox/require-smart-mode-line-theme))))
-            (load-theme chosen)
-          (disable-theme 'smart-mode-line-light)
-          (disable-theme 'smart-mode-line-dark)))))
-  (advice-add 'enable-theme :after 'nox/update-smart-mode-line-theme)
-
   (setq-default sml/position-percentage-format nil
-                sml/pos-id-separator nil
                 sml/use-projectile-p 'before-prefixes))
 
 (setq-default initial-frame-alist '((fullscreen . fullboth)
@@ -167,11 +153,11 @@
     (when (functionp 'tool-bar-mode) (tool-bar-mode -1))
     (when (functionp 'menu-bar-mode) (menu-bar-mode -1))
 
-    (load-theme 'sanityinc-tomorrow-eighties t)
+    (load-theme 'doom-tomorrow-night t)
     (nox/change-font)
 
     (sml/setup)
-    (line-number-mode -1)
+    (line-number-mode)
     (display-time-mode)
     (display-battery-mode)
 
@@ -1179,7 +1165,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                 org-startup-with-inline-images t
                 org-startup-with-latex-preview t
                 org-pretty-entities t
-                org-image-actual-width nil
+                org-image-actual-width '(700)
                 org-fontify-quote-and-verse-blocks t
 
                 org-tags-column -102
