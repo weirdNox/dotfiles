@@ -76,12 +76,16 @@
                'nox/customize-theme-hook (or theme (car custom-enabled-themes)))))
 
 (defmacro nox/add-customize-theme-hook (target-theme &rest body)
-  "TARGET-THEME may be a list or a symbol."
+  "TARGET-THEME may be a list, a symbol or a regexp."
   (declare (indent defun))
   `(add-hook 'nox/customize-theme-hook
              (lambda (theme)
-               ,(if (symbolp (eval target-theme)) `(when (eq theme ,target-theme) ,@body)
-                  `(when (memq theme ,target-theme) ,@body)))))
+               ,(cond ((symbolp (eval target-theme))
+                       `(when (eq theme ,target-theme) ,@body))
+                      ((stringp (eval target-theme))
+                       `(when (string-match ,target-theme (symbol-name theme)) ,@body))
+                      ((listp (eval target-theme))
+                       `(when (memq theme ,target-theme) ,@body))))))
 
 (defface font-lock-todo-face      '((t (:foreground "#dc322f" :weight bold :underline t))) "Face for TODO keywords.")
 (defface font-lock-important-face '((t (:foreground "#b58900" :weight bold :underline t))) "Face for IMPORTANT keywords.")
@@ -93,8 +97,7 @@
 
 (use-package color-theme-sanityinc-tomorrow :ensure
   :config
-  (nox/add-customize-theme-hook '(sanityinc-tomorrow-blue sanityinc-tomorrow-eighties sanityinc-tomorrow-bright
-                                                          sanityinc-tomorrow-night sanityinc-tomorrow-day)
+  (nox/add-customize-theme-hook "^sanityinc-"
     (custom-theme-set-faces
      theme
      `(org-special-keyword ((t (:inherit shadow)))))))
@@ -124,7 +127,12 @@
 
 (use-package doom-themes :ensure
   :config
-  (doom-themes-org-config))
+  (doom-themes-org-config)
+
+  (nox/add-customize-theme-hook "^doom-"
+    (custom-theme-set-faces
+     theme
+     `(org-special-keyword ((t (:inherit shadow)))))))
 
 (use-package smart-mode-line :ensure
   :config
