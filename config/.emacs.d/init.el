@@ -1222,7 +1222,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
                 org-image-actual-width '(700)
                 org-fontify-quote-and-verse-blocks t
 
-                org-tags-column -102
+                org-tags-column -92
                 org-catch-invisible-edits 'smart
                 org-return-follows-link t
                 org-list-allow-alphabetical t
