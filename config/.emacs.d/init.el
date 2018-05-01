@@ -375,10 +375,8 @@ When ARG is:
                 calendar-longitude -8.6291))
 
 (use-package cc-mode
-  :mode (("\\.c\\'" . c-mode)
-         ("\\.cpp\\'" . c++-mode)
-         ("\\.h\\'" . c++-mode)
-         ("\\.hpp\\'" . c++-mode)
+  :mode (("\\.\\(c\\|h\\)\\'" . c-mode)
+         ("\\.\\(c\\|h\\)pp\\'" . c++-mode)
          ("\\.ino\\'" . c++-mode))
   :config
   (defun nox/header-format ()
@@ -390,36 +388,61 @@ When ARG is:
       (forward-line -2)))
 
   (defun nox/c-hook ()
-    (c-add-style
-     "NoxStyle"
-     '((c-tab-always-indent . t)
-       (c-comment-only-line-offset . 0)
-
-       (c-hanging-braces-alist . ((class-open) (class-close) (defun-open) (defun-close)
-                                  (inline-open) (inline-close) (brace-list-open) (brace-list-close)
-                                  (brace-list-intro) (brace-list-entry) (block-open) (block-close)
-                                  (substatement-open) (statement-case-open) (class-open)))
-
-       (c-hanging-colons-alist . ((inher-intro) (case-label) (label) (access-label)
-                                  (access-key) (member-init-intro)))
-
-       (c-cleanup-list . (scope-operator list-close-comma defun-close-semi))
-
-       (c-offsets-alist . ((arglist-close . c-lineup-arglist) (label . -4) (access-label . -4)
-                           (substatement-open . 0) (statement-case-intro . 4) (case-label . 4)
-                           (block-open . 0) (inline-open . 0) (topmost-intro-cont . 0)
-                           (knr-argdecl-intro . -4) (brace-list-open . 0) (brace-list-intro . 4)
-                           (member-init-intro . ++)))
-
-       (c-echo-syntactic-information-p . t))
-     t)
+    (c-set-style "NoxStyle")
     (c-toggle-auto-hungry-state -1)
-    (if buffer-file-name
-        (cond ((file-exists-p buffer-file-name) t)
-              ((string-match "[.]h" buffer-file-name) (nox/header-format)))))
+    (if (and buffer-file-name
+             (not (file-exists-p buffer-file-name))
+             (string-match "\\.h\\(pp\\)?\\'" buffer-file-name))
+        (nox/header-format)))
 
   (add-hook 'c-mode-common-hook 'nox/c-hook)
-  (setq-default c-hanging-semi&comma-criteria '((lambda () 'stop))))
+  (setq-default c-hanging-semi&comma-criteria '((lambda () 'stop)))
+  (c-add-style
+   "NoxStyle"
+   '((c-tab-always-indent . t)
+     (c-comment-only-line-offset . 0)
+
+     (c-hanging-braces-alist . ((block-close)
+                                (block-open)
+                                (brace-list-close)
+                                (brace-list-entry)
+                                (brace-list-intro)
+                                (brace-list-open)
+                                (class-close)
+                                (class-open)
+                                (class-open)
+                                (defun-close)
+                                (defun-open)
+                                (inline-close)
+                                (inline-open)
+                                (statement-case-open)
+                                (substatement-open)))
+
+     (c-hanging-colons-alist . ((access-key)
+                                (access-label)
+                                (case-label)
+                                (inher-intro)
+                                (label)
+                                (member-init-intro)))
+
+     (c-cleanup-list . (scope-operator list-close-comma defun-close-semi))
+
+     (c-offsets-alist . ((access-label . -4)
+                         (arglist-close . c-lineup-arglist)
+                         (block-open . 0)
+                         (brace-list-intro . 4)
+                         (brace-list-open . 0)
+                         (case-label . 4)
+                         (inline-open . 0)
+                         (knr-argdecl-intro . -4)
+                         (label . 0)
+                         (member-init-intro . ++)
+                         (statement-case-intro . 4)
+                         (substatement-open . 0)
+                         (substatement-label . 0)
+                         (topmost-intro-cont . 0)))
+
+     (c-echo-syntactic-information-p . t))))
 
 (use-package cdlatex :ensure)
 
