@@ -44,10 +44,11 @@ table inet filter {
     # TCP chain
     set TCP_accepted {
         type inet_service; flags interval;
-        # Some ports:
-        #   - SSH: ssh
-        #   - Syncthing: 22000
-        #elements = {}
+        # elements = {
+        #     ssh,        # SSH
+        #     22000,      # Syncthing
+        #     1714-1764   # KDE Connect
+        # }
     }
 	chain TCP {
         tcp dport @TCP_accepted accept
@@ -56,9 +57,11 @@ table inet filter {
     # UDP chain
     set UDP_accepted {
         type inet_service; flags interval;
-        # Some ports:
-        #   - Syncthing: 21027
-        #elements = {}
+        # elements = {
+        #     ssh,        # SSH
+        #     21027,      # Syncthing
+        #     1714-1764   # KDE Connect
+        # }
     }
 	chain UDP {
         udp dport @UDP_accepted accept
