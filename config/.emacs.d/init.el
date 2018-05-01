@@ -1718,7 +1718,9 @@ Switch projects and subprojects from NEXT back to TODO"
 
 (use-package org-habit
   :config
-  (setq-default org-habit-graph-column 70
+  (setq-default org-habit-graph-column 75
+                org-habit-preceding-days 30
+                org-habit-following-days 1
                 org-habit-today-glyph ?@))
 
 (use-package org-id
