@@ -1,4 +1,4 @@
 . ~/.profile
 
-# Load bashrc if interactive
+# NOTE(nox): Load bashrc if interactive
 [[ $- == *i* ]] && . ~/.bashrc
