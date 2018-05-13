@@ -1617,7 +1617,8 @@ Else, return full list of projects."
               (org-agenda-prefix-format "%(nox/org-agenda-projects-next-prefix)")
               (org-agenda-sorting-strategy '(category-keep))
               (org-agenda-tags-todo-honor-ignore-options nil)
-              (org-agenda-todo-ignore-scheduled 'future)))
+              (org-agenda-todo-ignore-scheduled 'future)
+              (org-agenda-todo-ignore-deadlines nil)))
        (tags-todo "-REFILE-CANCELLED-WAITING-HOLD-PRIORITY=\"A\"-PRIORITY=\"C\"/!"
                   ((org-agenda-overriding-header "Tarefas isoladas")
                    (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
