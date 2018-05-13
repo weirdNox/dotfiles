@@ -334,6 +334,8 @@ When ARG is:
 (use-package hydra :ensure
   :config (setq-default lv-use-separator t))
 
+(define-key key-translation-map (kbd "ESC") (kbd "C-g"))
+
 (bind-keys
  ("<C-return>" . nox/open-line-below)
  ("<C-M-return>" . nox/open-line-above)
