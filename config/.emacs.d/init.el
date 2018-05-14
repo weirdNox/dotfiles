@@ -1214,7 +1214,8 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 (use-package octave
   :mode (("\\.m\\'" . octave-mode))
   :config
-  (setq-default inferior-octave-startup-args '("-i" "--line-editing"))
+  (setq-default inferior-octave-startup-args '("-i" "--line-editing")
+                inferior-octave-prompt "\\(?:^octave\\(?:.bin\\|.exe\\)?\\(?:-[.0-9]+\\)?\\(?::[0-9]+\\)?\\|^debug\\|^\\)\\(octave\\|[ >]\\)*> ")
   ;; NOTE(nox): Defining functions on octave sometimes failed without this!
   (add-hook 'inferior-octave-mode-hook (lambda () (setq eldoc-documentation-function nil))))
 
