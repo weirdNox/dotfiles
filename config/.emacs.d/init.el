@@ -1492,9 +1492,6 @@ Else, return full list of projects."
                ("C-c C-q" . counsel-org-tag)))
   :config
   (defun nox/org-agenda-finalize ()
-    ;; NOTE(nox): Reset project hierarchy builder helper variable
-    (setq nox/org-agenda-first-project t)
-
     ;; NOTE(nox): Remove empty blocks
     (save-excursion
       (goto-char (point-min))
@@ -1544,7 +1541,6 @@ Else, return full list of projects."
                (org-end-of-subtree t))
            next-heading)))))
 
-  (defvar nox/org-agenda-first-project t)
   (defun nox/org-agenda-projects-next-prefix ()
     (let* ((is-project (nox/org-project-p))
            (parent-projects (nox/org-parent-projects))
@@ -1555,7 +1551,6 @@ Else, return full list of projects."
         (if is-project
             (setq result (concat "  " (apply 'concat (make-list number-of-proj "| "))))
           (setq result (concat "  " (apply 'concat (make-list (1- number-of-proj) "| ")) "├─⮞ "))))
-      (setq nox/org-agenda-first-project nil)
       result))
 
   (defun nox/org-agenda-tasks-skip-function ()
