@@ -1590,17 +1590,16 @@ Else, return full list of projects."
    '(("n" "Agenda"
       ((agenda ""
                ((org-agenda-files (list org-default-notes-file nox/org-agenda-main-file
-                                        nox/org-agenda-journal-file))
-                (org-agenda-skip-scheduled-if-deadline-is-shown t)))
+                                        nox/org-agenda-journal-file))))
        (tags "REFILE"
              ((org-agenda-overriding-header "Coisas por organizar")
               (org-tags-match-list-sublevels nil)
               (org-agenda-files (list org-default-notes-file))))
-       (tags-todo "-CANCELLED-HOLD/!"
+       (tags-todo "-CANCELLED-HOLD"
                   ((org-agenda-overriding-header "Projetos estagnados")
                    (org-agenda-skip-function 'nox/org-agenda-stuck-skip-function)
                    (org-agenda-sorting-strategy '(category-keep))))
-       (tags-todo "-CANCELLED+PRIORITY=\"A\"/!"
+       (tags-todo "-CANCELLED+PRIORITY=\"A\""
                   ((org-agenda-overriding-header "Prioritário")
                    (org-agenda-sorting-strategy '(time-up category-keep))
                    (org-agenda-todo-ignore-scheduled 'future)))
@@ -1608,7 +1607,7 @@ Else, return full list of projects."
                   ((org-agenda-overriding-header "Coisas rápidas")
                    (org-agenda-sorting-strategy '(priority-down effort-up))
                    (org-agenda-todo-ignore-scheduled 'future)))
-       (tags "-REFILE-CANCELLED-WAITING-HOLD"
+       (tags "-REFILE-CANCELLED-WAITING-HOLD+TODO<>\"\""
              ((org-agenda-overriding-header "Projetos")
               (org-agenda-skip-function 'nox/org-agenda-projects-next-skip-function)
               (org-agenda-prefix-format "%(nox/org-agenda-projects-next-prefix)")
@@ -1616,12 +1615,12 @@ Else, return full list of projects."
               (org-agenda-tags-todo-honor-ignore-options nil)
               (org-agenda-todo-ignore-scheduled 'future)
               (org-agenda-todo-ignore-deadlines nil)))
-       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD-PRIORITY=\"A\"-PRIORITY=\"C\"/!"
+       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD-PRIORITY=\"A\"-PRIORITY=\"C\""
                   ((org-agenda-overriding-header "Tarefas isoladas")
                    (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
                    (org-agenda-todo-ignore-with-date t)
                    (org-agenda-sorting-strategy '(deadline-down priority-down effort-up category-keep))))
-       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD+PRIORITY=\"C\"/!"
+       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD+PRIORITY=\"C\""
                   ((org-agenda-overriding-header "Tarefas de baixa prioridade")
                    (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
                    (org-agenda-sorting-strategy '(deadline-down effort-up category-keep))))
@@ -1629,12 +1628,12 @@ Else, return full list of projects."
              ((org-agenda-overriding-header "Coisas interessantes")
               (org-agenda-sorting-strategy '(effort-up category-keep))
               (org-agenda-show-inherited-tags nil)))
-       (tags "-REFILE/"
+       (tags "-REFILE+TODO<>\"\""
              ((org-agenda-overriding-header "Tarefas a arquivar")
               (org-agenda-skip-function 'nox/org-agenda-archivable-skip-function)
               (org-tags-match-list-sublevels nil)
               (org-agenda-files (list nox/org-agenda-main-file))))
-       (tags-todo "-CANCELLED-TICKLER/!"
+       (tags-todo "-CANCELLED-TICKLER"
                   ((org-agenda-overriding-header "Tarefas à espera ou em pausa")
                    (org-agenda-skip-function 'nox/org-agenda-waiting-skip-function)
                    (org-tags-match-list-sublevels nil)
@@ -1652,6 +1651,7 @@ Else, return full list of projects."
    org-agenda-todo-ignore-deadlines 'far
    org-agenda-skip-scheduled-if-done t
    org-agenda-skip-deadline-if-done t
+   org-agenda-skip-scheduled-if-deadline-is-shown t
    org-agenda-clockreport-parameter-plist `(:link t :maxlevel 6 :fileskip0 t :compact t :narrow 100)
    org-agenda-columns-add-appointments-to-effort-sum t
    org-agenda-dim-blocked-tasks nil
