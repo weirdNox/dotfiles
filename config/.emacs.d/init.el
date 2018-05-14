@@ -765,6 +765,7 @@ When ARG is:
             (let ((index 0)
                   event)
               (while (and (not (eq event 'return)) (not (aref pos 3)))
+                (delete-other-windows)
                 (setq event (read-event "Next corner..."))
                 (when (and (listp event) (eq 'mouse-1 (car event))
                            (eq (selected-window) (posn-window (event-start event))))
@@ -780,10 +781,12 @@ When ARG is:
                             "\"")))
 
             (setq command-arguments (concat command-arguments " " (read-string "Extra arguments: ") " "
-                                            (shell-quote-argument file) " " result-name "-whiteboard.png"))
+                                            (shell-quote-argument file) " " (shell-quote-argument result-name)
+                                            "-whiteboard.png"))
 
             (async-shell-command command-arguments))))
-      (set-window-configuration window-config)))
+      (set-window-configuration window-config)
+      (dired-unmark-all-marks)))
 
   ;; From abo-abo
   (defun nox/ediff-files ()
