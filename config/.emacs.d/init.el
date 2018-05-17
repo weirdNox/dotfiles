@@ -577,10 +577,8 @@ When ARG is:
             (when arg (setq command-args (read-string "Arguments: " command-args)))
 
             (setf (nox/compile-info-last-args script) command-args)
-            (setq command-args (shell-quote-argument (replace-regexp-in-string
-                                                      (regexp-quote "%f")
-                                                      start-file-name
-                                                      command-args)))
+            (setq command-args (replace-regexp-in-string
+                                (regexp-quote "%f") (shell-quote-argument start-file-name) command-args))
 
             (setq nox/compile-info script)
             (compilation-start (concat command " " command-args) nil 'nox/compile-buffer-name)
