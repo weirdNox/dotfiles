@@ -525,7 +525,7 @@ When ARG is:
     (let ((default-script (when nox/compile-info (cons (nox/compile-info-path nox/compile-info)
                                                        nox/compile-info)))
           (start-file-name (or (buffer-file-name) ""))
-          script script-list  buffer)
+          script script-list buffer)
       (dolist (test-script nox/compile-script-names (setq script-list (nreverse script-list)))
         (let ((found-script-dir (locate-dominating-file default-directory test-script))
               full-path info)
@@ -553,8 +553,7 @@ When ARG is:
                                               script-list nil t nil nil (car default-script))
                              script-list))))
 
-        (setf (nox/compile-info-last-time script) (current-time)
-              (nox/compile-info-buffer-name script) (nox/compile-buffer-name script))
+        (setf (nox/compile-info-buffer-name script) (nox/compile-buffer-name script))
         (setq buffer (get-buffer-create (nox/compile-info-buffer-name script)))
 
         (if (projectile-project-p) (projectile-save-project-buffers) (save-some-buffers t))
@@ -581,6 +580,8 @@ When ARG is:
                                 (regexp-quote "%f") (shell-quote-argument start-file-name) command-args))
 
             (setq nox/compile-info script)
+
+            (setf (nox/compile-info-last-time script) (current-time))
             (compilation-start (concat command " " command-args) nil 'nox/compile-buffer-name)
             ;; NOTE(nox): Need to set it again in order to persist after changing the
             ;; major mode
@@ -592,6 +593,8 @@ When ARG is:
     "Bury compilation buffer if it succeeded."
     (with-current-buffer buffer
       (when nox/compile-info
+        (message "Compilation time: %.3fs"
+                 (float-time (subtract-time (current-time) (nox/compile-info-last-time nox/compile-info))))
         (when (and (string= string "finished\n")
                    (save-excursion (not (ignore-errors (compilation-next-error 1 nil 1)))))
           (let ((windows (get-buffer-window-list buffer t)))
