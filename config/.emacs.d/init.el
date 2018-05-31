@@ -1219,9 +1219,17 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   :mode (("\\.m\\'" . octave-mode))
   :config
   (setq-default inferior-octave-startup-args '("-i" "--line-editing")
-                inferior-octave-prompt "\\(?:^octave\\(?:.bin\\|.exe\\)?\\(?:-[.0-9]+\\)?\\(?::[0-9]+\\)?\\|^debug\\|^\\)\\(octave\\|[ >]\\)*> ")
+                inferior-octave-prompt-read-only t
+                inferior-octave-prompt "^octave\\(octave\\|[ >]\\)*")
+
   ;; NOTE(nox): Defining functions on octave sometimes failed without this!
-  (add-hook 'inferior-octave-mode-hook (lambda () (setq eldoc-documentation-function nil))))
+  (add-hook 'inferior-octave-mode-hook (lambda () (setq eldoc-documentation-function nil)))
+
+  ;; NOTE(nox): Remove whitespace from beginning when printing output
+  (advice-add 'org-babel-octave-evaluate-session :around
+              (lambda (orig-func session body result-type &optional matlabp)
+                (let ((result (funcall orig-func session body result-type matlabp)))
+                  (if (eq result-type 'output) (string-trim-left result) result)))))
 
 (use-package org :ensure
   :delight (org-cdlatex-mode)
