@@ -1671,6 +1671,11 @@ Else, return full list of projects."
 
   (add-hook 'org-agenda-mode-hook 'nox/org-offer-all-agenda-tags))
 
+(use-package org-attach
+  :config
+  (setq org-attach-directory "Recursos/"
+        org-attach-method 'mv))
+
 (use-package org-capture
   :init
   (defun nox/org-capture-frame ()
