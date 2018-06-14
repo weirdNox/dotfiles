@@ -1600,7 +1600,8 @@ Else, return full list of projects."
    '(("n" "Agenda"
       ((agenda ""
                ((org-agenda-files (list org-default-notes-file nox/org-agenda-main-file
-                                        nox/org-agenda-journal-file))))
+                                        nox/org-agenda-journal-file))
+                (org-agenda-span 3)))
        (tags "REFILE"
              ((org-agenda-overriding-header "Coisas por organizar")
               (org-tags-match-list-sublevels nil)
