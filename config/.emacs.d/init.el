@@ -217,16 +217,18 @@
  auto-window-vscroll nil ;; https://emacs.stackexchange.com/a/28746
 
  delete-by-moving-to-trash t
- backup-directory-alist `(("^" . ,temp-dir))
+ backup-directory-alist `(("." . ,temp-dir))
  auto-save-file-name-transforms `((".*" ,temp-dir t))
  delete-old-versions t
  kept-new-versions 10
  kept-old-versions 0
  version-control t)
 
+(set-charset-priority 'unicode)
 (set-language-environment "UTF-8")
-(prefer-coding-system 'utf-8-unix)
-(set-default-coding-systems 'utf-8-unix)
+(prefer-coding-system        'utf-8-unix)
+(set-selection-coding-system 'utf-8-unix)
+(set-default-coding-systems  'utf-8-unix)
 (setq-default default-input-method "TeX")
 
 (fset 'yes-or-no-p 'y-or-n-p)
