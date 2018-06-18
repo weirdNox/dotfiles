@@ -1,6 +1,2 @@
 #!/usr/bin/env sh
-
-setxkbmap -layout us,us -variant alt-intl,colemak -option ctrl:nocaps,shift:both_capslock
-if [ "$(command -v xcape)" ]; then
-    xcape
-fi
+setxkbmap -layout us,us -variant intl,colemak -option ctrl:nocaps,shift:both_capslock
