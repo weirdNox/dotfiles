@@ -1,2 +1,2 @@
 #!/usr/bin/env sh
-setxkbmap -layout us,us -variant intl,colemak -option ctrl:nocaps,shift:both_capslock
+setxkbmap -layout us,us -variant intl,colemak -option ctrl:nocaps,shift:both_capslock,compose:rwin
