@@ -1,0 +1,2972 @@
+#+TITLE: Emacs configuration
+#+AUTHOR: Gonçalo Santos (weirdNox)
+#+BEGIN_SRC emacs-lisp
+;; -*- lexical-binding: t -*-
+#+END_SRC
+* Configuration
+:PROPERTIES:
+:VISIBILITY: children
+:END:
+** About
+This is Gonçalo Santos's Emacs configuration, based on =doom-emacs=.
+
+#+BEGIN_SRC emacs-lisp
+(setq-default user-full-name "Gonçalo Santos")
+#+END_SRC
+
+*** Naming conventions
+- nox-...   variables or non-interactive functions
+- nox/...   an interactive function
+- nox|...   hook function
+- nox*...   advising functions
+- nox@...   a hydra command
+- nox:...   an evil operator, motion or command
+- ...!      a macro or function that configures Emacs
+- %...      functions used for in-snippet logic
+- +...      variables or functions related to a package
+
+** Essential
+*** Built-in packages
+#+BEGIN_SRC emacs-lisp
+(require 'subr-x)
+(require 'cl-lib)
+#+END_SRC
+
+*** Variables and constants
+#+BEGIN_SRC emacs-lisp
+(defvar nox-debug-mode (when (or (getenv "DEBUG") init-file-debug) t)
+  "If non-nil, all functions will be verbose. Set DEBUG=1 in the command
+line or use --debug-init to enable this.")
+
+(defconst EMACS26+ (eval-when-compile (not (version< emacs-version "26"))))
+(defconst EMACS27+ (eval-when-compile (not (version< emacs-version "27"))))
+
+(defconst IS-MAC     (eq system-type 'darwin))
+(defconst IS-LINUX   (eq system-type 'gnu/linux))
+(defconst IS-WINDOWS (memq system-type '(cygwin windows-nt ms-dos)))
+#+END_SRC
+
+*** Directories
+#+BEGIN_SRC emacs-lisp
+(defconst nox-emacs-dir (eval-when-compile (file-truename user-emacs-directory))
+  "The path to the emacs.d directory. Must end in a slash.")
+
+(defconst nox-local-dir (concat nox-emacs-dir ".local/")
+  "Root directory for local Emacs files. Use this as permanent storage for files
+that are safe to share across systems (if this config is symlinked across
+several computers).")
+
+(defconst nox-etc-dir (concat nox-local-dir "etc/")
+  "Directory for non-volatile storage.
+Use this for files that don't change much, like servers binaries, external
+dependencies or long-term shared data.")
+
+(defconst nox-cache-dir (concat nox-local-dir "cache/")
+  "Directory for volatile storage.
+Use this for files that change often, like cache files.")
+
+(defconst nox-packages-dir (concat nox-local-dir "packages/")
+  "Where packages are stored.")
+#+END_SRC
+
+Also create the directories if they don't exist.
+
+#+BEGIN_SRC emacs-lisp
+(dolist (dir (list nox-local-dir nox-etc-dir nox-cache-dir nox-packages-dir))
+  (unless (file-directory-p dir) (make-directory dir t)))
+#+END_SRC
+
+*** Functions and macros
+**** From DOOM Emacs
+#+BEGIN_SRC emacs-lisp
+(defun nox-try-run-hook (hook)
+  "Run HOOK (a hook function), but marks thrown errors to make it a little
+easier to tell where the came from.
+
+Meant to be used with `run-hook-wrapped'."
+  (when nox-debug-mode
+    (message "Running nox hook: %s" hook))
+  (condition-case e
+      (funcall hook)
+    ((debug error)
+     (signal 'nox-hook-error (list hook e))))
+  ;; return nil so `run-hook-wrapped' won't short circuit
+  nil)
+
+(defun nox-unquote (exp)
+  "Return EXP unquoted."
+  (declare (pure t) (side-effect-free t))
+  (while (memq (car-safe exp) '(quote function))
+    (setq exp (cadr exp)))
+  exp)
+
+(defun nox-enlist (exp)
+  "Return EXP wrapped in a list, or as-is if already a list."
+  (declare (pure t) (side-effect-free t))
+  (if (listp exp) exp (list exp)))
+
+(defun nox-keyword-intern (str)
+  "Converts STR (a string) into a keyword (`keywordp')."
+  (declare (pure t) (side-effect-free t))
+  (cl-check-type str string)
+  (intern (concat ":" str)))
+
+(defun nox-keyword-name (keyword)
+  "Returns the string name of KEYWORD (`keywordp') minus the leading colon."
+  (declare (pure t) (side-effect-free t))
+  (cl-check-type :test keyword)
+  (substring (symbol-name keyword) 1))
+
+(defun nox-resolve-hook-forms (hooks)
+  (declare (pure t) (side-effect-free t))
+  (cl-loop with quoted-p = (eq (car-safe hooks) 'quote)
+           for hook in (nox-enlist (nox-unquote hooks))
+           if (eq (car-safe hook) 'quote)
+           collect (cadr hook)
+           else if quoted-p
+           collect hook
+           else collect (intern (format "%s-hook" (symbol-name hook)))))
+
+(defmacro λ! (&rest body)
+  "A shortcut for inline interactive lambdas."
+  (declare (doc-string 1))
+  `(lambda () (interactive) ,@body))
+
+(defalias 'lambda! 'λ!)
+
+(defmacro add-transient-hook! (hook &rest args)
+  "Attaches transient forms to a HOOK.
+
+This means FORMS will be evaluated once when that function/hook is first
+invoked, then never again.
+
+HOOK can be a quoted hook or a sharp-quoted function (which will be advised).
+
+ARGS can be a function, list of functions, or body forms to be wrapped in a lambda.
+When it is a function or a list of functions, they will be called with the hooks args."
+  (declare (indent 1))
+  (let ((append (if (eq (car args) :after) (pop args)))
+        (funcs
+         (let ((val (car args)))
+           (if (memq (car-safe val) '(quote function))
+               (if (cdr-safe (cadr val))
+                   (cadr val)
+                 (list (cadr val)))
+             (list args))))
+        (func-name (gensym "nox|transient-hook-")))
+    `(progn
+       (fset ',func-name
+             (lambda (&rest call-args)
+               ,@(cl-loop for fn in funcs
+                          collect (if (symbolp fn)
+                                      `(apply #',fn call-args)
+                                    `(progn ,@args)))
+               (cond ((functionp ,hook) (advice-remove ,hook #',func-name))
+                     ((symbolp ,hook)   (remove-hook ,hook #',func-name)))
+               (unintern ',func-name nil)))
+       (cond ((functionp ,hook)
+              (advice-add ,hook ,(if append :after :before) #',func-name))
+             ((symbolp ,hook)
+              (put ',func-name 'permanent-local-hook t)
+              (add-hook ,hook #',func-name ,append))))))
+
+(defmacro after! (targets &rest body)
+  "A smart wrapper around `with-eval-after-load'. Supresses warnings during
+compilation. This will no-op on features that have been disabled by the user."
+  (declare (indent defun) (debug t))
+  (unless (and (symbolp targets)
+               (memq targets (bound-and-true-p nox-disabled-packages)))
+    (list (if (or (not (bound-and-true-p byte-compile-current-file))
+                  (eq (car-safe targets) :when)
+                  (dolist (next (nox-enlist targets))
+                    (unless (keywordp next)
+                      (if (symbolp next)
+                          (require next nil :no-error)
+                        (load next :no-message :no-error)))))
+              #'progn
+            #'with-no-warnings)
+          (cond ((eq (car-safe targets) :when)
+                 `(if ,(cadr targets)
+                      (progn ,@body)
+                    ,(let ((fun (gensym "nox|delay-form-")))
+                       `(progn
+                          (fset ',fun (lambda (&rest args)
+                                        (when ,(or (car (cdr-safe targets)) t)
+                                          (remove-hook 'after-load-functions #',fun)
+                                          (unintern ',fun nil)
+                                          (ignore args)
+                                          ,@body)))
+                          (put ',fun 'permanent-local-hook t)
+                          (add-hook 'after-load-functions #',fun)))))
+                ((symbolp targets)
+                 `(with-eval-after-load ',targets
+                    ,@body))
+                ((and (consp targets)
+                      (memq (car targets) '(:or :any)))
+                 `(progn
+                    ,@(cl-loop for next in (cdr targets)
+                               collect `(after! ,next ,@body))))
+                ((and (consp targets)
+                      (memq (car targets) '(:and :all)))
+                 (dolist (next (cdr targets))
+                   (setq body `((after! ,next ,@body))))
+                 (car body))
+                ((listp targets)
+                 `(after! (:all ,@targets) ,@body))))))
+
+(defmacro quiet! (&rest forms)
+  "Run FORMS without making any output."
+  `(if nox-debug-mode
+       (progn ,@forms)
+     (let ((old-fn (symbol-function 'write-region)))
+       (cl-letf* ((standard-output (lambda (&rest _)))
+                  ((symbol-function 'load-file) (lambda (file) (load file nil t)))
+                  ((symbol-function 'message) (lambda (&rest _)))
+                  ((symbol-function 'write-region)
+                   (lambda (start end filename &optional append visit lockname mustbenew)
+                     (unless visit (setq visit 'no-message))
+                     (funcall old-fn start end filename append visit lockname mustbenew)))
+                  (inhibit-message t)
+                  (save-silently t))
+         ,@forms))))
+
+(defmacro add-hook! (&rest args)
+  "A convenience macro for `add-hook'. Takes, in order:
+
+  1. Optional properties :local and/or :append, which will make the hook
+     buffer-local or append to the list of hooks (respectively),
+  2. The hooks: either an unquoted major mode, an unquoted list of major-modes,
+     a quoted hook variable or a quoted list of hook variables. If unquoted, the
+     hooks will be resolved by appending -hook to each symbol.
+  3. A function, list of functions, or body forms to be wrapped in a lambda.
+
+Examples:
+    (add-hook! 'some-mode-hook 'enable-something)   (same as `add-hook')
+    (add-hook! some-mode '(enable-something and-another))
+    (add-hook! '(one-mode-hook second-mode-hook) 'enable-something)
+    (add-hook! (one-mode second-mode) 'enable-something)
+    (add-hook! :append (one-mode second-mode) 'enable-something)
+    (add-hook! :local (one-mode second-mode) 'enable-something)
+    (add-hook! (one-mode second-mode) (setq v 5) (setq a 2))
+    (add-hook! :append :local (one-mode second-mode) (setq v 5) (setq a 2))
+
+Body forms can access the hook's arguments through the let-bound variable
+`args'."
+  (declare (indent defun) (debug t))
+  (let ((hook-fn 'add-hook)
+        append-p local-p)
+    (while (keywordp (car args))
+      (pcase (pop args)
+        (:append (setq append-p t))
+        (:local  (setq local-p t))
+        (:remove (setq hook-fn 'remove-hook))))
+    (let ((hooks (nox-resolve-hook-forms (pop args)))
+          (funcs
+           (let ((val (car args)))
+             (if (memq (car-safe val) '(quote function))
+                 (if (cdr-safe (cadr val))
+                     (cadr val)
+                   (list (cadr val)))
+               (list args))))
+          forms)
+      (dolist (fn funcs)
+        (setq fn (if (symbolp fn)
+                     `(function ,fn)
+                   `(lambda (&rest _) ,@args)))
+        (dolist (hook hooks)
+          (push (if (eq hook-fn 'remove-hook)
+                    `(remove-hook ',hook ,fn ,local-p)
+                  `(add-hook ',hook ,fn ,append-p ,local-p))
+                forms)))
+      `(progn ,@(if append-p (nreverse forms) forms)))))
+
+(defmacro remove-hook! (&rest args)
+  "Convenience macro for `remove-hook'. Takes the same arguments as
+`add-hook!'."
+  (declare (indent defun) (debug t))
+  `(add-hook! :remove ,@args))
+
+(defmacro setq-hook! (hooks &rest rest)
+  "Convenience macro for setting buffer-local variables in a hook.
+
+  (setq-hook! 'markdown-mode-hook
+    line-spacing 2
+    fill-column 80)"
+  (declare (indent 1))
+  (unless (= 0 (% (length rest) 2))
+    (signal 'wrong-number-of-arguments (length rest)))
+  `(add-hook! ,hooks
+     ,@(let (forms)
+         (while rest
+           (let ((var (pop rest))
+                 (val (pop rest)))
+             (push `(setq-local ,var ,val) forms)))
+         (nreverse forms))))
+
+(defun nox*shut-up (orig-fn &rest args)
+  "Generic advisor for silencing noisy functions."
+  (quiet! (apply orig-fn args)))
+#+END_SRC
+
+**** File management
+#+BEGIN_SRC emacs-lisp
+(defun nox/rename-file-and-buffer ()
+  "Rename current buffer and the file it is visiting, if any."
+  (interactive)
+  (let ((filename (buffer-file-name)))
+    (if (not (and filename (file-exists-p filename)))
+        (rename-buffer (read-from-minibuffer "New name: " (buffer-name)))
+      (let ((new-name (read-file-name "New name: " filename)))
+        (if (vc-backend filename)
+            (vc-rename-file filename new-name)
+          (rename-file filename new-name t))
+        (set-visited-file-name new-name t t)))))
+
+(defun nox/delete-file-and-buffer ()
+  "Kill the current buffer and delete the file it is visiting, if any."
+  (interactive)
+  (let ((filename (buffer-file-name)))
+    (if (not (and filename (file-exists-p filename)))
+        (kill-buffer)
+      (if (vc-backend filename)
+          (vc-delete-file filename)
+        (when (y-or-n-p (format "Are you sure you want to delete %s? " filename))
+          (delete-file filename delete-by-moving-to-trash)
+          (message "Deleted file %s" filename)
+          (kill-buffer))))))
+#+END_SRC
+
+**** Line movement
+#+BEGIN_SRC emacs-lisp
+(defun nox/previous-blank-line ()
+  "Move point to the previous blank line"
+  (interactive)
+  (move-end-of-line nil)
+  (if (search-backward-regexp "^[\t ]*\n[\t ]*[^\t\n ]+" nil "NOERROR") nil
+    (goto-char (point-min))))
+
+(defun nox/next-blank-line ()
+  "Move point to the next blank line"
+  (interactive)
+  (move-beginning-of-line nil)
+  (if (not (search-forward-regexp "[^\t\n ]\n[\t ]*$" nil "NOERROR"))
+      (goto-char (point-max))))
+
+(defun nox/open-line-above ()
+  "Insert an empty line above the current line.
+Position the cursor at its beginning, according to the current mode."
+  (interactive)
+  (move-end-of-line 0)
+  (newline-and-indent))
+
+(defun nox/open-line-below ()
+  "Insert an empty line below the current line.
+Position the cursor at its beginning, according to the current mode."
+  (interactive)
+  (move-end-of-line nil)
+  (newline-and-indent))
+#+END_SRC
+
+**** Exiting
+#+BEGIN_SRC emacs-lisp
+(defun nox/exit-emacs (arg)
+  "Exit Emacs, possibly killing the daemon and/or saving buffer.
+When ARG is:
+- nil or negative, it will kill the current terminal
+- `universal-argument' or positive, it will kill the daemon
+- a number, it will save all buffers automatically"
+  (interactive "P")
+  (when (or (numberp arg) (eq arg '-))
+    (setq arg (prefix-numeric-value arg)))
+  (let* ((save-without-asking (numberp arg))
+         (kill-server (or (equal arg '(4))
+                          (and save-without-asking
+                               (>= arg 0)))))
+    (if kill-server
+        (save-buffers-kill-emacs save-without-asking)
+      (save-buffers-kill-terminal save-without-asking))))
+#+END_SRC
+
+**** Helpers
+#+BEGIN_SRC emacs-lisp
+(defun nox-pos-at-line (line &optional column)
+  (save-excursion
+    (goto-char (point-min))
+    (forward-line (- line 1))
+    (move-to-column (or column 0))
+    (point)))
+
+(defun nox-get-line-from-file (file line &optional trim)
+  (with-current-buffer (find-file-noselect file)
+    (save-excursion
+      (goto-char (point-min))
+      (forward-line (- line 1))
+      (let ((string (thing-at-point 'line)))
+        (if trim
+            (replace-regexp-in-string "\\(\\`[[:space:]\n]*\\|[[:space:]\n]*\\'\\)" "" string)
+          string)))))
+
+(defun nox-get-entire-buffer (buffer)
+  (with-current-buffer buffer
+    (save-restriction
+      (widen)
+      (buffer-substring-no-properties (point-min) (point-max)))))
+#+END_SRC
+
+**** Byte compilation
+#+BEGIN_SRC emacs-lisp
+(defun nox-byte-compile-init ()
+  (byte-compile-file (concat user-emacs-directory "config.el"))
+  (byte-compile-file (concat user-emacs-directory "init.el"))
+  (byte-compile-file (concat user-emacs-directory "early-init.el")))
+#+END_SRC
+
+*** Hooks
+#+BEGIN_SRC emacs-lisp
+(defvar nox-post-init-hook nil
+  "A list of hooks to run when Emacs is fully initialized. Fires at the end of
+`emacs-startup-hook', as late as possible. Guaranteed to run after everything
+else (except for `window-setup-hook').")
+
+(defun nox|post-init ()
+  "Run `nox-post-init-hook'."
+  (run-hook-wrapped 'nox-post-init-hook #'nox-try-run-hook))
+(add-hook! 'emacs-startup-hook #'nox|post-init)
+#+END_SRC
+
+**** Window and buffer switch
+#+BEGIN_SRC emacs-lisp
+(defvar nox-before-switch-window-hook nil
+  "Hook run before `switch-window' or `switch-frame' are called. See
+`nox-after-switch-window-hook'.")
+
+(defvar nox-after-switch-window-hook nil
+  "Hook run after `switch-window' or `switch-frame' are called. See
+`nox-before-switch-window-hook'.")
+
+(defvar nox-before-switch-buffer-hook nil
+  "Hook run before `switch-to-buffer', `pop-to-buffer' or `display-buffer' are
+called. The buffer to be switched to is current when these hooks run.")
+
+(defvar nox-after-switch-buffer-hook nil
+  "Hook run after `switch-to-buffer', `pop-to-buffer' or `display-buffer' are
+called. The buffer to be switched to is current when these hooks run.")
+
+(defvar nox-inhibit-switch-buffer-hooks nil)
+(defvar nox-inhibit-switch-window-hooks nil)
+
+(defun nox*switch-window-hooks (orig-fn window &optional norecord)
+  (if (or nox-inhibit-switch-window-hooks
+          (null window)
+          (eq window (selected-window))
+          (window-minibuffer-p)
+          (window-minibuffer-p window))
+      (funcall orig-fn window norecord)
+    (let ((nox-inhibit-switch-window-hooks t))
+      (run-hooks 'nox-before-switch-window-hook)
+      (prog1 (funcall orig-fn window norecord)
+        (with-selected-window window
+          (run-hooks 'nox-after-switch-window-hook))))))
+(defun nox*switch-buffer-hooks (orig-fn buffer-or-name &rest args)
+  (if (or nox-inhibit-switch-buffer-hooks
+          (eq (get-buffer buffer-or-name) (current-buffer)))
+      (apply orig-fn buffer-or-name args)
+    (let ((nox-inhibit-switch-buffer-hooks t))
+      (run-hooks 'nox-before-switch-buffer-hook)
+      (prog1 (apply orig-fn buffer-or-name args)
+        (with-current-buffer buffer-or-name
+          (run-hooks 'nox-after-switch-buffer-hook))))))
+
+(defun nox|setup-switch-hooks (&optional disable)
+  (dolist (spec '((select-window . nox*switch-window-hooks)
+                  (switch-to-buffer . nox*switch-buffer-hooks)
+                  (display-buffer . nox*switch-buffer-hooks)
+                  (pop-to-buffer . nox*switch-buffer-hooks)))
+    (if disable
+        (advice-remove (car spec) (cdr spec))
+      (advice-add (car spec) :around (cdr spec)))))
+(add-hook 'nox-post-init-hook #'nox|setup-switch-hooks)
+#+END_SRC
+
+*** Emacs 25 compatibility
+#+BEGIN_SRC emacs-lisp
+(eval-and-compile
+  (unless EMACS26+
+    (with-no-warnings
+      (defalias 'if-let* #'if-let)
+      (defalias 'when-let* #'when-let)
+
+      ;; `alist-get' doesn't have its 5th argument before Emacs 26
+      (defun nox*alist-get (key alist &optional default remove testfn)
+        (ignore remove)
+        (let ((x (if (not testfn)
+                     (assq key alist)
+                   (assoc key alist testfn))))
+          (if x (cdr x) default)))
+      (advice-add #'alist-get :override #'nox*alist-get))))
+#+END_SRC
+
+*** Package ecosystem
+#+BEGIN_SRC emacs-lisp
+(require 'package)
+(setq-default package-user-dir      nox-packages-dir
+              package-gnupghome-dir nox-packages-dir
+              package-archives
+              '(("gnu"   . "https://elpa.gnu.org/packages/")
+                ("melpa" . "https://melpa.org/packages/")
+                ("org"   . "https://orgmode.org/elpa/")))
+
+(unless (bound-and-true-p gnutls-verify-error)
+  (dolist (archive package-archives)
+    (setcdr archive (replace-regexp-in-string "^https://" "http://" (cdr archive) t nil))))
+
+(package-initialize)
+#+END_SRC
+
+**** Setup use-package
+#+BEGIN_SRC emacs-lisp
+(unless (package-installed-p 'use-package)
+  (package-refresh-contents)
+  (package-install 'use-package))
+
+(require 'use-package)
+(setq-default use-package-always-defer t
+              use-package-verbose nox-debug-mode
+              use-package-compute-statistics nox-debug-mode
+              use-package-minimum-reported-time (if nox-debug-mode 0 0.1)
+              use-package-expand-minimally noninteractive)
+#+END_SRC
+
+Add the :after-call keyword, that takes a symbol or list of symbols, where the symbols are
+functions or hook variables. It will load the package on the first call to any of those
+symbols.
+
+#+BEGIN_SRC emacs-lisp
+(defvar nox-deferred-packages-alist '(t))
+(after! use-package-core
+  (add-to-list 'use-package-deferring-keywords :after-call nil #'eq)
+  (setq use-package-keywords
+        (use-package-list-insert :after-call use-package-keywords :after))
+
+  (defalias 'use-package-normalize/:after-call 'use-package-normalize-symlist)
+  (defun use-package-handler/:after-call (name _keyword hooks rest state)
+    (if (plist-get state :demand)
+        (use-package-process-keywords name rest state)
+      (let ((fn (intern (format "nox|transient-hook--load-%s" name))))
+        (use-package-concat
+         `((fset ',fn
+                 (lambda (&rest _)
+                   (when nox-debug-mode
+                     (message "Loading deferred package %s from %s" ',name ',fn))
+                   (condition-case e (require ',name)
+                     ((debug error)
+                      (message "Failed to load deferred package %s: %s" ',name e)))
+                   (dolist (hook (cdr (assq ',name nox-deferred-packages-alist)))
+                     (if (functionp hook)
+                         (advice-remove hook #',fn)
+                       (remove-hook hook #',fn)))
+                   (delq (assq ',name nox-deferred-packages-alist)
+                         nox-deferred-packages-alist)
+                   (fmakunbound ',fn))))
+         (let (forms)
+           (dolist (hook hooks forms)
+             (push (if (functionp hook)
+                       `(advice-add #',hook :before #',fn)
+                     `(add-hook ',hook #',fn))
+                   forms)))
+         `((unless (assq ',name nox-deferred-packages-alist)
+             (push '(,name) nox-deferred-packages-alist))
+           (nconc (assq ',name nox-deferred-packages-alist)
+                  '(,@hooks)))
+         (use-package-process-keywords name rest state))))))
+#+END_SRC
+
+**** Setup Quelpa
+#+BEGIN_SRC emacs-lisp
+(use-package quelpa :ensure
+  :custom
+  (quelpa-dir (concat nox-cache-dir "quelpa/"))
+  (quelpa-melpa-recipe-stores nil)
+  (quelpa-checkout-melpa-p nil)
+  (quelpa-update-melpa-p nil)
+  (quelpa-self-upgrade-p nil)
+  (quelpa-verbose nox-debug-mode))
+
+(use-package quelpa-use-package :ensure
+  :demand
+  :custom (quelpa-use-package-inhibit-loading-quelpa t))
+#+END_SRC
+
+*** Base packages
+**** Hydra
+#+BEGIN_SRC emacs-lisp
+(use-package hydra :ensure
+  :custom (lv-use-separator t))
+#+END_SRC
+
+**** General
+#+BEGIN_SRC emacs-lisp
+(use-package general :ensure
+  :demand
+  :config
+  (defalias 'gsetq 'general-setq)
+  (general-create-definer nox-leader :prefix "C-c")
+  (general-create-definer nox-local-leader :prefix "C-c m"))
+#+END_SRC
+
+** General settings and tweaks
+#+BEGIN_SRC emacs-lisp
+(setq-default
+ ad-redefinition-action 'accept
+ auto-window-vscroll nil ;; https://emacs.stackexchange.com/a/28746
+ autoload-compute-prefixes nil
+ bidi-display-reordering nil
+ byte-compile-verbose nox-debug-mode
+ debug-on-error nox-debug-mode
+ ffap-machine-p-known 'reject
+ idle-update-delay 2
+ inhibit-compacting-font-caches t
+ minibuffer-prompt-properties '(read-only t point-entered minibuffer-avoid-prompt face minibuffer-prompt))
+#+END_SRC
+
+**** UTF-8 as default
+#+BEGIN_SRC emacs-lisp
+(when (fboundp 'set-charset-priority)
+  (set-charset-priority 'unicode))
+(set-language-environment "UTF-8")
+(prefer-coding-system        'utf-8-unix)
+(set-selection-coding-system 'utf-8-unix)
+(set-default-coding-systems  'utf-8-unix)
+#+END_SRC
+
+**** Quiet startup
+#+BEGIN_SRC emacs-lisp
+(setq-default inhibit-startup-message t
+              inhibit-startup-echo-area-message user-login-name
+              inhibit-default-init t
+              initial-major-mode 'fundamental-mode
+              initial-scratch-message nil)
+(fset #'display-startup-echo-area-message #'ignore)
+#+END_SRC
+
+**** Files
+#+BEGIN_SRC emacs-lisp
+(setq-default abbrev-file-name               (concat nox-local-dir "abbrev.el")
+              auto-save-file-name-transforms (list (list ".*" (concat nox-cache-dir "auto-save/") t))
+              auto-save-list-file-name       (concat nox-cache-dir "autosave-list")
+              backup-directory-alist         (list (cons "." (concat nox-cache-dir "backup/")))
+              custom-file                    (concat nox-local-dir "custom.el")
+              mc/list-file                   (concat nox-etc-dir "mc-lists.el")
+              pcache-directory               (concat nox-cache-dir "pcache/")
+              request-storage-directory      (concat nox-cache-dir "request")
+              server-auth-dir                (concat nox-cache-dir "server/")
+              shared-game-score-directory    (concat nox-etc-dir "shared-game-score/")
+              url-cache-directory            (concat nox-cache-dir "url/")
+              url-configuration-directory    (concat nox-etc-dir "url/"))
+
+(make-directory (cadar auto-save-file-name-transforms) t)
+#+END_SRC
+
+**** History and backup
+#+BEGIN_SRC emacs-lisp
+(setq-default delete-by-moving-to-trash t
+              delete-old-versions t
+              history-length 500
+              kept-new-versions 10
+              kept-old-versions 2
+              version-control t)
+#+END_SRC
+
+**** Security
+#+BEGIN_SRC emacs-lisp
+(setq-default gnutls-verify-error (not (getenv "INSECURE"))
+              tls-checktrust gnutls-verify-error
+              tls-program (list "gnutls-cli --x509cafile %t -p %p %h"
+                                "gnutls-cli -p %p %h"
+                                "openssl s_client -connect %h:%p -no_ssl2 -no_ssl3 -ign_eof"))
+#+END_SRC
+
+**** Set indirect buffer name
+#+BEGIN_SRC emacs-lisp
+(defun nox*set-indirect-buffer-filename (orig-fn base-buffer name &optional clone)
+  "In indirect buffers, `buffer-file-name' is nil, which can cause problems
+with functions that require it."
+  (let ((file-name (buffer-file-name base-buffer))
+        (buffer (funcall orig-fn base-buffer name clone)))
+    (when (and file-name buffer)
+      (with-current-buffer buffer
+        (unless buffer-file-name
+          (setq buffer-file-name file-name
+                buffer-file-truename (file-truename file-name)))))
+    buffer))
+(advice-add #'make-indirect-buffer :around #'nox*set-indirect-buffer-filename)
+#+END_SRC
+
+** OS specific
+#+BEGIN_SRC emacs-lisp
+(setq-default x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)
+              select-enable-clipboard t
+              select-enable-primary t)
+
+(cond (IS-MAC (setq mac-command-modifier 'meta
+                    mac-option-modifier  'alt
+                    mac-redisplay-dont-reset-vscroll t
+                    mac-mouse-wheel-smooth-scroll nil
+                    ns-use-native-fullscreen nil
+                    ns-pop-up-frames nil)
+
+              (when (display-graphic-p)
+                (when (require 'exec-path-from-shell nil t)
+                  (setq exec-path-from-shell-check-startup-files nil
+                        exec-path-from-shell-arguments (delete "-i" exec-path-from-shell-arguments)
+                        exec-path-from-shell-debug nox-debug-mode)
+                  (exec-path-from-shell-initialize))))
+
+      (IS-LINUX (setq x-gtk-use-system-tooltips nil
+                      x-underline-at-descent-line t))
+
+      (IS-WINDOWS (setq w32-get-true-file-attributes nil)))
+#+END_SRC
+
+** UI
+*** Settings
+#+BEGIN_SRC emacs-lisp
+(setq-default initial-frame-alist '((fullscreen . fullboth)
+                                    (fullscreen-restore . maximized))
+              ring-bell-function #'ignore
+              visible-bell nil
+              custom-safe-themes t
+              frame-inhibit-implied-resXize t
+              cursor-in-non-selected-windows nil
+              highlight-nonselected-windows nil
+              mode-line-default-help-echo nil
+              use-dialog-box nil
+              visible-cursor nil
+              x-stretch-cursor nil
+              pos-tip-internal-border-width 6
+              pos-tip-border-width 1
+              window-resize-pixelwise t
+              frame-resize-pixelwise t
+              echo-keystrokes 0.2
+              window-divider-default-places t
+              window-divider-default-bottom-width 1
+              window-divider-default-right-width 1
+              frame-title-format '("%b - Emacs"))
+
+(fset 'yes-or-no-p 'y-or-n-p)
+(minibuffer-depth-indicate-mode)
+#+END_SRC
+
+**** Don't blink cursor
+#+BEGIN_SRC emacs-lisp
+(blink-cursor-mode -1)
+#+END_SRC
+
+**** Windows dividers
+#+BEGIN_SRC emacs-lisp
+(window-divider-mode)
+#+END_SRC
+
+**** Better (?) JIT font locking
+#+BEGIN_SRC emacs-lisp
+(setq-default jit-lock-defer-time nil
+              jit-lock-stealth-nice 0.1
+              jit-lock-stealth-time 0.2
+              jit-lock-stealth-verbose nil)
+#+END_SRC
+
+**** Highlight line
+#+BEGIN_SRC emacs-lisp
+(use-package hl-line
+  :config
+  (gsetq hl-line-sticky-flag nil
+         global-hl-line-sticky-flag nil))
+#+END_SRC
+
+**** Highlight matching parentheses
+#+BEGIN_SRC emacs-lisp
+(use-package paren
+  :after-call (after-find-file nox-before-switch-buffer-hook)
+  :config
+  (setq show-paren-delay 0
+        show-paren-highlight-openparen t
+        show-paren-when-point-inside-paren t)
+  (show-paren-mode))
+#+END_SRC
+
+**** Shims
+#+BEGIN_SRC emacs-lisp
+(unless (fboundp 'define-fringe-bitmap) (defun define-fringe-bitmap (&rest _)))
+#+END_SRC
+
+**** Misc
+#+BEGIN_SRC emacs-lisp
+(use-package speedbar
+  :config
+  (setq-default speedbar-frame-parameters '((minibuffer . t)
+                                            (unsplittable . t)
+                                            (width . 30)
+                                            (border-width . 0)
+                                            (left-fringe . 0))))
+
+(use-package server
+  :config
+  (add-hook 'after-make-frame-functions (lambda (frame) (select-frame-set-input-focus frame)) t)
+
+  ;; Remove prompt if the file is opened in other clients
+  (defun server-remove-kill-buffer-hook ()
+    (remove-hook 'kill-buffer-query-functions #'server-kill-buffer-query-function))
+  (add-hook 'server-visit-hook #'server-remove-kill-buffer-hook))
+#+END_SRC
+
+*** Font
+#+BEGIN_SRC emacs-lisp
+(defvar nox-fonts '(("PragmataPro" . 12) ("Hack" . 11) ("DejaVu Sans Mono" . 11)
+                    ("Inconsolata" . 13) ("Source Code Pro" . 11))
+  "List of fonts and sizes. The first one available will be used.")
+
+(defun nox/change-font ()
+  (interactive)
+  (let* (available-fonts font-name font-size font-setting)
+    (dolist (font nox-fonts)
+      (when (member (car font) (font-family-list))
+        (push font available-fonts)))
+
+    (push (cons "Monospace" 11) available-fonts)
+    (setq available-fonts (nreverse available-fonts))
+
+    (when nox-debug-mode (message "Available fonts: %s" available-fonts))
+
+    (if (called-interactively-p 'interactive)
+        (let* ((chosen (assoc-string (completing-read "What font to use? " available-fonts nil t)
+                                     available-fonts)))
+          (setq font-name (car chosen)
+                font-size (read-number "Font size: " (cdr chosen))))
+      (setq font-name (caar available-fonts)
+            font-size (cdar available-fonts)))
+
+    (setq font-setting (format "%s-%d" font-name font-size))
+    (set-frame-font font-setting nil t)
+    (add-to-list 'default-frame-alist (cons 'font font-setting))
+
+    (cond ((string= font-name "PragmataPro")
+           (custom-theme-set-faces
+            'user `(org-table ((t (:family ,(format "PragmataPro Mono-%d" font-size))))))))))
+#+END_SRC
+
+*** Theme
+**** Theme customizer
+#+BEGIN_SRC emacs-lisp
+(defvar nox-customize-theme-hook nil
+  "Hook for theme customization, called with the theme name.")
+(advice-add 'enable-theme :after
+            (lambda (theme)
+              (run-hook-with-args-until-success
+               'nox-customize-theme-hook (or theme (car custom-enabled-themes)))))
+
+(defmacro nox-add-customize-theme-hook (target-theme &rest body)
+  "TARGET-THEME may be a list, a symbol or a regexp."
+  (declare (indent defun))
+  `(add-hook 'nox-customize-theme-hook
+             (lambda (theme)
+               ,(cond ((symbolp (eval target-theme))
+                       `(when (eq theme ,target-theme) ,@body))
+                      ((stringp (eval target-theme))
+                       `(when (string-match ,target-theme (symbol-name theme)) ,@body))
+                      ((listp (eval target-theme))
+                       `(when (memq theme ,target-theme) ,@body))))))
+#+END_SRC
+
+**** Theme hooks
+#+BEGIN_SRC emacs-lisp
+(defvar nox-load-theme-hook nil
+  "Hooks to run when the theme is loaded")
+(defun nox*load-theme-hooks (&rest _) (run-hooks 'nox-load-theme-hook))
+(advice-add #'load-theme :after #'nox*load-theme-hooks)
+#+END_SRC
+
+**** Themes
+#+BEGIN_SRC emacs-lisp
+(use-package doom-themes :ensure
+  :config
+  (after! org (doom-themes-org-config))
+
+  (nox-add-customize-theme-hook "^doom-"
+    (custom-theme-set-faces
+     theme
+     '(org-special-keyword ((t (:inherit shadow))))
+     '(git-commit-overlong-summary ((t (:inherit shadow)))))))
+
+(use-package color-theme-sanityinc-tomorrow :ensure
+  :config
+  (nox-add-customize-theme-hook "^sanityinc-"
+    (custom-theme-set-faces
+     theme
+     `(org-special-keyword ((t (:inherit shadow)))))))
+
+(use-package solarized :ensure solarized-theme
+  :config
+  (setq-default solarized-use-variable-pitch nil
+                solarized-use-more-italic t
+                solarized-high-contrast-mode-line nil
+                solarized-scale-org-headlines nil)
+
+  (nox-add-customize-theme-hook 'solarized-dark
+    (solarized-with-color-variables 'dark
+      (custom-theme-set-faces
+       theme
+       `(org-block
+         ((t (:foreground ,(color-lighten-name base0 5) :background ,(color-lighten-name base03 5))))))))
+
+  (nox-add-customize-theme-hook 'solarized-light
+    (solarized-with-color-variables 'light
+      (custom-theme-set-faces
+       theme
+       `(org-block
+         ((t (:foreground ,(color-darken-name base0 7) :background ,(color-darken-name base03 7)))))))))
+#+END_SRC
+
+**** Extra programming keywords
+#+BEGIN_SRC emacs-lisp
+(defface font-lock-todo-face      '((t (:foreground "#dc322f" :weight bold :underline t))) "Face for TODO keywords.")
+(defface font-lock-important-face '((t (:foreground "#b58900" :weight bold :underline t))) "Face for IMPORTANT keywords.")
+(defface font-lock-note-face      '((t (:foreground "#228b22" :weight bold :underline t))) "Face for NOTE keywords.")
+(defface font-lock-study-face     '((t (:foreground "#41728e" :weight bold :underline t))) "Face for STUDY keywords.")
+(add-hook! prog-mode (font-lock-add-keywords
+                      nil '(("\\<\\(TODO\\|FIXME\\)" 1 'font-lock-todo-face t)
+                            ("\\<\\(IMPORTANT\\)" 1 'font-lock-important-face t)
+                            ("\\<\\(NOTE\\)" 1 'font-lock-note-face t)
+                            ("\\<\\(STUDY\\)" 1 'font-lock-study-face t))))
+#+END_SRC
+
+*** Icons
+#+BEGIN_SRC emacs-lisp
+(use-package all-the-icons :ensure
+  :init
+  (defun nox*disable-all-the-icons-in-tty (orig-fn &rest args)
+    (when (display-graphic-p)
+      (apply orig-fn args)))
+  (dolist (fn '(all-the-icons-octicon all-the-icons-material
+                all-the-icons-faicon all-the-icons-fileicon
+                all-the-icons-wicon all-the-icons-alltheicon))
+    (advice-add fn :around #'nox*disable-all-the-icons-in-tty)))
+#+END_SRC
+
+*** Fringes
+Disable fringes in the minibuffer window.
+
+#+BEGIN_SRC emacs-lisp
+(defun nox|no-fringes-in-minibuffer (&rest _)
+  "Disable fringes in the minibuffer window."
+  (set-window-fringes (minibuffer-window) 0 0 nil))
+(add-hook! '(nox-post-init-hook minibuffer-setup-hook window-configuration-change-hook)
+           #'nox|no-fringes-in-minibuffer)
+#+END_SRC
+
+*** Appearance setup
+#+BEGIN_SRC emacs-lisp
+(defun nox-setup-appearance (frame)
+  (with-selected-frame frame
+    (mapc #'disable-theme custom-enabled-themes)
+    (load-theme 'doom-tomorrow-night t)
+    (nox/change-font)
+
+    (line-number-mode)
+    (display-time-mode)
+    (quiet! (display-battery-mode))
+
+    (when (and (= (count-windows) 1)
+               (> (window-width) 100))
+      (split-window-right))
+
+    ;; NOTE(nox): This needs to be here, else it doesn't work
+    (setq-default system-time-locale "C")))
+
+(if (daemonp)
+    (add-transient-hook! 'after-make-frame-functions 'nox-setup-appearance)
+  (nox-setup-appearance (selected-frame)))
+#+END_SRC
+
+** Minibuffer completion
+*** Ivy
+#+BEGIN_SRC emacs-lisp
+(use-package ivy :ensure
+  :defer 1
+  :after-call pre-command-hook
+  :custom
+  (ivy-count-format "(%d/%d) ")
+  (ivy-extra-directories nil)
+  (ivy-fixed-height-minibuffer t)
+  (ivy-format-function #'ivy-format-function-line)
+  (ivy-height 15)
+  (ivy-initial-inputs-alist nil)
+  (ivy-magic-slash-non-match-action nil)
+  (ivy-on-del-error-function nil)
+  (ivy-use-selectable-prompt t)
+  (ivy-use-virtual-buffers t)
+  (ivy-virtual-abbreviate 'full)
+  (ivy-wrap t)
+
+  :config
+  (ivy-mode))
+#+END_SRC
+
+**** Hydra
+#+BEGIN_SRC emacs-lisp
+(use-package ivy-hydra :ensure
+  :commands (ivy-dispatching-done-hydra hydra-ivy/body)
+  :general
+  (:keymaps 'ivy-minibuffer-map
+            "C-o" #'hydra-ivy/body
+            "M-o" #'ivy-dispatching-done-hydra))
+#+END_SRC
+**** Fuzzy matching
+Needed for ivy fuzzy matching.
+
+#+BEGIN_SRC emacs-lisp
+(use-package flx :ensure
+  :after ivy
+  :demand
+  :config
+  (gsetq ivy-re-builders-alist '((counsel-ag . ivy--regex-plus)
+                                 (counsel-rg . ivy--regex-plus)
+                                 (counsel-pt . ivy--regex-plus)
+                                 (counsel-grep . ivy--regex-plus)
+                                 (swiper . ivy--regex-plus)
+                                 (t . ivy--regex-fuzzy))))
+#+END_SRC
+
+*** Counsel
+#+BEGIN_SRC emacs-lisp
+(use-package counsel :ensure
+  :defer 1
+  :after-call pre-command-hook
+  :general
+  ("C-r" 'swiper)
+  ("C-s" 'counsel-grep-or-swiper)
+  ("C-S-s" 'isearch-forward)
+  (:keymaps 'ivy-minibuffer-map
+   "<return>" 'ivy-alt-done
+   "C-j" 'ivy-done)
+  (:keymaps 'ivy-minibuffer-map
+   "C-r" 'counsel-minibuffer-history)
+
+  :custom
+  (counsel-rg-base-command "rg -zS -M 120 --no-heading --line-number --color never %s .")
+  (counsel-ag-base-command "ag -zS --nocolor --nogroup %s")
+  (counsel-pt-base-command "pt -zS --nocolor --nogroup -e %s")
+  (counsel-grep-base-command
+   (cond ((executable-find "rg") "rg -zS -M 120 --no-heading --line-number --color never %s %s")
+         ((executable-find "ag") "ag -zS --nocolor --nogroup %s %s")
+         (t "grep -i -E -n -e %s %s")))
+  (counsel-find-file-ignore-regexp "\\(?:^[#.]\\)\\|\\(?:[#~]$\\)\\|\\(?:^Icon?\\)")
+
+  :config
+  (defun counsel-find-file-as-root (x)
+    "Find file X with root privileges."
+    (counsel-require-program counsel-root-command)
+    (let* ((method (file-remote-p x 'method))
+           (user (file-remote-p x 'user))
+           (host (file-remote-p x 'host))
+           (file-name (concat (if (string= method "ssh")
+                                  (format "/ssh:%s%s|"
+                                          (if user (format "%s@" user) "")
+                                          host)
+                                "/")
+                              (format "%s:%s:%s"
+                                      counsel-root-command
+                                      (or host "")
+                                      (expand-file-name
+                                       (if host
+                                           (file-remote-p x 'localname)
+                                         x))))))
+      (if (eq (current-buffer) (get-file-buffer x))
+          (find-alternate-file file-name)
+        (find-file file-name))))
+
+  (counsel-mode))
+#+END_SRC
+
+**** Better ~counsel-M-x~
+#+BEGIN_SRC emacs-lisp
+(use-package amx :ensure
+  :custom
+  (amx-save-file (concat nox-cache-dir "/amx-items")))
+#+END_SRC
+
+** Editor
+*** Settings
+#+BEGIN_SRC emacs-lisp
+(setq-default vc-follow-symlinks t
+              save-interprogram-paste-before-kill t
+              enable-recursive-minibuffers t
+              mouse-yank-at-point t)
+
+#+END_SRC
+
+**** Whitespace, indentation & formatting
+#+BEGIN_SRC emacs-lisp
+(setq-default tab-width 4
+              indent-tabs-mode nil
+              require-final-newline t
+              mode-require-final-newline t
+              sentence-end-double-space nil
+              tab-always-indent t
+              tabify-regexp "^\t* [ \t]+"
+              fill-column 90
+              word-wrap t
+              truncate-lines t
+              truncate-partial-width-windows 70)
+
+(add-hook! 'before-save-hook #'delete-trailing-whitespace)
+(add-hook! 'after-save-hook #'executable-make-buffer-file-executable-if-script-p)
+#+END_SRC
+
+**** Scrolling
+#+BEGIN_SRC emacs-lisp
+(setq-default scroll-margin 1
+              hscroll-margin 2
+              hscroll-step 1
+              scroll-conservatively 101
+              scroll-preserve-screen-position t
+              mouse-wheel-scroll-amount '(1)
+              mouse-wheel-progressive-speed nil)
+#+END_SRC
+
+**** Limits
+#+BEGIN_SRC emacs-lisp
+(setq-default kill-ring-max 5000
+              undo-limit (* 20 1024 1024)
+              undo-strong-limit (* 40 1024 1024)
+              undo-outer-limit (* 100 1024 1024)
+              mark-ring-max 5000
+              global-mark-ring-max 5000)
+#+END_SRC
+
+**** Automatic revert
+#+BEGIN_SRC emacs-lisp
+(use-package autorevert
+  :after-call after-find-file
+  :custom
+  (auto-revert-verbose nil)
+  :config
+  (global-auto-revert-mode))
+#+END_SRC
+
+**** Recent files
+#+BEGIN_SRC emacs-lisp
+(use-package recentf
+  :defer 1
+  :after-call after-find-file
+  :commands recentf-open-files
+  :config
+  (setq recentf-save-file (concat nox-cache-dir "recentf")
+        recentf-auto-cleanup 120
+        recentf-max-menu-items 0
+        recentf-max-saved-items 300
+        recentf-filename-handlers '(file-truename)
+        recentf-exclude
+        (list #'file-remote-p "\\.\\(?:gz\\|gif\\|svg\\|png\\|jpe?g\\)$"
+              "^/tmp/" "^/ssh:" "\\.?ido\\.last$" "\\.revive$" "/TAGS$"
+              "^/var/folders/.+$"
+              (lambda (file) (file-in-directory-p file nox-local-dir))))
+  (quiet! (recentf-mode)))
+#+END_SRC
+
+**** Bookmarks
+#+BEGIN_SRC emacs-lisp
+(use-package bookmark
+  :custom
+  (bookmark-default-file (concat nox-etc-dir "bookmarks"))
+  (bookmark-save-flag t))
+#+END_SRC
+
+*** Swiper
+#+BEGIN_SRC emacs-lisp
+(use-package swiper :ensure
+  :general ([remap swiper] #'counsel-grep-or-swiper)
+  :config
+  (add-to-list 'swiper-font-lock-exclude 'c-mode)
+  (add-to-list 'swiper-font-lock-exclude 'c++-mode))
+#+END_SRC
+
+*** Company
+#+BEGIN_SRC emacs-lisp
+(use-package company :ensure
+  :after-call (pre-command-hook after-find-file dired-before-readin-hook)
+  :general
+  (:keymaps 'company-mode-map
+   "<tab>" 'company-complete)
+  (:keymaps 'company-active-map
+   "<tab>" 'company-complete-common-or-cycle)
+  (:keymaps 'company-template-nav-map
+   "<tab>" 'company-complete-common
+   "<C-return>" 'company-template-forward-field)
+
+  :config
+  (gsetq company-idle-delay nil
+         company-tooltip-limit 15
+         company-tooltip-align-annotations t
+         company-require-match 'never
+         company-global-modes '(not comint-mode erc-mode message-mode help-mode gud-mode)
+         company-frontends '(company-pseudo-tooltip-frontend company-echo-metadata-frontend)
+         company-transformers '(company-sort-by-occurrence))
+
+  (setq-hook! prog-mode
+    company-backends '((:separate company-dabbrev-code company-capf company-yasnippet)))
+
+  (setq-hook! text-mode
+    company-backends '((:separate company-dabbrev company-capf company-yasnippet)))
+
+  (global-company-mode))
+
+(use-package company-dabbrev
+  :custom
+  (company-dabbrev-downcase nil)
+  (company-dabbrev-ignore-case nil)
+  (company-dabbrev-ignore-invisible t)
+  (company-dabbrev-code-other-buffers t)
+
+  :config
+  (defun nox-company-dabbrev-buffer-check (buffer)
+    (with-current-buffer buffer (derived-mode-p 'pdf-view-mode
+                                                'doc-view-mode)))
+  (gsetq company-dabbrev-ignore-buffers #'nox-company-dabbrev-buffer-check))
+#+END_SRC
+
+*** Projects
+#+BEGIN_SRC emacs-lisp
+(use-package projectile :ensure
+  :after-call (pre-command-hook after-find-file dired-before-readin-hook)
+  :commands (projectile-project-root projectile-project-name projectile-project-p)
+  :general ("C-c p" '(:keymap projectile-command-map :wk "Projectile"))
+
+  :custom
+  (projectile-cache-file (concat nox-cache-dir "projectile.cache"))
+  (projectile-indexing-method (if IS-WINDOWS 'native 'alien))
+  (projectile-known-projects-file (concat nox-cache-dir "projectile.projects"))
+  (projectile-globally-ignored-files '(".DS_Store" "Icon" "TAGS"))
+  (projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o"))
+  (projectile-ignored-projects '("~" "/tmp"))
+
+  :config
+  (add-hook 'dired-before-readin-hook #'projectile-track-known-projects-find-file-hook)
+
+  (push ".project" projectile-project-root-files-bottom-up)
+  (gsetq projectile-globally-ignored-directories (append projectile-globally-ignored-directories
+                                                         (list (abbreviate-file-name nox-local-dir)
+                                                               ".sync" "node_modules" "flow-typed"))
+         projectile-other-file-alist (append projectile-other-file-alist
+                                             '(("css"  "scss" "sass" "less" "styl")
+                                               ("scss" "css")
+                                               ("sass" "css")
+                                               ("less" "css")
+                                               ("styl" "css"))))
+
+  ;; NOTE(nox): Projectile root-searching functions can cause an infinite loop on TRAMP
+  ;; connections, so disable them
+  (defun nox*projectile-locate-dominating-file (orig-fn &rest args)
+    "Don't traverse the file system if on a remote connection."
+    (unless (file-remote-p default-directory)
+      (apply orig-fn args)))
+  (advice-add #'projectile-locate-dominating-file :around #'nox*projectile-locate-dominating-file)
+
+  (defun nox*projectile-cache-current-file (orig-fun &rest args)
+    "Don't cache ignored files."
+    (unless (cl-loop for path in (projectile-ignored-directories)
+                     if (string-prefix-p (or buffer-file-name "") (expand-file-name path))
+                     return t)
+      (apply orig-fun args)))
+  (advice-add #'projectile-cache-current-file :around #'nox*projectile-cache-current-file)
+
+  (projectile-mode))
+
+(use-package counsel-projectile :ensure
+  :general
+  (:keymaps 'projectile-command-map "SPC" 'counsel-projectile)
+  ([remap projectile-find-file]        #'counsel-projectile-find-file)
+  ([remap projectile-find-dir]         #'counsel-projectile-find-dir)
+  ([remap projectile-switch-to-buffer] #'counsel-projectile-switch-to-buffer)
+  ([remap projectile-grep]             #'counsel-projectile-grep)
+  ([remap projectile-ag]               #'counsel-projectile-ag)
+  ([remap projectile-switch-project]   #'counsel-projectile-switch-project)
+
+  :custom
+  (projectile-completion-system 'ivy))
+#+END_SRC
+
+*** Navigation
+**** Avy
+#+BEGIN_SRC emacs-lisp
+(use-package avy :ensure
+  :custom
+  (avy-all-windows nil)
+  (avy-background t))
+#+END_SRC
+
+**** Dumb jump
+#+BEGIN_SRC emacs-lisp
+(use-package dumb-jump :ensure
+  :commands dumb-jump-result-follow
+  :config
+  (setq dumb-jump-default-project nox-emacs-dir
+        dumb-jump-aggressive nil
+        dumb-jump-selector 'ivy))
+#+END_SRC
+
+**** Imenu
+#+BEGIN_SRC emacs-lisp
+(use-package imenu
+  :custom
+  (imenu-auto-rescan-maxout 500000)
+  (imenu-auto-rescan t))
+
+(use-package imenu-anywhere :ensure
+  :general (nox-leader "i" 'imenu-anywhere)
+  :custom
+  (imenu-anywhere-delimiter ": "))
+#+END_SRC
+
+**** Recenter after jumping
+#+BEGIN_SRC emacs-lisp
+(add-hook!
+  '(imenu-after-jump-hook
+    evil-jumps-post-jump-hook
+    counsel-grep-post-action-hook
+    dumb-jump-after-jump-hook)
+  #'recenter)
+#+END_SRC
+
+*** Selection
+**** Expand region
+#+BEGIN_SRC emacs-lisp
+(use-package expand-region :ensure)
+#+END_SRC
+
+**** Multiple cursors
+#+BEGIN_SRC emacs-lisp
+(use-package multiple-cursors :ensure
+  :general
+  ("C-c l" 'mc/edit-lines
+   "M-»"   'mc/mark-next-like-this
+   "M-«"   'mc/mark-previous-like-this
+   "C-M-»" 'mc/mark-all-like-this
+   "M-<mouse-1>" 'mc/add-cursor-on-click))
+#+END_SRC
+
+*** Large file verification
+#+BEGIN_SRC emacs-lisp
+(setq large-file-warning-threshold (* 100 1024 1024))
+
+(defvar nox-large-file-size 10
+  "Size (in MB) above which the user will be prompted to open the file literally
+to avoid performance issues. Opening literally means that no major or minor
+modes are active and the buffer is read-only.")
+
+(defvar nox-large-file-modes-list
+  '(fundamental-mode special-mode archive-mode tar-mode jka-compr
+    git-commit-mode image-mode doc-view-mode doc-view-mode-maybe
+    ebrowse-tree-mode pdf-view-mode)
+  "Major modes that `nox|check-large-file' will ignore.")
+
+(defun nox|check-large-file ()
+  "Check if the buffer's file is large (see `nox-large-file-size'). If so, ask
+for confirmation to open it literally (read-only, disabled undo and in
+fundamental-mode) for performance sake."
+  (when (and (not (memq major-mode nox-large-file-modes-list))
+             auto-mode-alist
+             (get-buffer-window))
+    (when-let* ((size (nth 7 (file-attributes buffer-file-name))))
+      (when (and (> size (* 1024 1024 nox-large-file-size))
+                 (y-or-n-p
+                  (format (concat "%s is a large file, open literally to "
+                                  "avoid performance issues?")
+                          (file-relative-name buffer-file-name))))
+        (setq buffer-read-only t)
+        (buffer-disable-undo)
+        (fundamental-mode)))))
+(add-hook 'find-file-hook #'nox|check-large-file)
+#+END_SRC
+
+** Programming languages
+*** C/C++
+#+BEGIN_SRC emacs-lisp
+(use-package cc-mode
+  :mode (("\\.\\(c\\|h\\)\\'" . c-mode)
+         ("\\.\\(c\\|h\\)pp\\'" . c++-mode)
+         ("\\.ino\\'" . c++-mode))
+  :config
+  (defun nox-header-format ()
+    (interactive)
+    (let ((definition
+            (concat (upcase (file-name-sans-extension (file-name-nondirectory buffer-file-name))) "_H")))
+      (insert (format "#if !defined(%s)\n#define %s\n\n\n\n#endif // %s" definition definition definition))
+      (forward-line -2)))
+
+  (defun nox-c-hook ()
+    (c-set-style "NoxStyle")
+    (c-toggle-auto-hungry-state -1)
+    (if (and buffer-file-name
+             (not (file-exists-p buffer-file-name))
+             (string-match "\\.h\\(pp\\)?\\'" buffer-file-name))
+        (nox-header-format)))
+  (add-hook! c-mode-common #'nox-c-hook)
+
+  (setq-default c-hanging-semi&comma-criteria '((lambda () 'stop)))
+
+  (c-add-style
+   "NoxStyle"
+   '((c-tab-always-indent . t)
+     (c-comment-only-line-offset . 0)
+
+     (c-hanging-braces-alist . ((block-close)
+                                (block-open)
+                                (brace-list-close)
+                                (brace-list-entry)
+                                (brace-list-intro)
+                                (brace-list-open)
+                                (class-close)
+                                (class-open)
+                                (class-open)
+                                (defun-close)
+                                (defun-open)
+                                (inline-close)
+                                (inline-open)
+                                (statement-case-open)
+                                (substatement-open)))
+
+     (c-hanging-colons-alist . ((access-key)
+                                (access-label)
+                                (case-label)
+                                (inher-intro)
+                                (label)
+                                (member-init-intro)))
+
+     (c-cleanup-list . (scope-operator list-close-comma defun-close-semi))
+
+     (c-offsets-alist . ((access-label . -4)
+                         (arglist-close . c-lineup-arglist)
+                         (block-open . 0)
+                         (brace-list-intro . 4)
+                         (brace-list-open . 0)
+                         (case-label . 4)
+                         (inline-open . 0)
+                         (knr-argdecl-intro . -4)
+                         (label . 0)
+                         (member-init-intro . ++)
+                         (statement-case-intro . 4)
+                         (substatement-open . 0)
+                         (substatement-label . 0)
+                         (topmost-intro-cont . 0)))
+
+     (c-echo-syntactic-information-p . t))))
+#+END_SRC
+
+*** Go
+#+BEGIN_SRC emacs-lisp
+(use-package go-mode :ensure
+  :custom (gofmt-command (substitute-in-file-name "$GOPATH/bin/goimports"))
+  :config
+  (add-hook! go-mode (add-hook! :local 'before-save-hook 'gofmt-before-save)))
+#+END_SRC
+
+*** Lisp
+#+BEGIN_SRC emacs-lisp
+(use-package lisp-mode
+  :config
+  (defun nox-lisp-indent-function (indent-point state)
+    "This function is the normal value of the variable `lisp-indent-function'.
+The function `calculate-lisp-indent' calls this to determine
+if the arguments of a Lisp function call should be indented specially.
+INDENT-POINT is the position at which the line being indented begins.
+Point is located at the point to indent under (for default indentation);
+STATE is the `parse-partial-sexp' state for that position.
+If the current line is in a call to a Lisp function that has a non-nil
+property `lisp-indent-function' (or the deprecated `lisp-indent-hook'),
+it specifies how to indent.  The property value can be:
+,,* `defun', meaning indent `defun'-style
+  \(this is also the case if there is no property and the function
+  has a name that begins with \"def\", and three or more arguments);
+,,* an integer N, meaning indent the first N arguments specially
+  (like ordinary function arguments), and then indent any further
+  arguments like a body;
+,,* a function to call that returns the indentation (or nil).
+  `lisp-indent-function' calls this function with the same two arguments
+  that it itself received.
+This function returns either the indentation to use, or nil if the
+Lisp function does not specify a special indentation."
+    (let ((normal-indent (current-column))
+          (orig-point (point)))
+      (goto-char (1+ (elt state 1)))
+      (parse-partial-sexp (point) calculate-lisp-indent-last-sexp 0 t)
+      (cond
+       ;; car of form doesn't seem to be a symbol, or is a keyword
+       ((and (elt state 2)
+             (or (not (looking-at "\\sw\\|\\s_"))
+                 (looking-at ":")))
+        (if (not (> (save-excursion (forward-line 1) (point))
+                    calculate-lisp-indent-last-sexp))
+            (progn (goto-char calculate-lisp-indent-last-sexp)
+                   (beginning-of-line)
+                   (parse-partial-sexp (point)
+                                       calculate-lisp-indent-last-sexp 0 t)))
+        ;; Indent under the list or under the first sexp on the same
+        ;; line as calculate-lisp-indent-last-sexp.  Note that first
+        ;; thing on that line has to be complete sexp since we are
+        ;; inside the innermost containing sexp.
+        (backward-prefix-chars)
+        (current-column))
+       ((and (save-excursion
+               (goto-char indent-point)
+               (skip-syntax-forward " ")
+               (not (looking-at ":")))
+             (save-excursion
+               (goto-char orig-point)
+               (looking-at ":")))
+        (save-excursion
+          (goto-char (+ 2 (elt state 1)))
+          (current-column)))
+       (t
+        (let ((function (buffer-substring (point)
+                                          (progn (forward-sexp 1) (point))))
+              method)
+          (setq method (or (function-get (intern-soft function)
+                                         'lisp-indent-function)
+                           (get (intern-soft function) 'lisp-indent-hook)))
+          (cond ((or (eq method 'defun)
+                     (and (null method)
+                          (> (length function) 3)
+                          (string-match "\\`def" function)))
+                 (lisp-indent-defform state indent-point))
+                ((integerp method)
+                 (lisp-indent-specform method state
+                                       indent-point normal-indent))
+                (method
+                 (funcall method indent-point state))))))))
+
+  (setq-hook! (lisp-mode emacs-lisp-mode)
+    lisp-indent-function 'nox-lisp-indent-function))
+
+#+END_SRC
+
+*** LaTeX
+#+BEGIN_SRC emacs-lisp
+(use-package tex :ensure auctex)
+#+END_SRC
+
+*** Octave
+#+BEGIN_SRC emacs-lisp
+(use-package octave
+  :mode (("\\.m\\'" . octave-mode))
+  :custom
+  (inferior-octave-startup-args '("-i" "--line-editing"))
+  (inferior-octave-prompt-read-only t)
+  (inferior-octave-prompt "^octave\\(octave\\|[ >]\\)*")
+
+  :config
+  ;; NOTE(nox): Defining functions on octave sometimes failed without this!
+  (setq-hook! inferior-octave-mode
+    eldoc-documentation-function nil)
+
+  ;; NOTE(nox): Remove whitespace from beginning when printing output
+  (defun nox*org-babel-octave-evaluate-session (orig-func session body result-type &optional matlabp)
+    (let ((result (funcall orig-func session body result-type matlabp)))
+      (if (eq result-type 'output) (string-trim-left result) result)))
+  (advice-add 'org-babel-octave-evaluate-session :around 'nox*org-babel-octave-evaluate-session))
+#+END_SRC
+
+*** Web
+#+BEGIN_SRC emacs-lisp
+(use-package web-mode :ensure
+  :mode (("\\.\\(go\\)?html?\\'" . web-mode)))
+#+END_SRC
+
+** Org Mode
+*** General configuration
+#+BEGIN_SRC emacs-lisp
+(use-package org :ensure
+  :general
+  (nox-leader
+    :infix "o"
+    ""  '(:ignore t :wk "Org")
+    "l" '(org-store-link :wk "Store link"))
+
+  :custom
+  (org-modules '(org-habit org-id org-protocol org-timer))
+
+  ;; NOTE(nox): Directories
+  (org-directory "~/Personal/Org/")
+  (org-default-notes-file (concat org-directory "Inbox.org"))
+
+  ;; NOTE(nox): Appearance
+  (org-startup-indented t)
+  (org-startup-with-inline-images t)
+  (org-startup-with-latex-preview t)
+  (org-pretty-entities t)
+  (org-image-actual-width '(700))
+  (org-fontify-quote-and-verse-blocks t)
+
+  ;; NOTE(nox): Behavior
+  (org-tags-column -92)
+  (org-catch-invisible-edits 'smart)
+  (org-return-follows-link t)
+  (org-list-allow-alphabetical t)
+  (org-loop-over-headlines-in-active-region t)
+  (org-blank-before-new-entry '((heading . t) (plain-list-item . auto)))
+
+  ;; NOTE(nox): Tasks and states
+  (org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)")
+                       (sequence "HOLD(h@/!)" "WAITING(w@/!)" "|" "CANCELLED(c@/!)")))
+  (org-todo-state-tags-triggers '((todo ("CANCELLED"))
+                                  (done ("HOLD") ("WAITING"))
+                                  ("TODO" ("HOLD") ("WAITING"))
+                                  ("NEXT" ("HOLD") ("WAITING"))
+                                  ("DONE" ("CANCELLED"))
+                                  ("WAITING" ("WAITING" . t) ("HOLD"))
+                                  ("HOLD" ("WAITING") ("HOLD" . t))
+                                  ("CANCELLED" ("CANCELLED" . t))))
+  (org-treat-S-cursor-todo-selection-as-state-change nil)
+  (org-columns-default-format "%80ITEM(Task) %10Effort(Effort){:} %10CLOCKSUM")
+  (org-global-properties '(("Effort_ALL" . "0:15 0:30 0:45 1:00 1:30 2:00 3:00 4:00 5:00 7:00")))
+
+  ;; NOTE(nox): Refiling
+  (org-refile-use-outline-path 'file)
+  (org-outline-path-complete-in-steps nil)
+  (org-refile-allow-creating-parent-nodes 'confirm)
+
+  ;; NOTE(nox): Logging
+  (org-log-done 'time)
+  (org-log-reschedule 'time)
+  (org-log-into-drawer t)
+
+  ;; NOTE(nox): LaTeX
+  (org-preview-latex-default-process 'dvisvgm)
+  (org-latex-packages-alist '(("" "tikz" t) ("american,siunitx,smartlabels" "circuitikz" t) ("" "mathtools" t)))
+  (org-latex-preview-ltxpng-directory (concat nox-cache-dir "org-latex/"))
+  (org-format-latex-options '(:foreground default :background default :scale 1.7 :html-foreground "Black"
+                              :html-background "Transparent" :html-scale 1.0
+                              :matchers ("begin" "$1" "$" "$$" "\\(" "\\[")))
+  (org-preview-latex-process-alist
+   '((dvisvgm :programs ("latex" "dvisvgm")
+              :description "dvi > svg"
+              :message "you need to install the programs: latex and dvisvgm."
+              :use-xcolor t
+              :image-input-type "dvi"
+              :image-output-type "svg"
+              :image-size-adjust (1.7 . 1.5)
+              :latex-compiler ("latex -interaction nonstopmode -output-directory %o %f")
+              :image-converter ("dvisvgm %f -n -b 1 -c %S -o %O"))
+     (imagemagick :programs ("latex" "convert")
+                  :description "pdf > png"
+                  :message "you need to install the programs: latex and imagemagick."
+                  :use-xcolor t
+                  :image-input-type "pdf"
+                  :image-output-type "png"
+                  :image-size-adjust (1.0 . 1.0)
+                  :latex-compiler ("pdflatex -interaction nonstopmode -output-directory %o %f")
+                  :image-converter ("convert -density %D -trim -antialias %f -quality 100 %O"))
+     (dvipng :programs ("latex" "dvipng")
+             :description "dvi > png"
+             :message "you need to install the programs: latex and dvipng."
+             :image-input-type "dvi"
+             :image-output-type "png"
+             :image-size-adjust (1.0 . 1.0)
+             :latex-compiler ("latex -interaction nonstopmode -output-directory %o %f")
+             :image-converter ("dvipng -fg %F -bg %B -D %D -T tight -o %O %f"))))
+  (org-format-latex-header
+   "\\documentclass{article}
+\\usepackage[usenames]{color}
+[PACKAGES]
+[DEFAULT-PACKAGES]
+\\pagestyle{empty}
+\\setlength{\\textwidth}{\\paperwidth}
+\\addtolength{\\textwidth}{-3cm}
+\\setlength{\\oddsidemargin}{1.5cm}
+\\addtolength{\\oddsidemargin}{-2.54cm}
+\\setlength{\\evensidemargin}{\\oddsidemargin}
+\\setlength{\\textheight}{\\paperheight}
+\\addtolength{\\textheight}{-\\headheight}
+\\addtolength{\\textheight}{-\\headsep}
+\\addtolength{\\textheight}{-\\footskip}
+\\addtolength{\\textheight}{-3cm}
+\\setlength{\\topmargin}{1.5cm}
+\\addtolength{\\topmargin}{-2.54cm}
+\\tikzset{every picture/.style={color=fg}}")
+
+  :config
+  (defconst nox-org-agenda-main-file (concat org-directory "GTD.org"))
+  (defconst nox-org-agenda-journal-file (concat org-directory "Journal.org"))
+  (defconst nox-org-reference-file (concat org-directory "Reference.org"))
+  (setq-default org-agenda-files (list org-default-notes-file nox-org-agenda-main-file)
+                org-refile-targets `((nil . (:maxlevel . 9))
+                                     (org-agenda-files . (:maxlevel . 9))
+                                     (,nox-org-reference-file . (:maxlevel . 9))))
+
+  (add-hook 'org-mode-hook (lambda () (org-hide-block-all) (turn-on-org-cdlatex)))
+
+  (defun nox-org-summary-todo (n-done n-not-done)
+    "Switch entry to DONE when all subentries are done, to TODO otherwise."
+    (let (org-log-done org-log-states) (org-todo (if (= n-not-done 0) "DONE" "TODO"))))
+  (add-hook 'org-after-todo-statistics-hook 'nox-org-summary-todo)
+
+  (add-hook! 'org-after-refile-insert-hook (org-up-heading-safe) (org-update-statistics-cookies nil))
+
+  (defun nox-verify-refile-target ()
+    (if (member (org-get-todo-state) org-done-keywords)
+        (progn (org-end-of-subtree t t) nil)
+      t))
+  (setq-default org-refile-target-verify-function 'nox-verify-refile-target)
+
+  ;; NOTE(nox): Helper functions
+  (defun nox-org-has-subtasks-p (&optional specific-keywords ignore-keywords)
+    "Any heading with subtasks.
+When SPECIFIC-KEYWORDS is nil, returns t or `all-planned' when has subtasks, and nil otherwise.
+When it is a list of keywords, returns (HAS-SUBTASKS . HAS-SPECIFIC).
+HAS-SPECIFIC is t or `all-planned'.
+`all-planned' is returned when every subtask found will not be shown in the agenda because of
+scheduling/deadline.
+Subtrees whose parent todo keyword is in IGNORE-KEYWORDS are ignored."
+    (org-with-wide-buffer
+     (let ((subtree-end (save-excursion (org-end-of-subtree t)))
+           has-subtasks has-specific)
+       (forward-line)
+       (while (and (< (point) subtree-end)
+                   (or (not (eq has-subtasks t))
+                       (and specific-keywords (not (eq has-specific t))))
+                   (re-search-forward org-todo-line-regexp subtree-end t))
+         (let ((keyword (match-string 2))
+               (planned (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item)))
+           (if (member keyword ignore-keywords)
+               (org-end-of-subtree t)
+             (if (member keyword specific-keywords)
+                 (setq has-subtasks (or (eq has-subtasks t) (if planned 'all-planned t))
+                       has-specific (or (eq has-specific t) (if planned 'all-planned t)))
+               (when (member keyword org-todo-keywords-1)
+                 (setq has-subtasks (or (eq has-subtasks t) (if planned 'all-planned t))))))))
+       (if specific-keywords
+           (cons has-subtasks has-specific)
+         has-subtasks))))
+
+  (defun nox-org-project-p ()
+    "Any task that has subtasks."
+    (and (org-get-todo-state) (nox-org-has-subtasks-p)))
+
+  (defun nox-org-not-project-p ()
+    "Any task that doesn't have subtasks."
+    (and (org-get-todo-state) (not (nox-org-has-subtasks-p))))
+
+  (defun nox-org-parent-projects (&optional first)
+    "Get projects that enclose this heading, each specified by (NAME . POS).
+When FIRST is non-nil, return only the closest parent project that contains this heading.
+Else, return full list of projects."
+    (let (projects components)
+      (org-with-wide-buffer
+       (org-back-to-heading 'invisible-ok)
+       (while (and (not (and first projects))
+                   (org-up-heading-safe))
+         (setq components (org-heading-components))
+         (when (org-get-todo-state)
+           (push (cons (substring-no-properties (org-get-heading t t t t)) (point)) projects))))
+      (if first (car projects) projects)))
+
+  (defun nox-org-project-status ()
+    "Return nil when heading is not project. When it is, returns `done', `stuck', `planned' or `has-next'."
+    (let ((todo-state (org-get-todo-state))
+          subtasks-p)
+      (when todo-state
+        (setq subtasks-p (nox-org-has-subtasks-p '("NEXT") '("CANCELLED" "HOLD")))
+        (when (car subtasks-p)
+          (if (member todo-state org-done-keywords)
+              'done
+            (if (cdr subtasks-p)
+                (if (eq (cdr subtasks-p) 'all-planned) 'planned 'has-next)
+              'stuck))))))
+
+  (defun nox-org-project-set-next-after-done ()
+    "Ask to TODO to NEXT when changing previous states to DONE."
+    (let ((done-keywords (or org-done-keywords org-done-keywords-for-agenda))
+          target break)
+      (when (and (member org-state done-keywords) (nox-org-parent-projects t))
+        (org-with-wide-buffer
+         (org-back-to-heading t)
+         (save-excursion
+           (while (and (not target) (org-get-next-sibling))
+             (let ((keyword (org-get-todo-state)))
+               (if (nox-org-project-p)
+                   (setq target 'cancel)
+                 (if (string= keyword "TODO")
+                     (setq target (cons (point) (org-get-heading t t t t)))
+                   (unless (member keyword done-keywords)
+                     (setq target 'cancel)))))))
+         (save-excursion
+           (while (and (consp target) (not break) (org-get-last-sibling))
+             (let ((keyword (org-get-todo-state)))
+               (if (string= keyword "NEXT")
+                   (setq target nil)
+                 (when (member keyword org-todo-keywords)
+                   (setq break t))))))
+         (when (consp target)
+           (when (y-or-n-p (concat "Do you want to set " (cdr target) " to NEXT?"))
+             (goto-char (car target))
+             (org-todo "NEXT")))))))
+  (add-hook 'org-after-todo-state-change-hook #'nox-org-project-set-next-after-done)
+
+  (defun nox|org-offer-all-agenda-tags () (setq-local org-complete-tags-always-offer-all-agenda-tags t))
+
+  ;; NOTE(nox): Get different latex fragments for different themes
+  (defvar nox-org-sha-salt nil)
+  (defun nox*org-format-latex (orig-function &rest args)
+    (setq nox-org-sha-salt (concat (face-attribute 'default :foreground)
+                                   (face-attribute 'default :background)))
+    (cl-letf (((symbol-function 'sha1)
+               (lambda (object &optional start end binary)
+                 (secure-hash 'sha1 (concat object nox-org-sha-salt)
+                              start end binary))))
+      (apply orig-function args)))
+  (advice-add 'org-format-latex :around #'nox*org-format-latex)
+
+  ;; NOTE(nox): Babel
+  (setq-default org-confirm-babel-evaluate nil)
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '((gnuplot . t)
+     (octave . t)
+     (python . t)
+     (latex . t)
+     (shell . t)
+     (calc . t)))
+
+  (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images)
+
+  ;; NOTE(nox): PDF Tools support
+  (org-link-set-parameters "pdfview"
+                           :follow 'org-pdfview-open
+                           :complete 'org-pdfview-complete-link
+                           :store 'org-pdfview-store-link))
+
+(use-package org-attach
+  :custom
+  (org-attach-directory "Recursos/attach/")
+  (org-attach-method 'mv))
+
+(use-package org-element :commands org-element-update-syntax)
+#+END_SRC
+
+*** Agenda
+#+BEGIN_SRC emacs-lisp
+(use-package org-agenda
+  :general
+  (nox-leader "a" '(org-agenda :wk "Agenda"))
+
+  :config
+  (defun nox/org-agenda-finalize ()
+    ;; NOTE(nox): Remove empty blocks
+    (save-excursion
+      (goto-char (point-min))
+      (let ((prev (if (get-text-property (point-min) 'org-agenda-structural-header)
+                      (point-min)
+                    (next-single-property-change (point-min) 'org-agenda-structural-header)))
+            next)
+        (while (and prev (/= prev (point-max)))
+          (setq next
+                (or (next-single-property-change (next-single-property-change prev 'org-agenda-structural-header)
+                                                 'org-agenda-structural-header)
+                    (point-max)))
+          (if (or (and (< next (point-max)) (< (count-lines prev next) 4))
+                  (and (= next (point-max)) (< (count-lines prev next) 2)))
+              (delete-region prev next)
+            (setq prev next)))))
+
+    ;; NOTE(nox): Turn root projects bold
+    (save-excursion
+      (while (search-forward (char-to-string ?\u200B) nil t)
+        (let ((overlay (make-overlay (line-beginning-position) (1+ (line-end-position)))))
+          (overlay-put overlay 'face '(:weight bold)))))
+
+    ;; NOTE(nox): Check for sync conflicts!
+    (catch 'break
+      (message
+       (dolist (file (directory-files org-directory))
+         (when (string-match-p "sync-conflict" file)
+           (message-box "AVISO: Há conflitos de sincronização!")
+           (throw 'break t))))))
+
+  (defun nox/org-agenda-stuck-skip-function ()
+    (org-with-wide-buffer
+     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
+       (when (not (eq (nox-org-project-status) 'stuck)) next-heading))))
+
+  (defun nox/org-agenda-projects-next-skip-function ()
+    (org-with-wide-buffer
+     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max))))
+           (project-status (nox-org-project-status)))
+       (if (eq project-status 'done)
+           (org-end-of-subtree t)
+         (if (or (eq project-status 'has-next)
+                 (and (string= (org-get-todo-state) "NEXT")
+                      (nox-org-parent-projects t)))
+             (when (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item)
+               (org-end-of-subtree t))
+           next-heading)))))
+
+  (defun nox/org-agenda-projects-next-prefix ()
+    (let* ((is-project (nox-org-project-p))
+           (parent-projects (nox-org-parent-projects))
+           (number-of-proj (length parent-projects))
+           result)
+      (if (eq number-of-proj 0)
+          (setq result (string ?  ?⮞ ?\u200B))
+        (if is-project
+            (setq result (concat "  " (apply 'concat (make-list number-of-proj "| "))))
+          (setq result (concat "  " (apply 'concat (make-list (1- number-of-proj) "| ")) "├─⮞ "))))
+      result))
+
+  (defun nox/org-agenda-tasks-skip-function ()
+    (org-with-wide-buffer
+     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
+       (when (or (nox-org-project-p) (nox-org-parent-projects t)) next-heading))))
+
+  (defun nox/org-agenda-archivable-skip-function ()
+    (org-with-wide-buffer
+     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max))))
+           (subtree-end (save-excursion (org-end-of-subtree t)))
+           (keyword (org-get-todo-state)))
+       (if (member keyword org-todo-keywords-1)
+           (if (member keyword org-done-keywords)
+               (let* ((day (nth 3 (decode-time)))
+                      (this-month (format-time-string "%Y-%m-" (current-time)))
+                      (last-month (format-time-string "%Y-%m-" (time-subtract (current-time) (seconds-to-time (* 60 60 24 (+ day 1)))))))
+                 (forward-line 1)
+                 (when (and (< (point) subtree-end)
+                            (re-search-forward (concat last-month "\\|" this-month) subtree-end t))
+                   subtree-end))
+             subtree-end)
+         next-heading))))
+
+  (defun nox/org-agenda-waiting-skip-function ()
+    (org-with-wide-buffer
+     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max))))
+           (keyword (org-get-todo-state))
+           (project-status (nox-org-project-status)))
+       (unless (or (eq project-status 'planned)
+                   (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item)
+                   (member keyword '("WAITING" "HOLD")))
+         next-heading))))
+
+  (setq-default
+   org-agenda-custom-commands
+   '(("n" "Agenda"
+      ((agenda ""
+               ((org-agenda-files (list org-default-notes-file nox-org-agenda-main-file
+                                        nox-org-agenda-journal-file))
+                (org-agenda-span 3)))
+       (tags "REFILE"
+             ((org-agenda-overriding-header "Coisas por organizar")
+              (org-tags-match-list-sublevels nil)
+              (org-agenda-files (list org-default-notes-file))))
+       (tags-todo "-CANCELLED-HOLD"
+                  ((org-agenda-overriding-header "Projetos estagnados")
+                   (org-agenda-skip-function 'nox/org-agenda-stuck-skip-function)
+                   (org-agenda-sorting-strategy '(category-keep))))
+       (tags-todo "-CANCELLED+PRIORITY=\"A\""
+                  ((org-agenda-overriding-header "Prioritário")
+                   (org-agenda-sorting-strategy '(time-up category-keep))
+                   (org-agenda-todo-ignore-scheduled 'future)))
+       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD+EFFORT>\"0\"+EFFORT<=\"0:30\""
+                  ((org-agenda-overriding-header "Coisas rápidas")
+                   (org-agenda-sorting-strategy '(priority-down effort-up))
+                   (org-agenda-todo-ignore-scheduled 'future)))
+       (tags "-REFILE-CANCELLED-WAITING-HOLD+TODO<>\"\""
+             ((org-agenda-overriding-header "Projetos")
+              (org-agenda-skip-function 'nox/org-agenda-projects-next-skip-function)
+              (org-agenda-prefix-format "%(nox/org-agenda-projects-next-prefix)")
+              (org-agenda-sorting-strategy '(category-keep))
+              (org-agenda-tags-todo-honor-ignore-options nil)
+              (org-agenda-todo-ignore-scheduled 'future)
+              (org-agenda-todo-ignore-deadlines nil)))
+       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD-PRIORITY=\"A\"-PRIORITY=\"C\""
+                  ((org-agenda-overriding-header "Tarefas isoladas")
+                   (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
+                   (org-agenda-todo-ignore-with-date t)
+                   (org-agenda-sorting-strategy '(deadline-down priority-down effort-up category-keep))))
+       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD+PRIORITY=\"C\""
+                  ((org-agenda-overriding-header "Tarefas de baixa prioridade")
+                   (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
+                   (org-agenda-sorting-strategy '(deadline-down effort-up category-keep))))
+       (tags "+Interessante+Level=2"
+             ((org-agenda-overriding-header "Coisas interessantes")
+              (org-agenda-sorting-strategy '(effort-up category-keep))
+              (org-agenda-show-inherited-tags nil)))
+       (tags "-REFILE+TODO<>\"\""
+             ((org-agenda-overriding-header "Tarefas a arquivar")
+              (org-agenda-skip-function 'nox/org-agenda-archivable-skip-function)
+              (org-tags-match-list-sublevels nil)
+              (org-agenda-files (list nox-org-agenda-main-file))))
+       (tags-todo "-CANCELLED-TICKLER"
+                  ((org-agenda-overriding-header "Tarefas à espera ou em pausa")
+                   (org-agenda-skip-function 'nox/org-agenda-waiting-skip-function)
+                   (org-tags-match-list-sublevels nil)
+                   (org-agenda-tags-todo-honor-ignore-options nil)
+                   (org-agenda-todo-ignore-scheduled 'future))))
+      ((org-agenda-finalize-hook 'nox/org-agenda-finalize))))
+   org-agenda-span 'day
+   org-agenda-prefix-format '((agenda . "  %?-12t% s")
+                              (todo   . "  ")
+                              (tags   . "  ")
+                              (search . "  "))
+   org-agenda-skip-deadline-prewarning-if-scheduled 'pre-scheduled
+   org-agenda-tags-todo-honor-ignore-options t
+   org-agenda-todo-ignore-scheduled 'all
+   org-agenda-todo-ignore-deadlines 'far
+   org-agenda-skip-scheduled-if-done t
+   org-agenda-skip-deadline-if-done t
+   org-agenda-skip-scheduled-if-deadline-is-shown t
+   org-agenda-clockreport-parameter-plist `(:link t :maxlevel 6 :fileskip0 t :compact t :narrow 100)
+   org-agenda-columns-add-appointments-to-effort-sum t
+   org-agenda-dim-blocked-tasks nil
+   org-agenda-todo-list-sublevels nil
+   org-agenda-block-separator ""
+   org-agenda-time-grid '((daily today require-timed) nil "......" "----------------"))
+
+  (add-hook 'org-agenda-mode-hook 'nox|org-offer-all-agenda-tags))
+#+END_SRC
+
+*** Capture
+#+BEGIN_SRC emacs-lisp
+(use-package org-capture
+  :init
+  (defun nox-org-capture-frame ()
+    (modify-frame-parameters nil '((name . "Org Capture")
+                                   (org-capture-frame . t)
+                                   (width . 110) (height . 40)))
+    (org-capture))
+
+  :config
+  (defun nox-org-capture-add-created-property ()
+    (org-set-property "CREATED" (format-time-string
+                                 (concat "[" (substring (cdr org-time-stamp-formats) 1 -1) "]"))))
+  (add-hook 'org-capture-before-finalize-hook 'nox-org-capture-add-created-property)
+
+  (setq-default
+   org-capture-templates '(("t" "Tarefa" entry (file "")
+                            "* NEXT %i%?" :clock-in t :clock-resume t)
+                           ("c" "Calendário" entry (file "")
+                            "* %?\n%^t")
+                           ("n" "Nota" entry (file "")
+                            "* %?" :clock-in t :clock-resume t)
+                           ("d" "Diário" entry (file+olp+datetree nox-org-agenda-journal-file)
+                            "* %?" :clock-in t :clock-resume t)
+                           ("w" "Web bookmark" entry (file "")
+                            "* [[%:link][%^{Title|%:description}]]\n%?" :clock-in t :clock-resume t)))
+
+  (add-hook 'org-capture-mode-hook 'nox|org-offer-all-agenda-tags)
+
+  ;; NOTE(nox): Handle capture frame
+  (advice-add
+   'org-switch-to-buffer-other-window :after
+   (lambda (&rest _) (when (frame-parameter nil 'org-capture-frame) (delete-other-windows))))
+  (advice-add
+   'org-capture :around
+   (lambda (capture-function &rest args)
+     (condition-case nil (apply capture-function args)
+       (error (when (frame-parameter nil 'org-capture-frame)
+                (delete-frame))))))
+  (add-hook
+   'org-capture-after-finalize-hook
+   (lambda (&rest _)
+     (when (and (frame-parameter nil 'org-capture-frame) (not org-capture-is-refiling))
+       (org-save-all-org-buffers)
+       (delete-frame))))
+  (advice-add
+   'org-capture-refile :after
+   (lambda (&rest _)
+     (when (frame-parameter nil 'org-capture-frame)
+       (org-save-all-org-buffers)
+       (delete-frame)))))
+#+END_SRC
+
+*** Clocking
+#+BEGIN_SRC emacs-lisp
+(use-package org-clock
+  :config
+  (defun nox-org-clock-in-switch-state (current)
+    "Switch a task from TODO to NEXT when clocking in.
+Skips capture tasks, projects, and subprojects.
+Switch projects and subprojects from NEXT back to TODO"
+    (when (not (and (boundp 'org-capture-mode) org-capture-mode))
+      (cond ((and (string= current "TODO") (nox-org-not-project-p))
+             "NEXT")
+            ((and (string= current "NEXT") (nox-org-project-p))
+             "TODO"))))
+
+  (setq-default org-clock-in-resume t
+                org-clock-in-switch-to-state 'nox-org-clock-in-switch-state
+                org-clock-out-remove-zero-time-clocks t
+                org-clock-report-include-clocking-task t
+                org-clock-persist t
+                org-clock-persist-file (concat nox-etc-dir "org-clock-save.el")
+                org-clock-history-length 25)
+  (org-clock-persistence-insinuate))
+#+END_SRC
+
+*** Habit
+#+BEGIN_SRC emacs-lisp
+(use-package org-habit
+  :custom
+  (org-habit-graph-column 75)
+  (org-habit-preceding-days 30)
+  (org-habit-following-days 1)
+  (org-habit-today-glyph ?@))
+#+END_SRC
+
+*** IDs
+#+BEGIN_SRC emacs-lisp
+(use-package org-id
+  :config
+  (gsetq org-id-link-to-org-use-id 'create-if-interactive
+         org-id-locations-file (concat nox-cache-dir "org-id-locations")))
+#+END_SRC
+
+*** Latex editor and helpers
+#+BEGIN_SRC emacs-lisp
+(use-package org-edit-latex :ensure)
+(use-package cdlatex :ensure)
+#+END_SRC
+
+*** Org Noter
+#+BEGIN_SRC emacs-lisp
+(use-package org-noter :ensure
+  :general
+  (nox-local-leader :keymaps 'org-mode-map
+    "n" '(org-noter :wk "Org Noter"))
+
+  :custom
+  (org-noter-default-heading-title "Notas da página $p$")
+  (org-noter-default-notes-file-names '("Notes.org" "Notas.org"))
+  (org-noter-hide-other t))
+#+END_SRC
+
+*** Source blocks
+#+BEGIN_SRC emacs-lisp
+(use-package org-src
+  :custom
+  (org-src-fontify-natively t)
+  (org-src-tab-acts-natively t)
+  (org-edit-src-content-indentation 0)
+  :config
+  (add-to-list 'org-src-lang-modes '("html" . web)))
+#+END_SRC
+
+** Tools and utilities
+*** Compilation
+#+BEGIN_SRC emacs-lisp
+(use-package compile
+  :general
+  (nox-leader "c" '(+compile :wk "Compile"))
+  ("M-g n" '(nox@error/next-error :wk "Next error")
+   "M-g p" '(nox@error/previous-error :wk "Previous error"))
+
+  :config
+  (defhydra nox@error ()
+    "Errors"
+    ("f" first-error "First")
+    ("n" next-error "Next")
+    ("p" previous-error "Previous")
+    ("c" +compile "Recompile")
+    ("q" nil "Quit"))
+
+  (setq-default
+   compilation-ask-about-save nil
+   compilation-always-kill t
+   compilation-scroll-output 'first-error
+   compilation-context-lines 2
+   compilation-environment '("TERM=xterm"))
+
+  (cl-defstruct +compile-info type path last-args last-time buffer-name should-close)
+  (defvar-local +compile-info nil)
+  (defvar +compile-info-table (make-hash-table :test 'equal))
+
+  (defconst +compile-sh-names (if (eq system-type 'windows-nt)
+                                     '("build-nox.bat" "build.bat")
+                                   '("build-nox.sh" "build.sh")))
+  (defconst +compile-makefile-names '("makefile" "Makefile"))
+  (defconst +compile-script-names (append +compile-sh-names +compile-makefile-names))
+
+  (defun +compile-buffer-name (arg)
+    ;; NOTE(nox): This serves  2 purposes: one is creating the  buffer name itself, called
+    ;; from nox/compile  with arg  = info;  the other  is returning  the buffer  name when
+    ;; called  from compilation-start,  which  is  returned from  the  local  info in  the
+    ;; compilation buffer.
+    (if +compile-info (+compile-info-buffer-name +compile-info)
+      (let ((project-name (projectile-project-name)))
+        (if project-name
+            (format "*[%s] - Compile %s*" project-name (file-name-nondirectory (+compile-info-path arg)))
+          (format "*Compile %s*" (+compile-info-path arg))))))
+
+  (defun +compile (arg)
+    (interactive "P")
+    (let ((default-script (when +compile-info (cons (+compile-info-path +compile-info)
+                                                       +compile-info)))
+          (start-file-name (or (buffer-file-name) ""))
+          script script-list buffer)
+      (dolist (test-script +compile-script-names (setq script-list (nreverse script-list)))
+        (let ((found-script-dir (locate-dominating-file default-directory test-script))
+              full-path info)
+          (when found-script-dir
+            (setq full-path (expand-file-name test-script found-script-dir)
+                  info
+                  (or
+                   (gethash full-path +compile-info-table)
+                   (make-+compile-info :type (if (member test-script +compile-makefile-names) 'make 'sh)
+                                          :path full-path
+                                          :last-time '(0 0 0 0))))
+
+            (push (cons (+compile-info-path info) info) script-list)
+            (when (and (not +compile-info)
+                       (or (not default-script) (time-less-p (+compile-info-last-time (cdr default-script))
+                                                             (+compile-info-last-time info))))
+              (setq default-script (car script-list))))))
+
+      (if (not script-list)
+          (error "No build script found")
+        (if (or (not arg) (= (length script-list) 1))
+            (setq script (cdr default-script))
+          (setq script (cdr (assoc
+                             (completing-read "Which build script? "
+                                              script-list nil t nil nil (car default-script))
+                             script-list))))
+
+        (setf (+compile-info-buffer-name script) (+compile-buffer-name script))
+        (setq buffer (get-buffer-create (+compile-info-buffer-name script)))
+
+        (if (projectile-project-p) (projectile-save-project-buffers) (save-some-buffers t))
+
+        (if (= (length (window-list)) 1)
+            (setf (+compile-info-should-close script) t)
+          (unless (get-buffer-window buffer) (setf (+compile-info-should-close script) nil)))
+
+        (with-current-buffer buffer
+          (cd (file-name-directory (+compile-info-path script)))
+          (let (command command-args)
+            (if (eq (+compile-info-type script) 'make)
+                (setq command "make"
+                      command-args (or (+compile-info-last-args script) "-k"))
+
+              (setq command (shell-quote-argument
+                             (concat "./" (file-name-nondirectory (+compile-info-path script))))
+                    command-args (or (+compile-info-last-args script) "%f")))
+
+            (when arg (setq command-args (read-string "Arguments: " command-args)))
+
+            (setf (+compile-info-last-args script) command-args)
+            (setq command-args (replace-regexp-in-string
+                                (regexp-quote "%f") (shell-quote-argument start-file-name) command-args))
+
+            (setq +compile-info script)
+
+            (setf (+compile-info-last-time script) (current-time))
+            (compilation-start (concat command " " command-args) nil '+compile-buffer-name)
+            ;; NOTE(nox): Need to set it again in order to persist after changing the
+            ;; major mode
+            (setq +compile-info script)))
+
+        (puthash (+compile-info-path script) script +compile-info-table))))
+
+  (defun +compile|bury-buffer (buffer string)
+    "Bury compilation buffer if it succeeded."
+    (with-current-buffer buffer
+      (when +compile-info
+        (message "Compilation time: %.3fs"
+                 (float-time (time-subtract (current-time) (+compile-info-last-time +compile-info))))
+        (when (and (string= string "finished\n")
+                   (save-excursion (not (ignore-errors (compilation-next-error 1 nil 1)))))
+          (let ((windows (get-buffer-window-list buffer t)))
+            (dolist (window windows)
+              (if (and (> (length (window-list (window-frame window))) 1)
+                       (+compile-info-should-close +compile-info))
+                  (delete-window window)
+                (switch-to-prev-buffer window))))
+          (bury-buffer buffer)))))
+  (add-hook 'compilation-finish-functions '+compile|bury-buffer)
+
+  (defun +compile|ansi-color-apply ()
+    "Applies ansi codes to the compilation buffers. Meant for `compilation-filter-hook'."
+    (with-silent-modifications
+      (ansi-color-apply-on-region compilation-filter-start (point))))
+  (add-hook! 'compilation-filter-hook #'+compile|ansi-color-apply))
+#+END_SRC
+
+*** Dired
+#+BEGIN_SRC emacs-lisp
+(use-package dired
+  :config
+  (gsetq dired-auto-revert-buffer t
+         dired-dwim-target t
+         dired-hide-details-hide-symlink-targets nil
+         dired-listing-switches "-alh"
+         dired-recursive-copies 'always
+         dired-recursive-deletes 'always
+         image-dired-dir (concat nox-cache-dir "image-dired/")
+         image-dired-db-file (concat image-dired-dir "db.el")
+         image-dired-gallery-dir (concat image-dired-dir "gallery/")
+         image-dired-temp-image-file (concat image-dired-dir "temp-image")
+         image-dired-temp-rotate-image-file (concat image-dired-dir "temp-rotate-image")))
+
+(use-package diredfl :ensure
+  :after-call (dired-mode-hook)
+  :config (diredfl-global-mode))
+
+(use-package dired+ :quelpa (dired+ :fetcher wiki)
+  :after-call (dired-mode-hook)
+  :config
+  (defun dired|create-non-existent-directory ()
+    "Create missing directories when creating new files."
+    (let ((parent-directory (file-name-directory buffer-file-name)))
+      (when (and (not (file-exists-p parent-directory))
+                 (y-or-n-p (format "Directory `%s' does not exist! Create it?" parent-directory)))
+        (make-directory parent-directory t))))
+  (push #'dired|create-non-existent-directory find-file-not-found-functions)
+
+  (defun nox-pdf-compress-merge-sentinel (process event)
+    (unless (process-live-p process)
+      (let ((exit-code (process-exit-status process)))
+        (if (/= exit-code 0)
+            (error "Something went wrong with the process! Exit code: %d" exit-code)
+          (let* ((data (process-get process 'data))
+                 (output (car data))
+                 (temp-output-name (car output))
+                 (output-name (cdr output))
+                 (files (cdr data)))
+            (dolist (file files)
+              (move-file-to-trash file))
+            (ignore-errors (rename-file temp-output-name output-name 1))
+            (message "Done compressing/merging PDF(s)."))))))
+
+  (defun nox/pdf-compress-merge (arg)
+    (interactive "P")
+    (let ((files (dired-get-marked-files))
+          (quality "ebook")
+          (color-conv-strat "UseDeviceIndependentColor")
+          (temp-output-name (format "MERGED_FILE_%d.pdf" (random 100000)))
+          output-name)
+      (if (< (length files) 1)
+          (user-error "You must select at least one file!")
+        (when arg
+          (setq quality (completing-read
+                         "Compression type: "
+                         '("default" "screen" "ebook" "printer" "prepress")
+                         nil t nil nil quality)
+                color-conv-strat (completing-read
+                                  "Color conversion strategy: "
+                                  '("LeaveColorUnchanged" "Gray" "RGB" "sRGB" "CMYK" "UseDeviceIndependentColor")
+                                  nil t nil nil color-conv-strat)))
+        (setq output-name (completing-read "Output name: "
+                                           (when (= (length files) 1)
+                                             files)))
+        (when (= (length output-name) 0) (setq output-name "Output.pdf"))
+        (process-put (make-process
+                      :name "PDF Compressor/Merger"
+                      :buffer "*PDF Compress*"
+                      :connection-type 'pipe
+                      :sentinel 'nox-pdf-compress-merge-sentinel
+                      :command
+                      (append
+                       (list "gs" "-dBATCH" "-dNOPAUSE" "-q" "-sDEVICE=pdfwrite"
+                             (concat "-sColorConversionStrategy=/" color-conv-strat)
+                             (concat "-sOutputFile=" temp-output-name)
+                             (concat "-dPDFSETTINGS=/" quality))
+                       files))
+                     'data (cons (cons temp-output-name output-name)  files)))))
+
+  (defun nox/whiteboard ()
+    (interactive)
+    (unless (executable-find "whiteboard") (error "No whiteboard script :("))
+    (let ((window-config (current-window-configuration))
+          (files (dired-get-marked-files)))
+      (dolist (file files)
+        (let ((result-name (file-name-sans-extension file))
+              (pos (make-vector 4 nil))
+              (command-arguments "whiteboard"))
+          (find-file file)
+          (if (not (eq major-mode 'image-mode))
+              (message "%s is not an image!" file)
+
+            (let* ((displayed-image (image-get-display-property))
+                   (original-image (image--image-without-parameters displayed-image))
+                   (factor (/ (float (car (image-size original-image t)))
+                              (float (car (image-size displayed-image t)))))
+                   (index 0)
+                   event)
+              (plist-put (cdr (image-get-display-property)) :pointer 'arrow)
+
+              (while (and (not (eq event 'return)) (not (aref pos 3)))
+                (delete-other-windows)
+                (setq event (read-event "Next corner..."))
+                (when (and (listp event) (eq 'mouse-1 (car event))
+                           (eq (selected-window) (posn-window (event-start event))))
+                  (setf (aref pos index) (cons (* (car (posn-x-y (event-start event))) factor)
+                                               (* (cdr (posn-x-y (event-start event))) factor)))
+                  (setq index (1+ index)))))
+
+            (when (aref pos 3)
+              (setq command-arguments
+                    (concat command-arguments " -c \""
+                            (mapconcat (lambda (x) (format "%d,%d" (car x) (cdr x)))
+                                       pos " ")
+                            "\"")))
+
+            (setq command-arguments (concat command-arguments " " (read-string "Extra arguments: ") " "
+                                            (shell-quote-argument file) " " (shell-quote-argument result-name)
+                                            "-whiteboard.png"))
+
+            (async-shell-command command-arguments))))
+      (set-window-configuration window-config)
+      (dired-unmark-all-marks)))
+
+  ;; From abo-abo
+  (defun nox/ediff-files ()
+    (interactive)
+    (let ((files (dired-get-marked-files))
+          (wnd (current-window-configuration)))
+      (if (<= (length files) 2)
+          (let ((file1 (car files))
+                (file2 (if (cdr files)
+                           (cadr files)
+                         (read-file-name
+                          "file: "
+                          (dired-dwim-target-directory)))))
+            (if (file-newer-than-file-p file1 file2)
+                (ediff-files file2 file1)
+              (ediff-files file1 file2))
+            (add-hook 'ediff-after-quit-hook-internal
+                      (lambda ()
+                        (setq ediff-after-quit-hook-internal nil)
+                        (set-window-configuration wnd))))
+        (error "no more than 2 files should be marked"))))
+
+  (defun nox/dired-rsync (dest)
+    (interactive
+     (list
+      (expand-file-name
+       (read-file-name
+        "Rsync to:"
+        (dired-dwim-target-directory)))))
+    (let ((files (dired-get-marked-files
+                  nil current-prefix-arg))
+          (rsync-command
+           "rsync -arvz --progress "))
+      (dolist (file files)
+        (setq rsync-command
+              (concat rsync-command
+                      (shell-quote-argument file)
+                      " ")))
+      (setq rsync-command
+            (concat rsync-command
+                    (shell-quote-argument dest)))
+      (async-shell-command rsync-command "*rsync*")
+      (other-window 1))))
+#+END_SRC
+
+*** Document viewers
+**** PDF Tools
+#+BEGIN_SRC emacs-lisp
+(use-package pdf-tools :ensure
+  :mode (("\\.pdf\\'" . pdf-view-mode))
+  :commands (org-pdfview-open org-pdfview-store-link org-pdfview-complete-link)
+  :config
+  ;; Adapted from https://github.com/markus1189/org-pdfview
+  (defun org-pdfview-open (link)
+    "Open LINK in pdf-view-mode."
+    (cond ((string-match "\\(.*\\)::\\([0-9]*\\)\\+\\+\\([[0-9]\\.*[0-9]*\\)"  link)
+           (let* ((path (match-string 1 link))
+                  (page (string-to-number (match-string 2 link)))
+                  (height (string-to-number (match-string 3 link))))
+             (org-open-file path 1)
+             (pdf-view-goto-page page)
+             (image-set-window-vscroll
+              (round (/ (* height (cdr (pdf-view-image-size))) (frame-char-height))))))
+          ((string-match "\\(.*\\)::\\([0-9]+\\)$"  link)
+           (let* ((path (match-string 1 link))
+                  (page (string-to-number (match-string 2 link))))
+             (org-open-file path 1)
+             (pdf-view-goto-page page)))
+          (t (org-open-file link 1))))
+
+  (defun org-pdfview-store-link ()
+    "Store a link to a pdfview buffer."
+    (when (eq major-mode 'pdf-view-mode)
+      (let* ((path buffer-file-name)
+             (page (number-to-string (pdf-view-current-page)))
+             (link (concat "pdfview:" path "::" page))
+             (description (concat (file-name-nondirectory path) " at page " page)))
+        (org-store-link-props
+         :type "pdfview"
+         :link link
+         :description description))))
+
+  (defun org-pdfview-complete-link (&optional arg)
+    "Use the existing file name completion for file.
+Links to get the file name, then ask the user for the page number
+and append it."
+    (concat (replace-regexp-in-string "^file:" "pdfview:" (org-file-complete-link arg))
+            "::"
+            (read-from-minibuffer "Page:" "1")))
+
+  ;; NOTE(nox): Show page number
+  (define-pdf-cache-function pagelabels)
+  (add-hook 'pdf-view-mode-hook
+            (lambda ()
+              (setq-local mode-line-position
+                          '(" ["
+                            (:eval (nth (1- (pdf-view-current-page))
+                                        (pdf-cache-pagelabels)))
+                            "/"
+                            (:eval (number-to-string (pdf-view-current-page)))
+                            "/"
+                            (:eval (number-to-string (pdf-cache-number-of-pages)))
+                            "]"))))
+
+  (setq-default pdf-view-display-size 'fit-page
+                pdf-cache-image-limit 200
+                pdf-view-use-imagemagick t)
+  (pdf-tools-install))
+#+END_SRC
+
+**** Nov.el
+#+BEGIN_SRC emacs-lisp
+(use-package nov :ensure
+  :mode (("\\.epub\\'" . nov-mode)))
+#+END_SRC
+
+*** Ediff
+#+BEGIN_SRC emacs-lisp
+(use-package ediff
+  :custom
+  (ediff-split-window-function #'split-window-horizontally)
+  (ediff-window-setup-function #'ediff-setup-windows-plain)
+  (ediff-diff-options "-w")
+
+  :config
+  (add-hook! 'ediff-prepare-buffer-hook (when (derived-mode-p 'outline-mode) (outline-show-all)))
+  (defvar ediff--saved-wconf nil)
+  (defun ediff|save-wconf ()
+    (setq ediff--saved-wconf (current-window-configuration)))
+  (defun ediff|restore-wconf ()
+    (set-window-configuration ediff--saved-wconf))
+  (add-hook 'ediff-before-setup-hook #'ediff|save-wconf)
+  (add-hook! '(ediff-quit-hook ediff-suspend-hook) #'ediff|restore-wconf 'append))
+#+END_SRC
+
+*** GDB support
+This should be replaced by my package emacs-gdb, if I ever end up finishing it...
+
+#+BEGIN_SRC emacs-lisp
+(use-package gdb-mi
+  :config
+  (defvar nox/gdb-frame nil)
+  (defvar nox/gdb-last-file nil)
+  (defvar nox/gdb-last-args nil)
+  (defvar nox/gdb-disassembly-show-source t)
+
+  (defhydra nox@gdb (:hint nil :exit t)
+    "
+Debug it!!
+_O_pen    _R_un          _b_reak      _n_ext (_N_: inst)     _w_atch     _M_ixed? %-3`nox/gdb-disassembly-show-source
+_k_ill    _S_tart        _t_break     _i_n (_I_: inst)
+^ ^       _c_ontinue     _r_emove     _o_ut
+^ ^       _s_top         ^ ^          _u_ntil"
+    ("O" gdb)
+    ("k" nox/gdb-kill)
+    ("R" gud-run)
+    ("S" gud-start)
+    ("c" gud-cont)
+    ("s" nox/gdb-stop)
+    ("b" gud-break)
+    ("t" gud-tbreak)
+    ("r" gud-remove)
+    ("n" gud-next :exit nil)
+    ("N" gud-nexti :exit nil)
+    ("i" gud-step :exit nil)
+    ("I" gud-stepi :exit nil)
+    ("o" gud-finish :exit nil)
+    ("u" gud-until :exit nil)
+    ("w" nox/gdb-watch)
+    ("M" (lambda () (interactive) (setq nox/gdb-disassembly-show-source
+                                        (not nox/gdb-disassembly-show-source))) :exit nil))
+
+  (setq-default gdb-many-windows t
+                gdb-show-main t
+                gdb-display-buffer-other-frame-action
+                '((display-buffer-reuse-window display-buffer-pop-up-frame)
+                  (reusable-frames . visible)
+                  (inhibit-same-window . t)
+                  (pop-up-frame-parameters (minibuffer . t)
+                                           (unsplittable . t)
+                                           (width . 100)
+                                           (fullscreen . fullheight)
+                                           (border-width . 0))))
+
+  (add-to-list 'gdb-disassembly-font-lock-keywords '("0x[[:xdigit:]]+" . font-lock-constant-face) t)
+  (add-to-list 'gdb-disassembly-font-lock-keywords '("Line.*$" . font-lock-comment-face) t)
+
+  (gud-def gud-start    "-exec-run --start"
+           nil
+           "Run the program and stop at the start of the inferior's main subprogram.")
+
+  (defun nox/gdb-stop ()
+    (interactive)
+    (with-current-buffer gud-comint-buffer
+      (comint-interrupt-subjob)
+      (gud-call (gdb-gud-context-command "-exec-interrupt"))))
+
+  (defun nox/gdb-watch (expr)
+    (interactive "sEnter expression: ")
+    (when (eq 'gdbmi (buffer-local-value 'gud-minor-mode gud-comint-buffer))
+      (replace-regexp-in-string "\\(\\`[[:space:]\n]*\\|[[:space:]\n]*\\'\\)" "" expr)
+      (when (= (length expr) 0)
+        (setq expr (if (and transient-mark-mode mark-active)
+                       (buffer-substring (region-beginning) (region-end))
+                     (concat (if (derived-mode-p 'gdb-registers-mode) "$")
+                             (tooltip-identifier-from-point (point))))))
+      (set-text-properties 0 (length expr) nil expr)
+      (gdb-input (concat "-var-create - * \"" expr "\"")
+                 `(lambda () (gdb-var-create-handler ,expr)))))
+
+  (defun nox/gdb-kill (&optional frame)
+    (interactive)
+    (let ((more-frames (< 1 (length (visible-frame-list)))))
+      (if (and more-frames (not frame) (frame-live-p nox/gdb-frame))
+          (delete-frame nox/gdb-frame t) ; Only delete frame when running command, this
+                                        ; function will be called again
+        (let ((process (get-buffer-process gud-comint-buffer)))
+          (if (and process (or (not frame) (eq frame nox/gdb-frame)))
+              (kill-process process))))))
+  (add-to-list 'delete-frame-functions 'nox/gdb-kill) ; Kill GDB when closing its frame
+
+  (advice-add
+   'gdb :around
+   (lambda (gdb arg)
+     (interactive "P")
+     (let* ((this-frame (equal arg '(16)))
+            (stop-or-specify (or this-frame (equal arg '(4)))))
+       (if stop-or-specify (nox/gdb-kill))
+       (let ((frame-live (and (not stop-or-specify) (frame-live-p nox/gdb-frame)))
+             (gdb-running (and (not stop-or-specify) (get-buffer-process gud-comint-buffer))))
+         (cond ((and gdb-running frame-live)
+                (with-selected-frame nox/gdb-frame (gdb-restore-windows)))
+               ((and gdb-running (not frame-live))
+                (setq nox/gdb-frame (make-frame '((fullscreen . maximized) (name . "Emacs GDB"))))
+                (with-selected-frame nox/gdb-frame (gdb-restore-windows)))
+               (t
+                (let* ((executable (or (unless stop-or-specify nox/gdb-last-file)
+                                       (expand-file-name (read-file-name "Select file to debug: " nil nox/gdb-last-file t nox/gdb-last-file 'file-executable-p))))
+                       (extra-args (or (unless stop-or-specify nox/gdb-last-args)
+                                       (read-string "Extra arguments: " nox/gdb-last-args)))
+                       (command-line (concat "gdb -i=mi " executable " " extra-args)))
+                  (when (file-executable-p executable)
+                    (setq nox/gdb-last-file executable)
+                    (setq nox/gdb-last-args extra-args)
+                    (if this-frame
+                        (progn
+                          (setq nox/gdb-frame (selected-frame))
+                          (modify-frame-parameters nil '((name . "Emacs GDB"))))
+                      (unless frame-live
+                        (setq nox/gdb-frame (make-frame '((fullscreen . maximized) (name . "Emacs GDB"))))))
+                    (with-selected-frame nox/gdb-frame (funcall gdb command-line)))))))
+       (select-frame-set-input-focus nox/gdb-frame))))
+
+  ;; Prevent buffer stealing, https://stackoverflow.com/a/24923325/2175348
+  (defun gdb-inferior-filter (proc string)
+    (with-current-buffer (gdb-get-buffer-create 'gdb-inferior-io)
+      (comint-output-filter proc string)))
+
+  (defun gud-display-line (true-file line)
+    (let* ((last-nonmenu-event t)	 ; Prevent use of dialog box for questions.
+           (buffer
+            (with-current-buffer gud-comint-buffer
+              (gud-find-file true-file)))
+           (window (and buffer
+                        (or (get-buffer-window buffer)
+                            (display-buffer buffer '(nil (inhibit-same-window . t)
+                                                         (inhibit-switch-frame t))))))
+           (pos))
+      (when buffer
+        (with-current-buffer buffer
+          (unless (or (verify-visited-file-modtime buffer) gud-keep-buffer)
+            (if (yes-or-no-p
+                 (format "File %s changed on disk.  Reread from disk? "
+                         (buffer-name)))
+                (revert-buffer t t)
+              (setq gud-keep-buffer t)))
+          (save-restriction
+            (widen)
+            (goto-char (point-min))
+            (forward-line (1- line))
+            (setq pos (point))
+            (or gud-overlay-arrow-position
+                (setq gud-overlay-arrow-position (make-marker)))
+            (set-marker gud-overlay-arrow-position (point) (current-buffer))
+            (when (featurep 'hl-line)
+              (cond
+               (global-hl-line-mode
+                (global-hl-line-highlight))
+               ((and hl-line-mode hl-line-sticky-flag)
+                (hl-line-highlight)))))
+          (cond ((or (< pos (point-min)) (> pos (point-max)))
+                 (widen)
+                 (goto-char pos))))
+        (when window
+          (set-window-point window gud-overlay-arrow-position)
+          (if (eq gud-minor-mode 'gdbmi)
+              (setq gdb-source-window window))
+          (with-selected-window window (recenter 0))))))
+
+  ;; Better assembly view
+  (def-gdb-auto-update-trigger gdb-invalidate-disassembly
+    (if nox/gdb-disassembly-show-source
+        "-data-disassemble -s $pc -e \"$pc + 200\" -- 4"
+      "-data-disassemble -s $pc -e \"$pc + 200\" -- 0")
+    gdb-disassembly-handler
+    '(start update-disassembly))
+
+  (defun gdb-disassembly-handler-custom ()
+    (let* ((lines (bindat-get-field (gdb-json-partial-output "src_and_asm_line") 'asm_insns))
+           (address (bindat-get-field (gdb-current-buffer-frame) 'addr))
+           (table (make-gdb-table))
+           (marked-line nil))
+      (dolist (line lines)
+        (let ((line-number (bindat-get-field line 'line)))
+          (if (not line-number)
+              (progn
+                (gdb-table-add-row table
+                                   (list
+                                    (bindat-get-field line 'address)
+                                    (bindat-get-field line 'inst)))
+                (when (string-equal (bindat-get-field line 'address) address)
+                  (setq marked-line (length (gdb-table-rows table)))))
+            (gdb-table-add-row table
+                               (list
+                                (format "Line %s" (bindat-get-field line 'line))
+                                (nox-get-line-from-file
+                                 (bindat-get-field line 'fullname)
+                                 (string-to-number (bindat-get-field line 'line)) t)))
+            (dolist (instr (bindat-get-field line 'line_asm_insn))
+              (gdb-table-add-row table
+                                 (list
+                                  (bindat-get-field instr 'address)
+                                  (bindat-get-field instr 'inst)))
+              (when (string-equal (bindat-get-field instr 'address) address)
+                (setq marked-line (length (gdb-table-rows table))))))))
+      (insert (gdb-table-string table " "))
+      (gdb-disassembly-place-breakpoints)
+      (when marked-line
+        (setq fringe-indicator-alist
+              (if (string-equal gdb-frame-number "0")
+                  nil
+                '((overlay-arrow . hollow-right-triangle))))
+        (let ((window (get-buffer-window (current-buffer) 0)))
+          (set-window-point window (gdb-mark-line marked-line
+                                                  gdb-disassembly-position))))
+      (setq mode-name (gdb-current-context-mode-name
+                       (concat "Disassembly: " (bindat-get-field (gdb-current-buffer-frame) 'func))))))
+
+  (defun gdb-var-update-handler ()
+    (let ((changelist (bindat-get-field (gdb-json-partial-output) 'changelist)))
+      (dolist (var gdb-var-list)
+        (setcar (nthcdr 5 var) nil))
+      (let ((temp-var-list gdb-var-list))
+        (dolist (change changelist)
+          (let* ((varnum (bindat-get-field change 'name))
+                 (var (assoc varnum gdb-var-list))
+                 (new-num (bindat-get-field change 'new_num_children))
+                 (new-value (bindat-get-field change 'value)))
+            (when var
+              (let ((scope (bindat-get-field change 'in_scope))
+                    (has-more (bindat-get-field change 'has_more)))
+                (cond ((string-equal scope "false")
+                       (if gdb-delete-out-of-scope
+                           (gdb-var-delete-1 var varnum)
+                         (setcar (nthcdr 5 var) 'out-of-scope)))
+                      ((string-equal scope "true")
+                       (setcar (nthcdr 6 var) has-more)
+                       (when (and new-value
+                                  (not new-num)
+                                  (or (not has-more)
+                                      (string-equal has-more "0")))
+                         (setcar (nthcdr 4 var) new-value)
+                         (setcar (nthcdr 5 var) 'changed)))
+                      ((string-equal scope "invalid")
+                       (gdb-var-delete-1 var varnum)))))
+            (let ((var-list nil) var1
+                  (children (bindat-get-field change 'new_children)))
+              (when new-num
+                (setq var1 (pop temp-var-list))
+                (while var1
+                  (if (string-equal varnum (car var1))
+                      (let ((new (string-to-number new-num))
+                            (previous (string-to-number (nth 2 var1))))
+                        (setcar (nthcdr 2 var1) new-num)
+                        (push var1 var-list)
+                        (cond
+                         ((> new previous)
+                          ;; Add new children to list.
+                          (dotimes (_ previous)
+                            (push (pop temp-var-list) var-list))
+                          (dolist (child children)
+                            (let ((varchild
+                                   (list (bindat-get-field child 'name)
+                                         (bindat-get-field child 'exp)
+                                         (bindat-get-field child 'numchild)
+                                         (bindat-get-field child 'type)
+                                         (bindat-get-field child 'value)
+                                         'changed
+                                         (bindat-get-field child 'has_more))))
+                              (push varchild var-list))))
+                         ;; Remove deleted children from list.
+                         ((< new previous)
+                          (dotimes (_ new)
+                            (push (pop temp-var-list) var-list))
+                          (dotimes (_ (- previous new))
+                            (pop temp-var-list)))))
+                    (push var1 var-list))
+                  (setq var1 (pop temp-var-list)))
+                (setq gdb-var-list (nreverse var-list))))))))
+    (gdb-speedbar-update)))
+#+END_SRC
+
+*** Git
+#+BEGIN_SRC emacs-lisp
+(use-package magit :ensure
+  :when (executable-find "git")
+  :custom
+  (magit-completing-read-function #'ivy-completing-read)
+  (magit-diff-refine-hunk 'all))
+#+END_SRC
+
+*** Misc
+**** Apropos
+#+BEGIN_SRC emacs-lisp
+(use-package apropos
+  :custom
+  (apropos-do-all t))
+#+END_SRC
+
+**** Calendar and holidays
+#+BEGIN_SRC emacs-lisp
+(use-package calendar
+  :custom
+  (calendar-week-start-day 1)
+  (calendar-location-name "Porto")
+  (calendar-latitude  41.1579)
+  (calendar-longitude -8.6291)
+  :config (setq-default calendar-date-display-form calendar-european-date-display-form))
+
+(use-package holidays
+  :custom
+  (calendar-holidays
+   '((holiday-fixed  1  1    "New Year's Day")
+     (holiday-easter-etc -47 "Carnival")
+     (holiday-easter-etc  -2 "Good Friday")
+     (holiday-easter-etc   0 "Easter")
+     (holiday-fixed  4 25    "Freedom Day")
+     (holiday-fixed  5  1    "Labour Day")
+     (holiday-easter-etc  60 "Corpus Christi")
+     (holiday-fixed  6 10    "Portugal Day")
+     (holiday-fixed  8 15    "Assumption")
+     (holiday-fixed 10  5    "Republic Day")
+     (holiday-fixed 11  1    "All Saints Day")
+     (holiday-fixed 12  1    "Restoration of Independence")
+     (holiday-fixed 12  8    "Immaculate Conception")
+     (holiday-fixed 12 25    "Christmas"))))
+#+END_SRC
+
+**** Help
+#+BEGIN_SRC emacs-lisp
+(use-package help
+  :custom
+  (help-window-select t))
+#+END_SRC
+
+**** Spelling
+#+BEGIN_SRC emacs-lisp
+(use-package ispell
+  :when (executable-find "hunspell")
+  :custom
+  (ispell-program-name "hunspell")
+  (ispell-really-hunspell t))
+#+END_SRC
+
+**** Uniquify
+#+BEGIN_SRC emacs-lisp
+(use-package uniquify
+  :custom
+  (uniquify-buffer-name-style 'forward)
+  (uniquify-separator "/")
+  (uniquify-after-kill-buffer-p t))
+#+END_SRC
+
+**** Time
+#+BEGIN_SRC emacs-lisp
+(use-package time
+  :custom
+  (display-time-24hr-format t)
+  (display-time-load-average-threshold 1.5))
+#+END_SRC
+
+*** Tramp
+#+BEGIN_SRC emacs-lisp
+(use-package tramp
+  :custom
+  (tramp-default-method "ssh")
+  (tramp-backup-directory-alist '(("." . "/tmp/tramp-backup-files/")))
+  (tramp-auto-save-directory   (concat nox-cache-dir "tramp-auto-save/"))
+  (tramp-persistency-file-name (concat nox-cache-dir "tramp-persistency.el"))
+  (tramp-default-proxies-alist '(((regexp-quote (system-name)) nil nil)
+                                 (nil "\\`root\\'" "/ssh:%h:"))))
+#+END_SRC
+
+*** Treemacs
+#+BEGIN_SRC emacs-lisp
+(use-package treemacs :ensure
+  :config
+  (gsetq treemacs-persist-file (concat nox-cache-dir "treemacs-persist")))
+#+END_SRC
+
+** Keybindings
+*** Global keybindings
+#+BEGIN_SRC emacs-lisp
+(general-def
+  "<C-return>"   #'nox/open-line-below
+  "<C-M-return>" #'nox/open-line-above
+  "<backtab>" #'indent-for-tab-command
+  "<C-tab>" #'indent-region
+  "M-o" #'other-window
+  "M-O" (λ! (other-window -1))
+  "C-x C-c" #'nox/exit-emacs)
+
+(nox-leader
+  :infix "f"
+  ""  '(:ignore t :wk "Files")
+  "f" '(find-file :wk "Open")
+  "s" '(save-buffer :wk "Save")
+  "r" '(nox/rename-file-and-buffer :wk "Rename current")
+  "k" '(nox/delete-file-and-buffer :wk "Delete current")
+  "o" '(ff-find-other-file :wk "Switch header/source")
+  "b" '(hexl-find-file :wk "Open binary")
+  "l" '(find-file-literally :wk "Open literally"))
+#+END_SRC
+
+*** Which-key
+#+BEGIN_SRC emacs-lisp
+(use-package which-key :ensure
+  :defer 1
+  :after-call pre-command-hook
+  :config
+  (gsetq which-key-sort-order #'which-key-prefix-then-key-order
+         which-key-sort-uppercase-first nil
+         which-key-add-column-padding 1
+         which-key-max-display-columns nil
+         which-key-min-display-lines 6
+         which-key-side-window-slot -10)
+  (which-key-mode))
+#+END_SRC
