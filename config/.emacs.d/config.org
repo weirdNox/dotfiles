@@ -963,6 +963,11 @@ Disable fringes in the minibuffer window.
            #'nox|no-fringes-in-minibuffer)
 #+END_SRC
 
+*** Modeline
+#+BEGIN_SRC emacs-lisp
+(use-package doom-modeline :quelpa (doom-modeline :repo "seagle0128/doom-modeline" :fetcher github))
+#+END_SRC
+
 *** Appearance setup
 #+BEGIN_SRC emacs-lisp
 (defun nox-setup-appearance (frame)
@@ -971,9 +976,7 @@ Disable fringes in the minibuffer window.
     (load-theme 'doom-tomorrow-night t)
     (nox/change-font)
 
-    (line-number-mode)
-    (display-time-mode)
-    (quiet! (display-battery-mode))
+    (doom-modeline-init)
 
     (when (and (= (count-windows) 1)
                (> (window-width) 100))
