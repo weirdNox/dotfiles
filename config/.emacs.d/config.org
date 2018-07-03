@@ -2467,6 +2467,17 @@ Switch projects and subprojects from NEXT back to TODO"
       (other-window 1))))
 #+END_SRC
 
+*** Deft
+#+BEGIN_SRC emacs-lisp
+(use-package deft :ensure
+  :general (nox-leader "d" '(deft :wk "Deft"))
+  :config
+  (gsetq deft-directory "~/Personal/Org/Deft/"
+         deft-extensions '("org" "txt" "md" "markdown")
+         deft-default-extension (car deft-extensions)
+         deft-org-mode-title-prefix t))
+#+END_SRC
+
 *** Document viewers
 **** PDF Tools
 #+BEGIN_SRC emacs-lisp
