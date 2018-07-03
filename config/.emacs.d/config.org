@@ -616,7 +616,7 @@ symbols.
 
 ** General settings and tweaks
 #+BEGIN_SRC emacs-lisp
-(setq-default
+(gsetq
  ad-redefinition-action 'accept
  auto-window-vscroll nil ;; https://emacs.stackexchange.com/a/28746
  autoload-compute-prefixes nil
@@ -641,49 +641,49 @@ symbols.
 
 **** Quiet startup
 #+BEGIN_SRC emacs-lisp
-(setq-default inhibit-startup-message t
-              inhibit-startup-echo-area-message user-login-name
-              inhibit-default-init t
-              initial-major-mode 'fundamental-mode
-              initial-scratch-message nil)
+(gsetq inhibit-startup-message t
+       inhibit-startup-echo-area-message user-login-name
+       inhibit-default-init t
+       initial-major-mode 'fundamental-mode
+       initial-scratch-message nil)
 (fset #'display-startup-echo-area-message #'ignore)
 #+END_SRC
 
 **** Files
 #+BEGIN_SRC emacs-lisp
-(setq-default abbrev-file-name               (concat nox-local-dir "abbrev.el")
-              auto-save-file-name-transforms (list (list ".*" (concat nox-cache-dir "auto-save/") t))
-              auto-save-list-file-name       (concat nox-cache-dir "autosave-list")
-              backup-directory-alist         (list (cons "." (concat nox-cache-dir "backup/")))
-              custom-file                    (concat nox-local-dir "custom.el")
-              mc/list-file                   (concat nox-etc-dir "mc-lists.el")
-              pcache-directory               (concat nox-cache-dir "pcache/")
-              request-storage-directory      (concat nox-cache-dir "request")
-              server-auth-dir                (concat nox-cache-dir "server/")
-              shared-game-score-directory    (concat nox-etc-dir "shared-game-score/")
-              url-cache-directory            (concat nox-cache-dir "url/")
-              url-configuration-directory    (concat nox-etc-dir "url/"))
+(gsetq abbrev-file-name               (concat nox-local-dir "abbrev.el")
+       auto-save-file-name-transforms (list (list ".*" (concat nox-cache-dir "auto-save/") t))
+       auto-save-list-file-name       (concat nox-cache-dir "autosave-list")
+       backup-directory-alist         (list (cons "." (concat nox-cache-dir "backup/")))
+       custom-file                    (concat nox-local-dir "custom.el")
+       mc/list-file                   (concat nox-etc-dir "mc-lists.el")
+       pcache-directory               (concat nox-cache-dir "pcache/")
+       request-storage-directory      (concat nox-cache-dir "request")
+       server-auth-dir                (concat nox-cache-dir "server/")
+       shared-game-score-directory    (concat nox-etc-dir "shared-game-score/")
+       url-cache-directory            (concat nox-cache-dir "url/")
+       url-configuration-directory    (concat nox-etc-dir "url/"))
 
 (make-directory (cadar auto-save-file-name-transforms) t)
 #+END_SRC
 
 **** History and backup
 #+BEGIN_SRC emacs-lisp
-(setq-default delete-by-moving-to-trash t
-              delete-old-versions t
-              history-length 500
-              kept-new-versions 10
-              kept-old-versions 2
-              version-control t)
+(gsetq delete-by-moving-to-trash t
+       delete-old-versions t
+       history-length 500
+       kept-new-versions 10
+       kept-old-versions 2
+       version-control t)
 #+END_SRC
 
 **** Security
 #+BEGIN_SRC emacs-lisp
-(setq-default gnutls-verify-error (not (getenv "INSECURE"))
-              tls-checktrust gnutls-verify-error
-              tls-program (list "gnutls-cli --x509cafile %t -p %p %h"
-                                "gnutls-cli -p %p %h"
-                                "openssl s_client -connect %h:%p -no_ssl2 -no_ssl3 -ign_eof"))
+(gsetq gnutls-verify-error (not (getenv "INSECURE"))
+       tls-checktrust gnutls-verify-error
+       tls-program (list "gnutls-cli --x509cafile %t -p %p %h"
+                         "gnutls-cli -p %p %h"
+                         "openssl s_client -connect %h:%p -no_ssl2 -no_ssl3 -ign_eof"))
 #+END_SRC
 
 **** Set indirect buffer name
@@ -704,9 +704,9 @@ with functions that require it."
 
 ** OS specific
 #+BEGIN_SRC emacs-lisp
-(setq-default x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)
-              select-enable-clipboard t
-              select-enable-primary t)
+(gsetq x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)
+       select-enable-clipboard t
+       select-enable-primary t)
 
 (cond (IS-MAC (setq mac-command-modifier 'meta
                     mac-option-modifier  'alt
@@ -731,27 +731,27 @@ with functions that require it."
 ** UI
 *** Settings
 #+BEGIN_SRC emacs-lisp
-(setq-default initial-frame-alist '((fullscreen . fullboth)
-                                    (fullscreen-restore . maximized))
-              ring-bell-function #'ignore
-              visible-bell nil
-              custom-safe-themes t
-              frame-inhibit-implied-resXize t
-              cursor-in-non-selected-windows nil
-              highlight-nonselected-windows nil
-              mode-line-default-help-echo nil
-              use-dialog-box nil
-              visible-cursor nil
-              x-stretch-cursor nil
-              pos-tip-internal-border-width 6
-              pos-tip-border-width 1
-              window-resize-pixelwise t
-              frame-resize-pixelwise t
-              echo-keystrokes 0.2
-              window-divider-default-places t
-              window-divider-default-bottom-width 1
-              window-divider-default-right-width 1
-              frame-title-format '("%b - Emacs"))
+(gsetq initial-frame-alist '((fullscreen . fullboth)
+                             (fullscreen-restore . maximized))
+       ring-bell-function #'ignore
+       visible-bell nil
+       custom-safe-themes t
+       frame-inhibit-implied-resXize t
+       cursor-in-non-selected-windows nil
+       highlight-nonselected-windows nil
+       mode-line-default-help-echo nil
+       use-dialog-box nil
+       visible-cursor nil
+       x-stretch-cursor nil
+       pos-tip-internal-border-width 6
+       pos-tip-border-width 1
+       window-resize-pixelwise t
+       frame-resize-pixelwise t
+       echo-keystrokes 0.2
+       window-divider-default-places t
+       window-divider-default-bottom-width 1
+       window-divider-default-right-width 1
+       frame-title-format '("%b - Emacs"))
 
 (fset 'yes-or-no-p 'y-or-n-p)
 (minibuffer-depth-indicate-mode)
@@ -769,10 +769,10 @@ with functions that require it."
 
 **** Better (?) JIT font locking
 #+BEGIN_SRC emacs-lisp
-(setq-default jit-lock-defer-time nil
-              jit-lock-stealth-nice 0.1
-              jit-lock-stealth-time 0.2
-              jit-lock-stealth-verbose nil)
+(gsetq jit-lock-defer-time nil
+       jit-lock-stealth-nice 0.1
+       jit-lock-stealth-time 0.2
+       jit-lock-stealth-verbose nil)
 #+END_SRC
 
 **** Highlight line
@@ -803,11 +803,11 @@ with functions that require it."
 #+BEGIN_SRC emacs-lisp
 (use-package speedbar
   :config
-  (setq-default speedbar-frame-parameters '((minibuffer . t)
-                                            (unsplittable . t)
-                                            (width . 30)
-                                            (border-width . 0)
-                                            (left-fringe . 0))))
+  (gsetq speedbar-frame-parameters '((minibuffer . t)
+                                     (unsplittable . t)
+                                     (width . 30)
+                                     (border-width . 0)
+                                     (left-fringe . 0))))
 
 (use-package server
   :config
@@ -906,24 +906,24 @@ with functions that require it."
 
 (use-package solarized :ensure solarized-theme
   :config
-  (setq-default solarized-use-variable-pitch nil
-                solarized-use-more-italic t
-                solarized-high-contrast-mode-line nil
-                solarized-scale-org-headlines nil)
+  (gsetq solarized-use-variable-pitch nil
+         solarized-use-more-italic t
+         solarized-high-contrast-mode-line nil
+         solarized-scale-org-headlines nil)
 
   (nox-add-customize-theme-hook 'solarized-dark
     (solarized-with-color-variables 'dark
-      (custom-theme-set-faces
-       theme
-       `(org-block
-         ((t (:foreground ,(color-lighten-name base0 5) :background ,(color-lighten-name base03 5))))))))
+                                    (custom-theme-set-faces
+                                     theme
+                                     `(org-block
+                                       ((t (:foreground ,(color-lighten-name base0 5) :background ,(color-lighten-name base03 5))))))))
 
   (nox-add-customize-theme-hook 'solarized-light
     (solarized-with-color-variables 'light
-      (custom-theme-set-faces
-       theme
-       `(org-block
-         ((t (:foreground ,(color-darken-name base0 7) :background ,(color-darken-name base03 7)))))))))
+                                    (custom-theme-set-faces
+                                     theme
+                                     `(org-block
+                                       ((t (:foreground ,(color-darken-name base0 7) :background ,(color-darken-name base03 7)))))))))
 #+END_SRC
 
 **** Extra programming keywords
@@ -965,7 +965,10 @@ Disable fringes in the minibuffer window.
 
 *** Modeline
 #+BEGIN_SRC emacs-lisp
-(use-package doom-modeline :quelpa (doom-modeline :repo "seagle0128/doom-modeline" :fetcher github))
+(use-package doom-modeline :quelpa (doom-modeline :repo "seagle0128/doom-modeline" :branch "develop"
+                                                  :fetcher github)
+  :config
+  (gsetq doom-modeline-enable-word-count t))
 #+END_SRC
 
 *** Appearance setup
@@ -983,7 +986,7 @@ Disable fringes in the minibuffer window.
       (split-window-right))
 
     ;; NOTE(nox): This needs to be here, else it doesn't work
-    (setq-default system-time-locale "C")))
+    (gsetq system-time-locale "C")))
 
 (if (daemonp)
     (add-transient-hook! 'after-make-frame-functions 'nox-setup-appearance)
@@ -996,25 +999,25 @@ Disable fringes in the minibuffer window.
 (use-package ivy :ensure
   :defer 1
   :after-call pre-command-hook
-  :custom
-  (ivy-count-format "(%d/%d) ")
-  (ivy-extra-directories nil)
-  (ivy-fixed-height-minibuffer t)
-  (ivy-format-function #'ivy-format-function-line)
-  (ivy-height 15)
-  (ivy-initial-inputs-alist nil)
-  (ivy-magic-slash-non-match-action nil)
-  (ivy-on-del-error-function nil)
-  (ivy-use-selectable-prompt t)
-  (ivy-use-virtual-buffers t)
-  (ivy-virtual-abbreviate 'full)
-  (ivy-wrap t)
-
+  :general ("C-x b" 'ivy-switch-buffer)
   :config
+  (gsetq ivy-count-format "(%d/%d) "
+         ivy-extra-directories nil
+         ivy-fixed-height-minibuffer t
+         ivy-format-function #'ivy-format-function-line
+         ivy-height 15
+         ivy-initial-inputs-alist nil
+         ivy-magic-slash-non-match-action nil
+         ivy-on-del-error-function nil
+         ivy-use-selectable-prompt t
+         ivy-use-virtual-buffers t
+         ivy-virtual-abbreviate 'full
+         ivy-wrap t)
+
   (ivy-mode))
 #+END_SRC
 
-**** Hydra
+**** Ivy hydra
 #+BEGIN_SRC emacs-lisp
 (use-package ivy-hydra :ensure
   :commands (ivy-dispatching-done-hydra hydra-ivy/body)
@@ -1045,9 +1048,6 @@ Needed for ivy fuzzy matching.
   :defer 1
   :after-call pre-command-hook
   :general
-  ("C-r" 'swiper)
-  ("C-s" 'counsel-grep-or-swiper)
-  ("C-S-s" 'isearch-forward)
   (:keymaps 'ivy-minibuffer-map
    "<return>" 'ivy-alt-done
    "C-j" 'ivy-done)
@@ -1100,26 +1100,26 @@ Needed for ivy fuzzy matching.
 ** Editor
 *** Settings
 #+BEGIN_SRC emacs-lisp
-(setq-default vc-follow-symlinks t
-              save-interprogram-paste-before-kill t
-              enable-recursive-minibuffers t
-              mouse-yank-at-point t)
+(gsetq vc-follow-symlinks t
+       save-interprogram-paste-before-kill t
+       enable-recursive-minibuffers t
+       mouse-yank-at-point t)
 
 #+END_SRC
 
 **** Whitespace, indentation & formatting
 #+BEGIN_SRC emacs-lisp
-(setq-default tab-width 4
-              indent-tabs-mode nil
-              require-final-newline t
-              mode-require-final-newline t
-              sentence-end-double-space nil
-              tab-always-indent t
-              tabify-regexp "^\t* [ \t]+"
-              fill-column 90
-              word-wrap t
-              truncate-lines t
-              truncate-partial-width-windows 70)
+(gsetq tab-width 4
+       indent-tabs-mode nil
+       require-final-newline t
+       mode-require-final-newline t
+       sentence-end-double-space nil
+       tab-always-indent t
+       tabify-regexp "^\t* [ \t]+"
+       fill-column 90
+       word-wrap t
+       truncate-lines t
+       truncate-partial-width-windows 70)
 
 (add-hook! 'before-save-hook #'delete-trailing-whitespace)
 (add-hook! 'after-save-hook #'executable-make-buffer-file-executable-if-script-p)
@@ -1127,23 +1127,23 @@ Needed for ivy fuzzy matching.
 
 **** Scrolling
 #+BEGIN_SRC emacs-lisp
-(setq-default scroll-margin 1
-              hscroll-margin 2
-              hscroll-step 1
-              scroll-conservatively 101
-              scroll-preserve-screen-position t
-              mouse-wheel-scroll-amount '(1)
-              mouse-wheel-progressive-speed nil)
+(gsetq scroll-margin 1
+       hscroll-margin 2
+       hscroll-step 1
+       scroll-conservatively 101
+       scroll-preserve-screen-position t
+       mouse-wheel-scroll-amount '(1)
+       mouse-wheel-progressive-speed nil)
 #+END_SRC
 
 **** Limits
 #+BEGIN_SRC emacs-lisp
-(setq-default kill-ring-max 5000
-              undo-limit (* 20 1024 1024)
-              undo-strong-limit (* 40 1024 1024)
-              undo-outer-limit (* 100 1024 1024)
-              mark-ring-max 5000
-              global-mark-ring-max 5000)
+(gsetq kill-ring-max 5000
+       undo-limit (* 20 1024 1024)
+       undo-strong-limit (* 40 1024 1024)
+       undo-outer-limit (* 100 1024 1024)
+       mark-ring-max 5000
+       global-mark-ring-max 5000)
 #+END_SRC
 
 **** Automatic revert
@@ -1187,7 +1187,10 @@ Needed for ivy fuzzy matching.
 *** Swiper
 #+BEGIN_SRC emacs-lisp
 (use-package swiper :ensure
-  :general ([remap swiper] #'counsel-grep-or-swiper)
+  :general
+  ("C-r" 'swiper
+   "C-s" 'counsel-grep-or-swiper
+   "C-S-s" 'isearch-forward)
   :config
   (add-to-list 'swiper-font-lock-exclude 'c-mode)
   (add-to-list 'swiper-font-lock-exclude 'c++-mode))
@@ -1415,7 +1418,7 @@ fundamental-mode) for performance sake."
         (nox-header-format)))
   (add-hook! c-mode-common #'nox-c-hook)
 
-  (setq-default c-hanging-semi&comma-criteria '((lambda () 'stop)))
+  (gsetq c-hanging-semi&comma-criteria '((lambda () 'stop)))
 
   (c-add-style
    "NoxStyle"
@@ -1700,10 +1703,10 @@ Lisp function does not specify a special indentation."
   (defconst nox-org-agenda-main-file (concat org-directory "GTD.org"))
   (defconst nox-org-agenda-journal-file (concat org-directory "Journal.org"))
   (defconst nox-org-reference-file (concat org-directory "Reference.org"))
-  (setq-default org-agenda-files (list org-default-notes-file nox-org-agenda-main-file)
-                org-refile-targets `((nil . (:maxlevel . 9))
-                                     (org-agenda-files . (:maxlevel . 9))
-                                     (,nox-org-reference-file . (:maxlevel . 9))))
+  (gsetq org-agenda-files (list org-default-notes-file nox-org-agenda-main-file)
+         org-refile-targets `((nil . (:maxlevel . 9))
+                              (org-agenda-files . (:maxlevel . 9))
+                              (,nox-org-reference-file . (:maxlevel . 9))))
 
   (add-hook 'org-mode-hook (lambda () (org-hide-block-all) (turn-on-org-cdlatex)))
 
@@ -1718,7 +1721,7 @@ Lisp function does not specify a special indentation."
     (if (member (org-get-todo-state) org-done-keywords)
         (progn (org-end-of-subtree t t) nil)
       t))
-  (setq-default org-refile-target-verify-function 'nox-verify-refile-target)
+  (gsetq org-refile-target-verify-function 'nox-verify-refile-target)
 
   ;; NOTE(nox): Helper functions
   (defun nox-org-has-subtasks-p (&optional specific-keywords ignore-keywords)
@@ -1829,7 +1832,7 @@ Else, return full list of projects."
   (advice-add 'org-format-latex :around #'nox*org-format-latex)
 
   ;; NOTE(nox): Babel
-  (setq-default org-confirm-babel-evaluate nil)
+  (gsetq org-confirm-babel-evaluate nil)
   (org-babel-do-load-languages
    'org-babel-load-languages
    '((gnuplot . t)
@@ -1956,7 +1959,7 @@ Else, return full list of projects."
                    (member keyword '("WAITING" "HOLD")))
          next-heading))))
 
-  (setq-default
+  (gsetq
    org-agenda-custom-commands
    '(("n" "Agenda"
       ((agenda ""
@@ -2050,7 +2053,7 @@ Else, return full list of projects."
                                  (concat "[" (substring (cdr org-time-stamp-formats) 1 -1) "]"))))
   (add-hook 'org-capture-before-finalize-hook 'nox-org-capture-add-created-property)
 
-  (setq-default
+  (gsetq
    org-capture-templates '(("t" "Tarefa" entry (file "")
                             "* NEXT %i%?" :clock-in t :clock-resume t)
                            ("c" "Calendário" entry (file "")
@@ -2102,13 +2105,13 @@ Switch projects and subprojects from NEXT back to TODO"
             ((and (string= current "NEXT") (nox-org-project-p))
              "TODO"))))
 
-  (setq-default org-clock-in-resume t
-                org-clock-in-switch-to-state 'nox-org-clock-in-switch-state
-                org-clock-out-remove-zero-time-clocks t
-                org-clock-report-include-clocking-task t
-                org-clock-persist t
-                org-clock-persist-file (concat nox-etc-dir "org-clock-save.el")
-                org-clock-history-length 25)
+  (gsetq org-clock-in-resume t
+         org-clock-in-switch-to-state 'nox-org-clock-in-switch-state
+         org-clock-out-remove-zero-time-clocks t
+         org-clock-report-include-clocking-task t
+         org-clock-persist t
+         org-clock-persist-file (concat nox-etc-dir "org-clock-save.el")
+         org-clock-history-length 25)
   (org-clock-persistence-insinuate))
 #+END_SRC
 
@@ -2178,7 +2181,7 @@ Switch projects and subprojects from NEXT back to TODO"
     ("c" +compile "Recompile")
     ("q" nil "Quit"))
 
-  (setq-default
+  (gsetq
    compilation-ask-about-save nil
    compilation-always-kill t
    compilation-scroll-output 'first-error
@@ -2190,8 +2193,8 @@ Switch projects and subprojects from NEXT back to TODO"
   (defvar +compile-info-table (make-hash-table :test 'equal))
 
   (defconst +compile-sh-names (if (eq system-type 'windows-nt)
-                                     '("build-nox.bat" "build.bat")
-                                   '("build-nox.sh" "build.sh")))
+                                  '("build-nox.bat" "build.bat")
+                                '("build-nox.sh" "build.sh")))
   (defconst +compile-makefile-names '("makefile" "Makefile"))
   (defconst +compile-script-names (append +compile-sh-names +compile-makefile-names))
 
@@ -2209,7 +2212,7 @@ Switch projects and subprojects from NEXT back to TODO"
   (defun +compile (arg)
     (interactive "P")
     (let ((default-script (when +compile-info (cons (+compile-info-path +compile-info)
-                                                       +compile-info)))
+                                                    +compile-info)))
           (start-file-name (or (buffer-file-name) ""))
           script script-list buffer)
       (dolist (test-script +compile-script-names (setq script-list (nreverse script-list)))
@@ -2221,8 +2224,8 @@ Switch projects and subprojects from NEXT back to TODO"
                   (or
                    (gethash full-path +compile-info-table)
                    (make-+compile-info :type (if (member test-script +compile-makefile-names) 'make 'sh)
-                                          :path full-path
-                                          :last-time '(0 0 0 0))))
+                                       :path full-path
+                                       :last-time '(0 0 0 0))))
 
             (push (cons (+compile-info-path info) info) script-list)
             (when (and (not +compile-info)
@@ -2540,9 +2543,9 @@ and append it."
                             (:eval (number-to-string (pdf-cache-number-of-pages)))
                             "]"))))
 
-  (setq-default pdf-view-display-size 'fit-page
-                pdf-cache-image-limit 200
-                pdf-view-use-imagemagick t)
+  (gsetq pdf-view-display-size 'fit-page
+         pdf-cache-image-limit 200
+         pdf-view-use-imagemagick t)
   (pdf-tools-install))
 #+END_SRC
 
@@ -2608,17 +2611,17 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     ("M" (lambda () (interactive) (setq nox/gdb-disassembly-show-source
                                         (not nox/gdb-disassembly-show-source))) :exit nil))
 
-  (setq-default gdb-many-windows t
-                gdb-show-main t
-                gdb-display-buffer-other-frame-action
-                '((display-buffer-reuse-window display-buffer-pop-up-frame)
-                  (reusable-frames . visible)
-                  (inhibit-same-window . t)
-                  (pop-up-frame-parameters (minibuffer . t)
-                                           (unsplittable . t)
-                                           (width . 100)
-                                           (fullscreen . fullheight)
-                                           (border-width . 0))))
+  (gsetq gdb-many-windows t
+         gdb-show-main t
+         gdb-display-buffer-other-frame-action
+         '((display-buffer-reuse-window display-buffer-pop-up-frame)
+           (reusable-frames . visible)
+           (inhibit-same-window . t)
+           (pop-up-frame-parameters (minibuffer . t)
+                                    (unsplittable . t)
+                                    (width . 100)
+                                    (fullscreen . fullheight)
+                                    (border-width . 0))))
 
   (add-to-list 'gdb-disassembly-font-lock-keywords '("0x[[:xdigit:]]+" . font-lock-constant-face) t)
   (add-to-list 'gdb-disassembly-font-lock-keywords '("Line.*$" . font-lock-comment-face) t)
@@ -2873,7 +2876,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   (calendar-location-name "Porto")
   (calendar-latitude  41.1579)
   (calendar-longitude -8.6291)
-  :config (setq-default calendar-date-display-form calendar-european-date-display-form))
+  :config (gsetq calendar-date-display-form calendar-european-date-display-form))
 
 (use-package holidays
   :custom
@@ -2942,7 +2945,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 *** Treemacs
 #+BEGIN_SRC emacs-lisp
 (use-package treemacs :ensure
-  :config
+  :init
   (gsetq treemacs-persist-file (concat nox-cache-dir "treemacs-persist")))
 #+END_SRC
 
