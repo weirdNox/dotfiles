@@ -10,10 +10,15 @@
 (let* ((org (expand-file-name "config.org" user-emacs-directory))
        (el  (expand-file-name "config.el" user-emacs-directory))
        (elc (concat el "c")))
-  (cond ((and (file-exists-p elc)
-              (file-newer-than-file-p elc org))
-         (load elc nil t))
+  (when (and (file-exists-p elc)
+             (file-newer-than-file-p org elc))
+    (message "Byte compiled init is old - deleting...")
+    (dolist (file (directory-files user-emacs-directory nil ".*\.elc"))
+      (delete-file (expand-file-name file user-emacs-directory))))
+
+  (cond ((file-exists-p elc) (load elc nil t))
         (t
+         (message "Loading config.el...")
          (when (file-newer-than-file-p org el)
            (message "Tangling the literate config...")
            (unless (call-process "emacs" nil nil nil

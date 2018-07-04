@@ -584,17 +584,17 @@ symbols.
 **** Setup Quelpa
 #+BEGIN_SRC emacs-lisp
 (use-package quelpa :ensure
-  :custom
-  (quelpa-dir (concat nox-cache-dir "quelpa/"))
-  (quelpa-melpa-recipe-stores nil)
-  (quelpa-checkout-melpa-p nil)
-  (quelpa-update-melpa-p nil)
-  (quelpa-self-upgrade-p nil)
-  (quelpa-verbose nox-debug-mode))
+  :config
+  (setq-default quelpa-dir (concat nox-packages-dir "quelpa-cache/")
+                quelpa-verbose nox-debug-mode
+		        quelpa-melpa-recipe-stores nil
+		        quelpa-checkout-melpa-p nil
+		        quelpa-update-melpa-p nil
+		        quelpa-self-upgrade-p nil))
 
 (use-package quelpa-use-package :ensure
   :demand
-  :custom (quelpa-use-package-inhibit-loading-quelpa t))
+  :config (setq-default quelpa-use-package-inhibit-loading-quelpa t))
 #+END_SRC
 
 *** Base packages
@@ -647,6 +647,13 @@ symbols.
        initial-major-mode 'fundamental-mode
        initial-scratch-message nil)
 (fset #'display-startup-echo-area-message #'ignore)
+
+(defun nox*server-execute-quiet (orig-fn &rest args)
+  "Shup ut `server-execute' once."
+  (quiet! (apply orig-fn args))
+  (advice-remove 'server-execute 'nox*server-execute-quiet))
+(when (daemonp)
+  (advice-add 'server-execute :around 'nox*server-execute-quiet))
 #+END_SRC
 
 **** Files
@@ -778,6 +785,7 @@ with functions that require it."
 **** Highlight line
 #+BEGIN_SRC emacs-lisp
 (use-package hl-line
+  :ghook ('nox-post-init-hook #'global-hl-line-mode)
   :config
   (gsetq hl-line-sticky-flag nil
          global-hl-line-sticky-flag nil))
@@ -825,6 +833,16 @@ with functions that require it."
                     ("Inconsolata" . 13) ("Source Code Pro" . 11))
   "List of fonts and sizes. The first one available will be used.")
 
+(defvar nox-font-faces-changed nil
+  "List ARGS passed to custom-set-faces, in order to fix font.")
+
+(defun nox-font-set-faces (&rest args)
+  "Override faces' attributes in the `user' theme.
+These settings will remain until a new font is loaded.
+ARGS are the same as in `custom-set-faces'."
+  (push args nox-font-faces-changed)
+  (apply 'custom-set-faces args))
+
 (defun nox/change-font ()
   (interactive)
   (let* (available-fonts font-name font-size font-setting)
@@ -849,9 +867,12 @@ with functions that require it."
     (set-frame-font font-setting nil t)
     (add-to-list 'default-frame-alist (cons 'font font-setting))
 
+    (dolist (args nox-font-faces-changed)
+      (apply 'custom-theme-reset-faces 'user args))
+    (setq nox-font-faces-changed nil)
+
     (cond ((string= font-name "PragmataPro")
-           (custom-theme-set-faces
-            'user `(org-table ((t (:family ,(format "PragmataPro Mono-%d" font-size))))))))))
+           (nox-font-set-faces `(org-table ((t (:family ,(format "PragmataPro Mono-%d" font-size))))))))))
 #+END_SRC
 
 *** Theme
@@ -859,10 +880,22 @@ with functions that require it."
 #+BEGIN_SRC emacs-lisp
 (defvar nox-customize-theme-hook nil
   "Hook for theme customization, called with the theme name.")
-(advice-add 'enable-theme :after
-            (lambda (theme)
-              (run-hook-with-args-until-success
-               'nox-customize-theme-hook (or theme (car custom-enabled-themes)))))
+
+(defvar nox-theme-faces-changed nil
+  "List ARGS passed to custom-set-faces, in order to fix theme.")
+
+(defun nox*customize-theme (theme)
+  (unless (eq theme 'user)
+    (dolist (enabled-theme custom-enabled-themes)
+      (unless (eq enabled-theme theme) (disable-theme enabled-theme))))
+
+  (dolist (args nox-theme-faces-changed)
+    (apply 'custom-theme-reset-faces 'user args))
+  (setq nox-theme-faces-changed nil)
+
+  (run-hook-with-args-until-success 'nox-customize-theme-hook (or theme
+                                                                  (car custom-enabled-themes))))
+(advice-add 'enable-theme :after #'nox*customize-theme)
 
 (defmacro nox-add-customize-theme-hook (target-theme &rest body)
   "TARGET-THEME may be a list, a symbol or a regexp."
@@ -875,23 +908,28 @@ with functions that require it."
                        `(when (string-match ,target-theme (symbol-name theme)) ,@body))
                       ((listp (eval target-theme))
                        `(when (memq theme ,target-theme) ,@body))))))
-#+END_SRC
 
-**** Theme hooks
-#+BEGIN_SRC emacs-lisp
-(defvar nox-load-theme-hook nil
-  "Hooks to run when the theme is loaded")
-(defun nox*load-theme-hooks (&rest _) (run-hooks 'nox-load-theme-hook))
-(advice-add #'load-theme :after #'nox*load-theme-hooks)
+(defun nox-theme-set-faces (&rest args)
+  "Override faces' attributes in the `user' theme.
+These settings will remain until a new theme is loaded.
+ARGS are the same as in `custom-set-faces'."
+  (push args nox-theme-faces-changed)
+  (apply 'custom-set-faces args))
 #+END_SRC
 
 **** Themes
 #+BEGIN_SRC emacs-lisp
 (use-package doom-themes :ensure
   :config
+  (gsetq doom-one-brighter-comments t
+         doom-one-comment-bg nil)
+
   (after! org (doom-themes-org-config))
 
   (nox-add-customize-theme-hook "^doom-"
+    (nox-theme-set-faces '(org-level-1 ((t (:height 1.0))))
+                         '(org-level-2 ((t (:height 1.0))))
+                         '(org-level-3 ((t (:height 1.0)))))
     (custom-theme-set-faces
      theme
      '(org-special-keyword ((t (:inherit shadow))))
@@ -907,23 +945,23 @@ with functions that require it."
 (use-package solarized :ensure solarized-theme
   :config
   (gsetq solarized-use-variable-pitch nil
-         solarized-use-more-italic t
-         solarized-high-contrast-mode-line nil
-         solarized-scale-org-headlines nil)
+	     solarized-use-more-italic t
+	     solarized-high-contrast-mode-line nil
+	     solarized-scale-org-headlines nil)
 
   (nox-add-customize-theme-hook 'solarized-dark
     (solarized-with-color-variables 'dark
-                                    (custom-theme-set-faces
-                                     theme
-                                     `(org-block
-                                       ((t (:foreground ,(color-lighten-name base0 5) :background ,(color-lighten-name base03 5))))))))
+				                    (custom-theme-set-faces
+				                     theme
+				                     `(org-block
+				                       ((t (:foreground ,(color-lighten-name base0 5) :background ,(color-lighten-name base03 5))))))))
 
   (nox-add-customize-theme-hook 'solarized-light
     (solarized-with-color-variables 'light
-                                    (custom-theme-set-faces
-                                     theme
-                                     `(org-block
-                                       ((t (:foreground ,(color-darken-name base0 7) :background ,(color-darken-name base03 7)))))))))
+				                    (custom-theme-set-faces
+				                     theme
+				                     `(org-block
+				                       ((t (:foreground ,(color-darken-name base0 7) :background ,(color-darken-name base03 7)))))))))
 #+END_SRC
 
 **** Extra programming keywords
@@ -975,8 +1013,7 @@ Disable fringes in the minibuffer window.
 #+BEGIN_SRC emacs-lisp
 (defun nox-setup-appearance (frame)
   (with-selected-frame frame
-    (mapc #'disable-theme custom-enabled-themes)
-    (load-theme 'doom-tomorrow-night t)
+    (load-theme 'doom-one t)
     (nox/change-font)
 
     (doom-modeline-init)
@@ -1588,207 +1625,54 @@ Lisp function does not specify a special indentation."
 #+END_SRC
 
 ** Org Mode
-*** General configuration
+*** Base configuration
 #+BEGIN_SRC emacs-lisp
 (use-package org :ensure
   :general
-  (nox-leader
-    :infix "o"
+  (nox-leader :infix "o"
     ""  '(:ignore t :wk "Org")
     "l" '(org-store-link :wk "Store link"))
 
-  :custom
-  (org-modules '(org-habit org-id org-protocol org-timer))
-
-  ;; NOTE(nox): Directories
-  (org-directory "~/Personal/Org/")
-  (org-default-notes-file (concat org-directory "Inbox.org"))
-
-  ;; NOTE(nox): Appearance
-  (org-startup-indented t)
-  (org-startup-with-inline-images t)
-  (org-startup-with-latex-preview t)
-  (org-pretty-entities t)
-  (org-image-actual-width '(700))
-  (org-fontify-quote-and-verse-blocks t)
-
-  ;; NOTE(nox): Behavior
-  (org-tags-column -92)
-  (org-catch-invisible-edits 'smart)
-  (org-return-follows-link t)
-  (org-list-allow-alphabetical t)
-  (org-loop-over-headlines-in-active-region t)
-  (org-blank-before-new-entry '((heading . t) (plain-list-item . auto)))
-
-  ;; NOTE(nox): Tasks and states
-  (org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)")
-                       (sequence "HOLD(h@/!)" "WAITING(w@/!)" "|" "CANCELLED(c@/!)")))
-  (org-todo-state-tags-triggers '((todo ("CANCELLED"))
-                                  (done ("HOLD") ("WAITING"))
-                                  ("TODO" ("HOLD") ("WAITING"))
-                                  ("NEXT" ("HOLD") ("WAITING"))
-                                  ("DONE" ("CANCELLED"))
-                                  ("WAITING" ("WAITING" . t) ("HOLD"))
-                                  ("HOLD" ("WAITING") ("HOLD" . t))
-                                  ("CANCELLED" ("CANCELLED" . t))))
-  (org-treat-S-cursor-todo-selection-as-state-change nil)
-  (org-columns-default-format "%80ITEM(Task) %10Effort(Effort){:} %10CLOCKSUM")
-  (org-global-properties '(("Effort_ALL" . "0:15 0:30 0:45 1:00 1:30 2:00 3:00 4:00 5:00 7:00")))
-
-  ;; NOTE(nox): Refiling
-  (org-refile-use-outline-path 'file)
-  (org-outline-path-complete-in-steps nil)
-  (org-refile-allow-creating-parent-nodes 'confirm)
-
-  ;; NOTE(nox): Logging
-  (org-log-done 'time)
-  (org-log-reschedule 'time)
-  (org-log-into-drawer t)
-
-  ;; NOTE(nox): LaTeX
-  (org-preview-latex-default-process 'dvisvgm)
-  (org-latex-packages-alist '(("" "tikz" t) ("american,siunitx,smartlabels" "circuitikz" t) ("" "mathtools" t)))
-  (org-latex-preview-ltxpng-directory (concat nox-cache-dir "org-latex/"))
-  (org-format-latex-options '(:foreground default :background default :scale 1.7 :html-foreground "Black"
-                              :html-background "Transparent" :html-scale 1.0
-                              :matchers ("begin" "$1" "$" "$$" "\\(" "\\[")))
-  (org-preview-latex-process-alist
-   '((dvisvgm :programs ("latex" "dvisvgm")
-              :description "dvi > svg"
-              :message "you need to install the programs: latex and dvisvgm."
-              :use-xcolor t
-              :image-input-type "dvi"
-              :image-output-type "svg"
-              :image-size-adjust (1.7 . 1.5)
-              :latex-compiler ("latex -interaction nonstopmode -output-directory %o %f")
-              :image-converter ("dvisvgm %f -n -b 1 -c %S -o %O"))
-     (imagemagick :programs ("latex" "convert")
-                  :description "pdf > png"
-                  :message "you need to install the programs: latex and imagemagick."
-                  :use-xcolor t
-                  :image-input-type "pdf"
-                  :image-output-type "png"
-                  :image-size-adjust (1.0 . 1.0)
-                  :latex-compiler ("pdflatex -interaction nonstopmode -output-directory %o %f")
-                  :image-converter ("convert -density %D -trim -antialias %f -quality 100 %O"))
-     (dvipng :programs ("latex" "dvipng")
-             :description "dvi > png"
-             :message "you need to install the programs: latex and dvipng."
-             :image-input-type "dvi"
-             :image-output-type "png"
-             :image-size-adjust (1.0 . 1.0)
-             :latex-compiler ("latex -interaction nonstopmode -output-directory %o %f")
-             :image-converter ("dvipng -fg %F -bg %B -D %D -T tight -o %O %f"))))
-  (org-format-latex-header
-   "\\documentclass{article}
-\\usepackage[usenames]{color}
-[PACKAGES]
-[DEFAULT-PACKAGES]
-\\pagestyle{empty}
-\\setlength{\\textwidth}{\\paperwidth}
-\\addtolength{\\textwidth}{-3cm}
-\\setlength{\\oddsidemargin}{1.5cm}
-\\addtolength{\\oddsidemargin}{-2.54cm}
-\\setlength{\\evensidemargin}{\\oddsidemargin}
-\\setlength{\\textheight}{\\paperheight}
-\\addtolength{\\textheight}{-\\headheight}
-\\addtolength{\\textheight}{-\\headsep}
-\\addtolength{\\textheight}{-\\footskip}
-\\addtolength{\\textheight}{-3cm}
-\\setlength{\\topmargin}{1.5cm}
-\\addtolength{\\topmargin}{-2.54cm}
-\\tikzset{every picture/.style={color=fg}}")
-
   :config
-  (defconst nox-org-agenda-main-file (concat org-directory "GTD.org"))
-  (defconst nox-org-agenda-journal-file (concat org-directory "Journal.org"))
-  (defconst nox-org-reference-file (concat org-directory "Reference.org"))
-  (gsetq org-agenda-files (list org-default-notes-file nox-org-agenda-main-file)
-         org-refile-targets `((nil . (:maxlevel . 9))
-                              (org-agenda-files . (:maxlevel . 9))
-                              (,nox-org-reference-file . (:maxlevel . 9))))
+  (gsetq org-modules '(org-habit org-id org-protocol org-timer))
+#+END_SRC
 
-  (add-hook 'org-mode-hook (lambda () (org-hide-block-all) (turn-on-org-cdlatex)))
+**** Directories and files
+#+BEGIN_SRC emacs-lisp
+(gsetq org-directory "~/Personal/Org/")
+(defconst nox-org-agenda-file (concat org-directory "Agenda.org"))
+(defconst nox-org-journal-file (concat org-directory "Journal.org"))
+(gsetq org-default-notes-file (concat org-directory "Inbox.org")
+       org-agenda-files (list nox-org-agenda-file))
+#+END_SRC
 
-  (defun nox-org-summary-todo (n-done n-not-done)
-    "Switch entry to DONE when all subentries are done, to TODO otherwise."
-    (let (org-log-done org-log-states) (org-todo (if (= n-not-done 0) "DONE" "TODO"))))
-  (add-hook 'org-after-todo-statistics-hook 'nox-org-summary-todo)
+**** Appearance
+#+BEGIN_SRC emacs-lisp
+(gsetq org-startup-indented t
+       org-startup-with-inline-images t
+       org-startup-with-latex-preview t
+       org-pretty-entities t
+       org-image-actual-width '(700)
+       org-fontify-quote-and-verse-blocks t)
 
-  (add-hook! 'org-after-refile-insert-hook (org-up-heading-safe) (org-update-statistics-cookies nil))
+(add-hook! org-mode #'org-hide-block-all)
+#+END_SRC
 
-  (defun nox-verify-refile-target ()
-    (if (member (org-get-todo-state) org-done-keywords)
-        (progn (org-end-of-subtree t t) nil)
-      t))
-  (gsetq org-refile-target-verify-function 'nox-verify-refile-target)
+**** Behavior
+#+BEGIN_SRC emacs-lisp
+(gsetq  org-tags-column -92
+        org-catch-invisible-edits 'smart
+        org-return-follows-link t
+        org-list-allow-alphabetical t
+        org-loop-over-headlines-in-active-region t
+        org-blank-before-new-entry '((heading . t) (plain-list-item . auto)))
 
-  ;; NOTE(nox): Helper functions
-  (defun nox-org-has-subtasks-p (&optional specific-keywords ignore-keywords)
-    "Any heading with subtasks.
-When SPECIFIC-KEYWORDS is nil, returns t or `all-planned' when has subtasks, and nil otherwise.
-When it is a list of keywords, returns (HAS-SUBTASKS . HAS-SPECIFIC).
-HAS-SPECIFIC is t or `all-planned'.
-`all-planned' is returned when every subtask found will not be shown in the agenda because of
-scheduling/deadline.
-Subtrees whose parent todo keyword is in IGNORE-KEYWORDS are ignored."
-    (org-with-wide-buffer
-     (let ((subtree-end (save-excursion (org-end-of-subtree t)))
-           has-subtasks has-specific)
-       (forward-line)
-       (while (and (< (point) subtree-end)
-                   (or (not (eq has-subtasks t))
-                       (and specific-keywords (not (eq has-specific t))))
-                   (re-search-forward org-todo-line-regexp subtree-end t))
-         (let ((keyword (match-string 2))
-               (planned (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item)))
-           (if (member keyword ignore-keywords)
-               (org-end-of-subtree t)
-             (if (member keyword specific-keywords)
-                 (setq has-subtasks (or (eq has-subtasks t) (if planned 'all-planned t))
-                       has-specific (or (eq has-specific t) (if planned 'all-planned t)))
-               (when (member keyword org-todo-keywords-1)
-                 (setq has-subtasks (or (eq has-subtasks t) (if planned 'all-planned t))))))))
-       (if specific-keywords
-           (cons has-subtasks has-specific)
-         has-subtasks))))
+(defun nox|org-summary-todo (n-done n-not-done)
+  "Switch entry to DONE when all subentries are done, to TODO otherwise."
+  (let (org-log-done org-log-states) (org-todo (if (= n-not-done 0) "DONE" "TODO"))))
+(add-hook! 'org-after-todo-statistics-hook #'nox|org-summary-todo)
 
-  (defun nox-org-project-p ()
-    "Any task that has subtasks."
-    (and (org-get-todo-state) (nox-org-has-subtasks-p)))
-
-  (defun nox-org-not-project-p ()
-    "Any task that doesn't have subtasks."
-    (and (org-get-todo-state) (not (nox-org-has-subtasks-p))))
-
-  (defun nox-org-parent-projects (&optional first)
-    "Get projects that enclose this heading, each specified by (NAME . POS).
-When FIRST is non-nil, return only the closest parent project that contains this heading.
-Else, return full list of projects."
-    (let (projects components)
-      (org-with-wide-buffer
-       (org-back-to-heading 'invisible-ok)
-       (while (and (not (and first projects))
-                   (org-up-heading-safe))
-         (setq components (org-heading-components))
-         (when (org-get-todo-state)
-           (push (cons (substring-no-properties (org-get-heading t t t t)) (point)) projects))))
-      (if first (car projects) projects)))
-
-  (defun nox-org-project-status ()
-    "Return nil when heading is not project. When it is, returns `done', `stuck', `planned' or `has-next'."
-    (let ((todo-state (org-get-todo-state))
-          subtasks-p)
-      (when todo-state
-        (setq subtasks-p (nox-org-has-subtasks-p '("NEXT") '("CANCELLED" "HOLD")))
-        (when (car subtasks-p)
-          (if (member todo-state org-done-keywords)
-              'done
-            (if (cdr subtasks-p)
-                (if (eq (cdr subtasks-p) 'all-planned) 'planned 'has-next)
-              'stuck))))))
-
-  (defun nox-org-project-set-next-after-done ()
+(defun nox|org-project-set-next-after-done ()
     "Ask to TODO to NEXT when changing previous states to DONE."
     (let ((done-keywords (or org-done-keywords org-done-keywords-for-agenda))
           target break)
@@ -1815,45 +1699,223 @@ Else, return full list of projects."
            (when (y-or-n-p (concat "Do you want to set " (cdr target) " to NEXT?"))
              (goto-char (car target))
              (org-todo "NEXT")))))))
-  (add-hook 'org-after-todo-state-change-hook #'nox-org-project-set-next-after-done)
+  (add-hook 'org-after-todo-state-change-hook #'nox|org-project-set-next-after-done)
+#+END_SRC
 
-  (defun nox|org-offer-all-agenda-tags () (setq-local org-complete-tags-always-offer-all-agenda-tags t))
+**** Tasks and states
+#+BEGIN_SRC emacs-lisp
+(gsetq
+ org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)")
+                     (sequence "HOLD(h@/!)" "WAITING(w@/!)" "|" "CANCELLED(c@/!)"))
+ org-treat-S-cursor-todo-selection-as-state-change nil
+ org-columns-default-format "%80ITEM(Task) %10Effort(Effort){:} %10CLOCKSUM"
+ org-global-properties '(("Effort_ALL" . "0:15 0:30 0:45 1:00 1:30 2:00 3:00 4:00 5:00 7:00")))
+#+END_SRC
 
-  ;; NOTE(nox): Get different latex fragments for different themes
-  (defvar nox-org-sha-salt nil)
-  (defun nox*org-format-latex (orig-function &rest args)
-    (setq nox-org-sha-salt (concat (face-attribute 'default :foreground)
-                                   (face-attribute 'default :background)))
-    (cl-letf (((symbol-function 'sha1)
-               (lambda (object &optional start end binary)
-                 (secure-hash 'sha1 (concat object nox-org-sha-salt)
-                              start end binary))))
-      (apply orig-function args)))
-  (advice-add 'org-format-latex :around #'nox*org-format-latex)
+**** Refiling
+#+BEGIN_SRC emacs-lisp
+(gsetq org-refile-use-outline-path 'file
+       org-outline-path-complete-in-steps nil
+       org-refile-allow-creating-parent-nodes 'confirm
+       org-refile-targets `((nil . (:maxlevel . 9))
+                            (org-agenda-files . (:maxlevel . 9))))
 
-  ;; NOTE(nox): Babel
-  (gsetq org-confirm-babel-evaluate nil)
-  (org-babel-do-load-languages
-   'org-babel-load-languages
-   '((gnuplot . t)
-     (octave . t)
-     (python . t)
-     (latex . t)
-     (shell . t)
-     (calc . t)))
+(add-hook! 'org-after-refile-insert-hook
+  (org-up-heading-safe)
+  (org-update-statistics-cookies nil))
 
-  (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images)
+(defun nox-verify-refile-target ()
+  (if (member (org-get-todo-state) org-done-keywords)
+      (progn (org-end-of-subtree t t) nil)
+    t))
+(gsetq org-refile-target-verify-function #'nox-verify-refile-target)
+#+END_SRC
 
-  ;; NOTE(nox): PDF Tools support
-  (org-link-set-parameters "pdfview"
-                           :follow 'org-pdfview-open
-                           :complete 'org-pdfview-complete-link
-                           :store 'org-pdfview-store-link))
+**** Logging
+#+BEGIN_SRC emacs-lisp
+(gsetq org-log-done 'time
+       org-log-reschedule 'time
+       org-log-into-drawer t)
+#+END_SRC
 
-(use-package org-attach
-  :custom
-  (org-attach-directory "Recursos/attach/")
-  (org-attach-method 'mv))
+**** Latex
+#+BEGIN_SRC emacs-lisp
+(gsetq
+ org-preview-latex-default-process 'dvisvgm
+ org-latex-packages-alist '(("" "tikz" t) ("american,siunitx,smartlabels" "circuitikz" t)
+                            ("" "mathtools" t))
+ org-latex-preview-ltxpng-directory (concat nox-cache-dir "org-latex/")
+ org-format-latex-options '(:foreground default :background default :scale 1.7 :html-foreground "Black"
+                            :html-background "Transparent" :html-scale 1.0
+                            :matchers ("begin" "$1" "$" "$$" "\\(" "\\["))
+ org-preview-latex-process-alist
+ '((dvisvgm :programs ("latex" "dvisvgm")
+            :description "dvi > svg"
+            :message "you need to install the programs: latex and dvisvgm."
+            :use-xcolor t
+            :image-input-type "dvi"
+            :image-output-type "svg"
+            :image-size-adjust (1.7 . 1.5)
+            :latex-compiler ("latex -interaction nonstopmode -output-directory %o %f")
+            :image-converter ("dvisvgm %f -n -b 1 -c %S -o %O"))
+   (imagemagick :programs ("latex" "convert")
+                :description "pdf > png"
+                :message "you need to install the programs: latex and imagemagick."
+                :use-xcolor t
+                :image-input-type "pdf"
+                :image-output-type "png"
+                :image-size-adjust (1.0 . 1.0)
+                :latex-compiler ("pdflatex -interaction nonstopmode -output-directory %o %f")
+                :image-converter ("convert -density %D -trim -antialias %f -quality 100 %O"))
+   (dvipng :programs ("latex" "dvipng")
+           :description "dvi > png"
+           :message "you need to install the programs: latex and dvipng."
+           :image-input-type "dvi"
+           :image-output-type "png"
+           :image-size-adjust (1.0 . 1.0)
+           :latex-compiler ("latex -interaction nonstopmode -output-directory %o %f")
+           :image-converter ("dvipng -fg %F -bg %B -D %D -T tight -o %O %f")))
+ org-format-latex-header
+ "\\documentclass{article}
+\\usepackage[usenames]{color}
+[PACKAGES]
+[DEFAULT-PACKAGES]
+\\pagestyle{empty}
+\\setlength{\\textwidth}{\\paperwidth}
+\\addtolength{\\textwidth}{-3cm}
+\\setlength{\\oddsidemargin}{1.5cm}
+\\addtolength{\\oddsidemargin}{-2.54cm}
+\\setlength{\\evensidemargin}{\\oddsidemargin}
+\\setlength{\\textheight}{\\paperheight}
+\\addtolength{\\textheight}{-\\headheight}
+\\addtolength{\\textheight}{-\\headsep}
+\\addtolength{\\textheight}{-\\footskip}
+\\addtolength{\\textheight}{-3cm}
+\\setlength{\\topmargin}{1.5cm}
+\\addtolength{\\topmargin}{-2.54cm}
+\\tikzset{every picture/.style={color=fg}}")
+
+(add-hook! org-mode #'turn-on-org-cdlatex)
+#+END_SRC
+
+***** Get different Latex fragments for different themes
+#+BEGIN_SRC emacs-lisp
+(defvar nox-org-sha-salt nil)
+(defun nox*org-format-latex (orig-function &rest args)
+  (setq nox-org-sha-salt (concat (face-attribute 'default :foreground)
+                                 (face-attribute 'default :background)))
+  (cl-letf (((symbol-function 'sha1)
+             (lambda (object &optional start end binary)
+               (secure-hash 'sha1 (concat object nox-org-sha-salt)
+                            start end binary))))
+    (apply orig-function args)))
+(advice-add 'org-format-latex :around #'nox*org-format-latex)
+#+END_SRC
+
+**** Babel
+#+BEGIN_SRC emacs-lisp
+(gsetq org-confirm-babel-evaluate nil)
+(org-babel-do-load-languages
+ 'org-babel-load-languages
+ '((gnuplot . t)
+   (octave . t)
+   (python . t)
+   (latex . t)
+   (shell . t)
+   (calc . t)))
+
+(add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images)
+#+END_SRC
+
+**** Helper functions
+***** Subtasks
+#+BEGIN_SRC emacs-lisp
+(defun nox-org-has-subtasks-p (&optional specific-keywords ignore-keywords)
+  "Any heading with subtasks.
+When SPECIFIC-KEYWORDS is nil, returns t or `all-planned' when has subtasks, and nil otherwise.
+When it is a list of keywords, returns (HAS-SUBTASKS . HAS-SPECIFIC).
+HAS-SPECIFIC is t or `all-planned'.
+`all-planned' is returned when every subtask found will not be shown in the agenda because of
+scheduling/deadline.
+Subtrees whose parent todo keyword is in IGNORE-KEYWORDS are ignored."
+  (org-with-wide-buffer
+   (let ((subtree-end (save-excursion (org-end-of-subtree t)))
+         has-subtasks has-specific)
+     (forward-line)
+     (while (and (< (point) subtree-end)
+                 (or (not (eq has-subtasks t))
+                     (and specific-keywords (not (eq has-specific t))))
+                 (re-search-forward org-todo-line-regexp subtree-end t))
+       (let ((keyword (match-string 2))
+             (planned (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item)))
+         (if (member keyword ignore-keywords)
+             (org-end-of-subtree t)
+           (if (member keyword specific-keywords)
+               (setq has-subtasks (or (eq has-subtasks t) (if planned 'all-planned t))
+                     has-specific (or (eq has-specific t) (if planned 'all-planned t)))
+             (when (member keyword org-todo-keywords-1)
+               (setq has-subtasks (or (eq has-subtasks t) (if planned 'all-planned t))))))))
+     (if specific-keywords
+         (cons has-subtasks has-specific)
+       has-subtasks))))
+#+END_SRC
+
+***** Projects
+#+BEGIN_SRC emacs-lisp
+(defun nox-org-project-p ()
+  "Any task that has subtasks."
+  (and (org-get-todo-state) (nox-org-has-subtasks-p)))
+
+(defun nox-org-not-project-p ()
+  "Any task that doesn't have subtasks."
+  (and (org-get-todo-state) (not (nox-org-has-subtasks-p))))
+
+(defun nox-org-parent-projects (&optional first)
+  "Get projects that enclose this heading, each specified by (NAME . POS).
+When FIRST is non-nil, return only the closest parent project that contains this heading.
+Else, return full list of projects."
+  (let (projects components)
+    (org-with-wide-buffer
+     (org-back-to-heading 'invisible-ok)
+     (while (and (not (and first projects))
+                 (org-up-heading-safe))
+       (setq components (org-heading-components))
+       (when (org-get-todo-state)
+         (push (cons (substring-no-properties (org-get-heading t t t t)) (point)) projects))))
+    (if first (car projects) projects)))
+
+(defun nox-org-project-status ()
+  "Return nil when heading is not project. When it is, returns `done', `stuck', `planned' or `has-next'."
+  (let ((todo-state (org-get-todo-state))
+        subtasks-p)
+    (when todo-state
+      (setq subtasks-p (nox-org-has-subtasks-p '("NEXT") '("CANCELLED" "HOLD")))
+      (when (car subtasks-p)
+        (if (member todo-state org-done-keywords)
+            'done
+          (if (cdr subtasks-p)
+              (if (eq (cdr subtasks-p) 'all-planned) 'planned 'has-next)
+            'stuck))))))
+#+END_SRC
+
+***** Misc
+#+BEGIN_SRC emacs-lisp
+(defun nox|org-offer-all-agenda-tags ()
+  (setq-local org-complete-tags-always-offer-all-agenda-tags t))
+#+END_SRC
+
+**** PDF Tools support
+#+BEGIN_SRC emacs-lisp
+(org-link-set-parameters
+ "pdfview"
+ :follow 'org-pdfview-open
+ :complete 'org-pdfview-complete-link
+ :store 'org-pdfview-store-link)
+#+END_SRC
+
+**** End
+#+BEGIN_SRC emacs-lisp
+) ;; use-package
 
 (use-package org-element :commands org-element-update-syntax)
 #+END_SRC
@@ -1866,30 +1928,6 @@ Else, return full list of projects."
 
   :config
   (defun nox/org-agenda-finalize ()
-    ;; NOTE(nox): Remove empty blocks
-    (save-excursion
-      (goto-char (point-min))
-      (let ((prev (if (get-text-property (point-min) 'org-agenda-structural-header)
-                      (point-min)
-                    (next-single-property-change (point-min) 'org-agenda-structural-header)))
-            next)
-        (while (and prev (/= prev (point-max)))
-          (setq next
-                (or (next-single-property-change (next-single-property-change prev 'org-agenda-structural-header)
-                                                 'org-agenda-structural-header)
-                    (point-max)))
-          (if (or (and (< next (point-max)) (< (count-lines prev next) 4))
-                  (and (= next (point-max)) (< (count-lines prev next) 2)))
-              (delete-region prev next)
-            (setq prev next)))))
-
-    ;; NOTE(nox): Turn root projects bold
-    (save-excursion
-      (while (search-forward (char-to-string ?\u200B) nil t)
-        (let ((overlay (make-overlay (line-beginning-position) (1+ (line-end-position)))))
-          (overlay-put overlay 'face '(:weight bold)))))
-
-    ;; NOTE(nox): Check for sync conflicts!
     (catch 'break
       (message
        (dolist (file (directory-files org-directory))
@@ -1897,129 +1935,17 @@ Else, return full list of projects."
            (message-box "AVISO: Há conflitos de sincronização!")
            (throw 'break t))))))
 
-  (defun nox/org-agenda-stuck-skip-function ()
-    (org-with-wide-buffer
-     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
-       (when (not (eq (nox-org-project-status) 'stuck)) next-heading))))
-
-  (defun nox/org-agenda-projects-next-skip-function ()
-    (org-with-wide-buffer
-     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max))))
-           (project-status (nox-org-project-status)))
-       (if (eq project-status 'done)
-           (org-end-of-subtree t)
-         (if (or (eq project-status 'has-next)
-                 (and (string= (org-get-todo-state) "NEXT")
-                      (nox-org-parent-projects t)))
-             (when (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item)
-               (org-end-of-subtree t))
-           next-heading)))))
-
-  (defun nox/org-agenda-projects-next-prefix ()
-    (let* ((is-project (nox-org-project-p))
-           (parent-projects (nox-org-parent-projects))
-           (number-of-proj (length parent-projects))
-           result)
-      (if (eq number-of-proj 0)
-          (setq result (string ?  ?⮞ ?\u200B))
-        (if is-project
-            (setq result (concat "  " (apply 'concat (make-list number-of-proj "| "))))
-          (setq result (concat "  " (apply 'concat (make-list (1- number-of-proj) "| ")) "├─⮞ "))))
-      result))
-
-  (defun nox/org-agenda-tasks-skip-function ()
-    (org-with-wide-buffer
-     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max)))))
-       (when (or (nox-org-project-p) (nox-org-parent-projects t)) next-heading))))
-
-  (defun nox/org-agenda-archivable-skip-function ()
-    (org-with-wide-buffer
-     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max))))
-           (subtree-end (save-excursion (org-end-of-subtree t)))
-           (keyword (org-get-todo-state)))
-       (if (member keyword org-todo-keywords-1)
-           (if (member keyword org-done-keywords)
-               (let* ((day (nth 3 (decode-time)))
-                      (this-month (format-time-string "%Y-%m-" (current-time)))
-                      (last-month (format-time-string "%Y-%m-" (time-subtract (current-time) (seconds-to-time (* 60 60 24 (+ day 1)))))))
-                 (forward-line 1)
-                 (when (and (< (point) subtree-end)
-                            (re-search-forward (concat last-month "\\|" this-month) subtree-end t))
-                   subtree-end))
-             subtree-end)
-         next-heading))))
-
-  (defun nox/org-agenda-waiting-skip-function ()
-    (org-with-wide-buffer
-     (let ((next-heading (save-excursion (or (outline-next-heading) (point-max))))
-           (keyword (org-get-todo-state))
-           (project-status (nox-org-project-status)))
-       (unless (or (eq project-status 'planned)
-                   (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item)
-                   (member keyword '("WAITING" "HOLD")))
-         next-heading))))
+  (general-def :keymaps 'org-agenda-mode-map "P" #'+agenda/toggle-private)
 
   (gsetq
    org-agenda-custom-commands
    '(("n" "Agenda"
-      ((agenda ""
-               ((org-agenda-files (list org-default-notes-file nox-org-agenda-main-file
-                                        nox-org-agenda-journal-file))
-                (org-agenda-span 3)))
-       (tags "REFILE"
-             ((org-agenda-overriding-header "Coisas por organizar")
-              (org-tags-match-list-sublevels nil)
-              (org-agenda-files (list org-default-notes-file))))
-       (tags-todo "-CANCELLED-HOLD"
-                  ((org-agenda-overriding-header "Projetos estagnados")
-                   (org-agenda-skip-function 'nox/org-agenda-stuck-skip-function)
-                   (org-agenda-sorting-strategy '(category-keep))))
-       (tags-todo "-CANCELLED+PRIORITY=\"A\""
-                  ((org-agenda-overriding-header "Prioritário")
-                   (org-agenda-sorting-strategy '(time-up category-keep))
-                   (org-agenda-todo-ignore-scheduled 'future)))
-       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD+EFFORT>\"0\"+EFFORT<=\"0:30\""
-                  ((org-agenda-overriding-header "Coisas rápidas")
-                   (org-agenda-sorting-strategy '(priority-down effort-up))
-                   (org-agenda-todo-ignore-scheduled 'future)))
-       (tags "-REFILE-CANCELLED-WAITING-HOLD+TODO<>\"\""
-             ((org-agenda-overriding-header "Projetos")
-              (org-agenda-skip-function 'nox/org-agenda-projects-next-skip-function)
-              (org-agenda-prefix-format "%(nox/org-agenda-projects-next-prefix)")
-              (org-agenda-sorting-strategy '(category-keep))
-              (org-agenda-tags-todo-honor-ignore-options nil)
-              (org-agenda-todo-ignore-scheduled 'future)
-              (org-agenda-todo-ignore-deadlines nil)))
-       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD-PRIORITY=\"A\"-PRIORITY=\"C\""
-                  ((org-agenda-overriding-header "Tarefas isoladas")
-                   (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
-                   (org-agenda-todo-ignore-with-date t)
-                   (org-agenda-sorting-strategy '(deadline-down priority-down effort-up category-keep))))
-       (tags-todo "-REFILE-CANCELLED-WAITING-HOLD+PRIORITY=\"C\""
-                  ((org-agenda-overriding-header "Tarefas de baixa prioridade")
-                   (org-agenda-skip-function 'nox/org-agenda-tasks-skip-function)
-                   (org-agenda-sorting-strategy '(deadline-down effort-up category-keep))))
-       (tags "+Interessante+Level=2"
-             ((org-agenda-overriding-header "Coisas interessantes")
-              (org-agenda-sorting-strategy '(effort-up category-keep))
-              (org-agenda-show-inherited-tags nil)))
-       (tags "-REFILE+TODO<>\"\""
-             ((org-agenda-overriding-header "Tarefas a arquivar")
-              (org-agenda-skip-function 'nox/org-agenda-archivable-skip-function)
-              (org-tags-match-list-sublevels nil)
-              (org-agenda-files (list nox-org-agenda-main-file))))
-       (tags-todo "-CANCELLED-TICKLER"
-                  ((org-agenda-overriding-header "Tarefas à espera ou em pausa")
-                   (org-agenda-skip-function 'nox/org-agenda-waiting-skip-function)
-                   (org-tags-match-list-sublevels nil)
-                   (org-agenda-tags-todo-honor-ignore-options nil)
-                   (org-agenda-todo-ignore-scheduled 'future))))
-      ((org-agenda-finalize-hook 'nox/org-agenda-finalize))))
-   org-agenda-span 'day
-   org-agenda-prefix-format '((agenda . "  %?-12t% s")
-                              (todo   . "  ")
-                              (tags   . "  ")
-                              (search . "  "))
+      ((agenda "" ((org-agenda-files (list org-default-notes-file nox-org-agenda-file))
+                   (org-agenda-span 3)))
+       (+agenda-inbox nil ((org-agenda-files (list org-default-notes-file))))
+       (+agenda-tasks))))
+
+   org-agenda-prefix-format '((agenda . "  %?-12t% s"))
    org-agenda-skip-deadline-prewarning-if-scheduled 'pre-scheduled
    org-agenda-tags-todo-honor-ignore-options t
    org-agenda-todo-ignore-scheduled 'all
@@ -2034,7 +1960,389 @@ Else, return full list of projects."
    org-agenda-block-separator ""
    org-agenda-time-grid '((daily today require-timed) nil "......" "----------------"))
 
-  (add-hook 'org-agenda-mode-hook 'nox|org-offer-all-agenda-tags))
+  (add-hook 'org-agenda-mode-hook 'nox|org-offer-all-agenda-tags)
+#+END_SRC
+
+**** Entry
+#+BEGIN_SRC emacs-lisp
+(cl-defstruct +agenda-entry todo priority text tags low-effort marker project-status children)
+
+(defun +agenda-entry (headline &optional tags)
+  (let ((todo-type (org-element-property :todo-type headline))
+        (effort (org-element-property :EFFORT headline)))
+    (make-+agenda-entry
+     :todo (org-element-property :todo-keyword headline)
+     :priority (org-element-property :priority headline)
+     :text (org-element-property :raw-value headline)
+     :tags (or tags (org-element-property :tags headline))
+     :low-effort (and effort (eq todo-type 'todo) (< (org-duration-to-minutes effort) 20))
+     :marker (org-agenda-new-marker (org-element-property :begin headline)))))
+#+END_SRC
+
+**** Renderer
+#+BEGIN_SRC emacs-lisp
+(defun +agenda-format-entry (prefix entry)
+  (let ((props (list 'nox-custom-agenda t
+                     'mouse-face 'highlight
+                     'undone-face nil
+                     'done-face 'org-agenda-done
+                     'org-marker (+agenda-entry-marker entry)
+                     'org-hd-marker (+agenda-entry-marker entry)
+                     'todo-state (+agenda-entry-todo entry)
+                     'org-todo-regexp org-todo-regexp
+                     'org-not-done-regexp org-not-done-regexp
+                     'org-complex-heading-regexp org-complex-heading-regexp
+                     'org-highest-priority org-highest-priority
+                     'org-lowest-priority org-lowest-priority
+	                 'tags (mapcar 'org-downcase-keep-props (+agenda-entry-tags entry))
+	                 'format `(() ,prefix)))
+        (text
+         (concat prefix
+                 (if (+agenda-entry-todo entry)
+                     (concat (+agenda-entry-todo entry) " ")
+                   "")
+                 (if (+agenda-entry-priority entry)
+                     (string ?\[ ?# (+agenda-entry-priority entry) ?\] ? )
+                   "")
+                 (+agenda-entry-text entry)
+                 (if (+agenda-entry-tags entry)
+                     (concat " :" (mapconcat #'identity (+agenda-entry-tags entry) ":") ":")
+                   ""))))
+
+	(add-text-properties (length prefix) (length text) '(org-heading t) text)
+    (setq text (concat (org-add-props text props) "\n"))
+    (org-agenda-highlight-todo text)))
+
+(defun +agenda-project-get-prefix (taskp parent-continuations)
+  (let ((prefix "  "))
+    (if taskp
+        (while parent-continuations
+          (setq prefix (concat prefix
+                               (if (cdr parent-continuations)
+                                   (if (car parent-continuations) "|  " "   ")
+                                 (propertize (if (car parent-continuations) "├⮚ " "╰⮚ ")
+                                             'face
+                                             (if (eq taskp 'low-effort)
+                                                 '(:foreground "#b58900")
+                                               nil)))))
+          (setq parent-continuations (cdr parent-continuations)))
+      (while parent-continuations
+        (setq prefix (concat prefix
+                             (if (cdr parent-continuations)
+                                 (if (car parent-continuations) "|  " "   ")
+                               (if (car parent-continuations) "├─╴" "╰─╴"))))
+        (setq parent-continuations (cdr parent-continuations))))
+    prefix))
+
+(defun +agenda-priority-sort (a b)
+  (let ((pa (or (+agenda-entry-priority a) ?B))
+        (pb (or (+agenda-entry-priority b) ?B)))
+    (< pa pb)))
+
+(defun +agenda-flatten-list (l)
+  (cond ((not l) nil)
+        ((atom l) (list l))
+        (t (append (+agenda-flatten-list (car l)) (+agenda-flatten-list (cdr l))))))
+
+(defun +agenda-project-printer (list &optional parent-continuations)
+  (setq list (sort (+agenda-flatten-list list) #'+agenda-priority-sort))
+
+  (if parent-continuations
+      (while list
+        (let ((entry (car list)))
+          (unless (cdr list) (setf (car (last parent-continuations)) nil))
+
+          (when (eq (+agenda-entry-project-status entry) 'stuck)
+            (org-add-props (+agenda-entry-text entry) nil 'face 'org-priority))
+
+
+          (let ((org-todo-keyword-faces (if (+agenda-entry-project-status entry)
+                                            '(("NEXT" . '(:inherit org-todo :weight normal))
+                                              ("TODO" . '(:inherit org-todo :weight normal)))
+                                          '(("NEXT" . '(:inherit org-todo :weight bold))
+                                            ("TODO" . '(:inherit org-todo :weight bold))))))
+            (insert
+             (+agenda-format-entry (+agenda-project-get-prefix (and (not (+agenda-entry-project-status entry))
+                                                                    (or (and (+agenda-entry-low-effort entry)
+                                                                             'low-effort)
+                                                                        t))
+                                                               parent-continuations)
+                                   entry)))
+
+          (+agenda-project-printer (+agenda-entry-children entry) (append parent-continuations (list t))))
+        (setq list (cdr list)))
+
+    (let ((first t)
+          (org-todo-keyword-faces '(("NEXT" . '(:inherit org-todo :weight normal))
+                                    ("TODO" . '(:inherit org-todo :weight normal)))))
+      (dolist (entry list)
+        (if first (setq first nil) (insert "\n"))
+
+        (when (eq (+agenda-entry-project-status entry) 'stuck)
+          (org-add-props (+agenda-entry-text entry) nil 'face 'org-priority))
+        (insert (+agenda-format-entry "  " entry))
+
+        (+agenda-project-printer (+agenda-entry-children entry) (list t))))))
+
+(defun +agenda-simple-printer (list)
+  (setq list (sort list #'+agenda-priority-sort))
+  (dolist (entry list)
+    (insert
+     (+agenda-format-entry (if (+agenda-entry-low-effort entry)
+                               (propertize " ⮞" 'face '(:foreground "#b58900")) "  ")
+                           entry))))
+
+(defun +agenda-separator ()
+  (unless (or (bobp) org-agenda-compact-blocks
+			  (not org-agenda-block-separator))
+	(insert "\n"
+            (if (stringp org-agenda-block-separator)
+                org-agenda-block-separator
+			  (make-string (window-width) org-agenda-block-separator))
+		    "\n")))
+
+(defun +agenda-render-block (data title &optional printer)
+  (when data
+    (let ((begin (point)))
+      (+agenda-separator)
+      (insert (org-add-props title nil 'face 'org-agenda-structure) "\n")
+      (funcall (or printer #'+agenda-simple-printer) data)
+      (add-text-properties begin (point-max) `(org-agenda-type tags)))))
+#+END_SRC
+
+**** Inbox
+#+BEGIN_SRC emacs-lisp
+(defun +agenda-inbox-process-headline (headline)
+  (when (or +agenda-show-private
+            (not (member "PRIVATE" (org-element-property :tags headline))))
+    (+agenda-entry headline)))
+
+(defun +agenda-inbox (&optional _)
+  (catch 'exit
+    (let ((files (org-agenda-files nil 'ifmode))
+          +agenda-inbox
+          org-todo-regexp org-not-done-regexp org-complex-heading-regexp org-done-keywords
+          org-done-keywords-for-agenda file buffer ast)
+      (while (setq file (pop files))
+        (org-check-agenda-file file)
+        (setq buffer (if (file-exists-p file)
+                         (org-get-agenda-file-buffer file)
+                       (error "No such file %s" file)))
+
+        (unless org-todo-regexp
+          (dolist (variable '(org-todo-regexp org-not-done-regexp org-complex-heading-regexp
+                                              org-done-keywords org-done-keywords-for-agenda))
+            (set variable (buffer-local-value variable buffer))))
+
+        (with-current-buffer buffer
+          (org-with-wide-buffer
+           (unless (derived-mode-p 'org-mode) (error "Agenda file %s is not in Org mode" file))
+           (setq ast (org-element-parse-buffer 'headline))
+           (setq +agenda-inbox
+                 (append (org-element-map ast 'headline #'+agenda-inbox-process-headline nil nil 'headline)
+                         +agenda-inbox)))))
+
+      (let ((inhibit-read-only t))
+	    (goto-char (point-max))
+        (+agenda-render-block +agenda-inbox "Coisas a arrumar")))))
+#+END_SRC
+
+**** Tasks
+#+BEGIN_SRC emacs-lisp
+(defvar +agenda-level)
+(defvar +agenda-parent-tags)
+(defvar +agenda-project-status)
+(defvar +agenda-projects)
+(defvar +agenda-isolated-tasks)
+(defvar +agenda-high-priority)
+(defvar +agenda-low-priority)
+(defvar +agenda-archivable-tasks)
+(defvar +agenda-planned-tasks)
+(defvar +agenda-hold-tasks)
+
+(defun +agenda-filter-priorities (entry)
+  (let ((priority (+agenda-entry-priority entry)))
+    (cond ((eq priority ?A) (push entry +agenda-high-priority))
+          ((eq priority ?C) (push entry +agenda-low-priority)))))
+
+(defmacro +agenda-process-children (parent &optional task-children)
+  (if task-children
+      `(let ((+agenda-parent-tags (append (org-element-property :tags ,parent) +agenda-parent-tags))
+             (+agenda-level (1+ +agenda-level)))
+         (org-element-map (org-element-contents ,parent) 'headline
+           #'+agenda-tasks-process-headline nil nil 'headline))
+    `(let ((+agenda-parent-tags (append (org-element-property :tags ,parent) +agenda-parent-tags)))
+       (org-element-map (org-element-contents ,parent) 'headline #'+agenda-tasks-process-headline
+                        nil nil 'headline))))
+
+(defun +agenda-tasks-process-headline (headline)
+  (let* ((todo (org-element-property :todo-keyword headline))
+         (todo-type (org-element-property :todo-type headline))
+         (scheduled-ts (org-element-property :raw-value (org-element-property :scheduled headline)))
+         (deadline-ts  (org-element-property :raw-value (org-element-property :deadline headline)))
+         (closed-ts  (org-element-property :raw-value (org-element-property :closed headline)))
+         (has-scheduling (or scheduled-ts deadline-ts))
+         (scheduled-future (cond (scheduled-ts (> (org-time-stamp-to-now scheduled-ts) 0))
+                                 (deadline-ts  (> (org-time-stamp-to-now deadline-ts)
+                                                  (org-get-wdays deadline-ts)))))
+         (scheduled-past-or-now (and has-scheduling (not scheduled-future)))
+         (effort (org-element-property :EFFORT headline))
+         (contents-begin (org-element-property :contents-begin headline))
+         entry project-status return)
+
+    (setq entry (+agenda-entry headline (cl-remove-duplicates (append (org-element-property :tags headline)
+                                                                      +agenda-parent-tags)
+                                                              :test 'string=)))
+
+    (when (or +agenda-show-private
+              (not (member "PRIVATE" (org-element-property :tags headline))))
+      (if (not todo-type)
+          (unless (member "TICKLER" (org-element-property :tags headline))
+            (let* ((first-child (org-element-map (org-element-contents headline) 'headline #'identity
+                                                 nil t 'headline))
+                   (timestamp (or scheduled-ts deadline-ts
+                                  (and contents-begin
+                                       (progn
+                                         (goto-char contents-begin)
+                                         (re-search-forward
+                                          org-ts-regexp
+                                          (or (and first-child (org-element-property :begin first-child))
+                                              (org-element-property :end headline))
+                                          t))
+                                       (match-string 1)))))
+
+              (if (and timestamp (< (org-time-stamp-to-now timestamp) -60))
+                  ;; NOTE(nox): This headline without todo keyword has a timestamp that is
+                  ;; more than two months old.
+                  (push entry +agenda-archivable-tasks)
+
+                ;; NOTE(nox): Just process the children of this headline without todo keyword
+                (setq return (+agenda-process-children headline)))))
+
+        ;; NOTE(nox): This is a subtask, so at least it is stuck
+        (unless (or (= +agenda-level 0) +agenda-project-status) (setq +agenda-project-status 'stuck))
+
+        (if (or (eq todo-type 'done)
+                (string= (org-element-property :STYLE headline) "habit"))
+            ;; NOTE(nox): Archive all tasks that have been done for longer than 2 months
+            (when (and (eq todo-type 'done)
+                       (or (not closed-ts)
+                           (< (org-time-stamp-to-now closed-ts) -60)))
+              (push entry +agenda-archivable-tasks))
+
+          (cond
+           ;; NOTE(nox): Planned
+           ((and (not (string= todo "NEXT")) scheduled-future)
+            (unless (or (= +agenda-level 0) (eq +agenda-project-status 'next)) (setq +agenda-project-status 'planned))
+            (push entry +agenda-planned-tasks))
+
+           ;; NOTE(nox): Hold
+           ((or (string= todo "HOLD") (string= todo "WAITING"))
+            (push entry +agenda-hold-tasks))
+
+           (t
+            ;; NOTE(nox): Process children
+            (let* ((+agenda-project-status nil)
+                   (children (+agenda-process-children headline t)))
+              (setq project-status +agenda-project-status)
+              (setf (+agenda-entry-project-status entry) project-status
+                    (+agenda-entry-children entry) children))
+
+            ;; NOTE(nox): Update parent project status
+            (unless (or (= +agenda-level 0) (eq +agenda-project-status 'next))
+              (if project-status
+                  (when (memq project-status '(next planned))
+                    (setq +agenda-project-status project-status))
+
+                (when (or (string= todo "NEXT") scheduled-past-or-now)
+                  (setq +agenda-project-status 'next))))
+
+            (if project-status
+                (unless (eq project-status 'planned) (setq return entry))
+
+              (if (= +agenda-level 0)
+                  (unless (+agenda-filter-priorities entry)
+                    (when (or (not has-scheduling) (and (string= todo "NEXT")
+                                                        scheduled-future))
+                      (push entry +agenda-isolated-tasks)))
+
+                (when (or (eq project-status 'next) (and (not project-status)
+                                                         (or (string= todo "NEXT")
+                                                             scheduled-past-or-now)))
+                  (setq return entry))))))))
+      return)))
+
+(defun +agenda-tasks (&optional _)
+  (catch 'exit
+    (let ((files (org-agenda-files nil 'ifmode))
+          +agenda-projects +agenda-isolated-tasks +agenda-high-priority
+          +agenda-low-priority +agenda-planned-tasks +agenda-hold-tasks
+          +agenda-archivable-tasks
+          org-todo-regexp org-not-done-regexp org-complex-heading-regexp org-done-keywords
+          org-done-keywords-for-agenda file buffer ast)
+      (while (setq file (pop files))
+        (org-check-agenda-file file)
+        (setq buffer (if (file-exists-p file)
+                         (org-get-agenda-file-buffer file)
+                       (error "No such file %s" file)))
+
+        (unless org-todo-regexp
+          (dolist (variable '(org-todo-regexp org-not-done-regexp org-complex-heading-regexp
+                                              org-done-keywords org-done-keywords-for-agenda))
+            (set variable (buffer-local-value variable buffer))))
+
+        (with-current-buffer buffer
+          (org-with-wide-buffer
+           (unless (derived-mode-p 'org-mode) (error "Agenda file %s is not in Org mode" file))
+           (setq ast (org-element-parse-buffer 'headline))
+           (let ((+agenda-level 0)
+                 +agenda-parent-tags)
+             (setq +agenda-projects
+                   (append (org-element-map ast 'headline #'+agenda-tasks-process-headline nil nil 'headline)
+                           +agenda-projects))))))
+
+      (let ((inhibit-read-only t))
+	    (goto-char (point-max))
+        (+agenda-render-block (nreverse +agenda-high-priority)    "Alta prioridade")
+        (+agenda-render-block +agenda-projects                    "Projetos" #'+agenda-project-printer)
+        (+agenda-render-block (nreverse +agenda-isolated-tasks)   "Tarefas isoladas")
+        (+agenda-render-block (nreverse +agenda-low-priority)     "Baixa prioridade")
+        (+agenda-render-block (nreverse +agenda-archivable-tasks) "Tarefas a arquivar")
+        (+agenda-render-block (nreverse +agenda-planned-tasks)    "Tarefas planeadas")
+        (+agenda-render-block (nreverse +agenda-hold-tasks)       "Tarefas em espera")))))
+#+END_SRC
+
+**** Private information
+#+BEGIN_SRC emacs-lisp
+(defvar +agenda-show-private t
+  "If non-nil, show sensitive information on the agenda.")
+
+(defun +agenda/toggle-private ()
+  (interactive)
+  (setq +agenda-show-private (not +agenda-show-private))
+  (when  (equal major-mode 'org-agenda-mode) (org-agenda-redo)))
+#+END_SRC
+
+**** Compatibility with their functions
+#+BEGIN_SRC emacs-lisp
+(defun +agenda*change-all-lines-fixface (newhead hdmarker &optional fixface just-this)
+  (when (org-get-at-bol 'nox-custom-agenda)
+    (let ((inhibit-read-only t))
+	  (add-text-properties (point-at-bol) (point-at-eol) '(face nil)))))
+(advice-add 'org-agenda-change-all-lines :before '+agenda*change-all-lines-fixface)
+#+END_SRC
+
+**** End
+#+BEGIN_SRC emacs-lisp
+) ;; use-package
+#+END_SRC
+
+*** Attach
+#+BEGIN_SRC emacs-lisp
+(use-package org-attach
+  :config
+  (gsetq org-attach-directory "Recursos/attach/"
+         org-attach-method 'mv))
 #+END_SRC
 
 *** Capture
@@ -2060,7 +2368,7 @@ Else, return full list of projects."
                             "* %?\n%^t")
                            ("n" "Nota" entry (file "")
                             "* %?" :clock-in t :clock-resume t)
-                           ("d" "Diário" entry (file+olp+datetree nox-org-agenda-journal-file)
+                           ("d" "Diário" entry (file+olp+datetree nox-org-journal-file)
                             "* %?" :clock-in t :clock-resume t)
                            ("w" "Web bookmark" entry (file "")
                             "* [[%:link][%^{Title|%:description}]]\n%?" :clock-in t :clock-resume t)))
@@ -2118,11 +2426,11 @@ Switch projects and subprojects from NEXT back to TODO"
 *** Habit
 #+BEGIN_SRC emacs-lisp
 (use-package org-habit
-  :custom
-  (org-habit-graph-column 75)
-  (org-habit-preceding-days 30)
-  (org-habit-following-days 1)
-  (org-habit-today-glyph ?@))
+  :config
+  (gsetq org-habit-graph-column 75
+         org-habit-preceding-days 30
+         org-habit-following-days 1
+         org-habit-today-glyph ?@))
 #+END_SRC
 
 *** IDs
@@ -2146,10 +2454,10 @@ Switch projects and subprojects from NEXT back to TODO"
   (nox-local-leader :keymaps 'org-mode-map
     "n" '(org-noter :wk "Org Noter"))
 
-  :custom
-  (org-noter-default-heading-title "Notas da página $p$")
-  (org-noter-default-notes-file-names '("Notes.org" "Notas.org"))
-  (org-noter-hide-other t))
+  :config
+  (gsetq org-noter-default-heading-title "Notas da página $p$"
+         org-noter-default-notes-file-names '("Notes.org" "Notas.org")
+         org-noter-hide-other t))
 #+END_SRC
 
 *** Source blocks
@@ -2481,6 +2789,12 @@ Switch projects and subprojects from NEXT back to TODO"
   (gsetq deft-directory "~/Personal/Org/Deft/"
          deft-extensions '("org" "txt" "md" "markdown")
          deft-default-extension (car deft-extensions)
+         deft-use-filename-as-title nil
+         deft-use-filter-string-for-filename t
+         deft-file-naming-rules '((noslash . "-")
+                                   (nospace . "-")
+                                   (case-fn . downcase))
+         deft-auto-save-interval 0
          deft-org-mode-title-prefix t))
 #+END_SRC
 
