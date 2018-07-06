@@ -592,9 +592,10 @@ symbols.
 		        quelpa-update-melpa-p nil
 		        quelpa-self-upgrade-p nil))
 
-(use-package quelpa-use-package :ensure
-  :demand
-  :config (setq-default quelpa-use-package-inhibit-loading-quelpa t))
+(use-package quelpa-use-package :ensure)
+
+(require 'quelpa)
+(require 'quelpa-use-package)
 #+END_SRC
 
 *** Base packages
@@ -1003,8 +1004,7 @@ Disable fringes in the minibuffer window.
 
 *** Modeline
 #+BEGIN_SRC emacs-lisp
-(use-package doom-modeline :quelpa (doom-modeline :repo "seagle0128/doom-modeline" :branch "develop"
-                                                  :fetcher github)
+(use-package doom-modeline :ensure
   :config
   (gsetq doom-modeline-enable-word-count t))
 #+END_SRC
