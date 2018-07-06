@@ -1966,7 +1966,7 @@ Else, return full list of projects."
 
 **** Entry
 #+BEGIN_SRC emacs-lisp
-(cl-defstruct +agenda-entry todo priority text tags low-effort marker project-status children)
+(cl-defstruct +agenda-entry todo priority text tags planned low-effort marker project-status children)
 
 (defun +agenda-entry (headline &optional tags)
   (let ((todo-type (org-element-property :todo-type headline))
@@ -2237,8 +2237,11 @@ Else, return full list of projects."
           (cond
            ;; NOTE(nox): Planned
            ((and (not (string= todo "NEXT")) scheduled-future)
-            (unless (or (= +agenda-level 0) (eq +agenda-project-status 'next)) (setq +agenda-project-status 'planned))
-            (push entry +agenda-planned-tasks))
+            (setf (+agenda-entry-planned entry) t)
+            (if (= +agenda-level 0)
+                (push entry +agenda-planned-tasks)
+              (unless (eq +agenda-project-status 'next) (setq +agenda-project-status 'planned))
+              (setq return entry)))
 
            ;; NOTE(nox): Hold
            ((or (string= todo "HOLD") (string= todo "WAITING"))
@@ -2247,22 +2250,41 @@ Else, return full list of projects."
            (t
             ;; NOTE(nox): Process children
             (let* ((+agenda-project-status nil)
-                   (children (+agenda-process-children headline t)))
+                   (children (+agenda-process-children headline t))
+                   tail prev)
               (setq project-status +agenda-project-status)
+
+              ;; NOTE(nox): When this project is not planned, we need to remove its
+              ;; planned tasks and insert them in the planned list
+              ;; IMPORTANT(nox): A project that is stuck doesn't have any planned children
+              ;; so, for this check, not planned ≡ next
+              (when (eq project-status 'next)
+                (setq tail children)
+                (while tail
+                  (if (or (+agenda-entry-planned (car tail))
+                          (eq (+agenda-entry-project-status (car tail)) 'planned))
+                      (progn
+                        (push (car tail) +agenda-planned-tasks)
+                        (if prev
+                            (setcdr prev (cdr tail))
+                          (setq children (cdr tail))))
+                    (setq prev tail))
+                  (setq tail (cdr tail))))
+
               (setf (+agenda-entry-project-status entry) project-status
                     (+agenda-entry-children entry) children))
 
             ;; NOTE(nox): Update parent project status
             (unless (or (= +agenda-level 0) (eq +agenda-project-status 'next))
               (if project-status
-                  (when (memq project-status '(next planned))
-                    (setq +agenda-project-status project-status))
-
+                  (when (memq project-status '(next planned)) (setq +agenda-project-status project-status))
                 (when (or (string= todo "NEXT") scheduled-past-or-now)
                   (setq +agenda-project-status 'next))))
 
             (if project-status
-                (unless (eq project-status 'planned) (setq return entry))
+                (if (and (eq project-status 'planned) (= +agenda-level 0))
+                    (push entry +agenda-planned-tasks)
+                  (setq return entry))
 
               (if (= +agenda-level 0)
                   (unless (+agenda-filter-priorities entry)
@@ -2270,10 +2292,7 @@ Else, return full list of projects."
                                                         scheduled-future))
                       (push entry +agenda-isolated-tasks)))
 
-                (when (or (eq project-status 'next) (and (not project-status)
-                                                         (or (string= todo "NEXT")
-                                                             scheduled-past-or-now)))
-                  (setq return entry))))))))
+                (when (or (string= todo "NEXT") scheduled-past-or-now) (setq return entry))))))))
       return)))
 
 (defun +agenda-tasks (&optional _)
