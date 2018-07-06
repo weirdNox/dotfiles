@@ -2176,6 +2176,18 @@ Else, return full list of projects."
        (org-element-map (org-element-contents ,parent) 'headline #'+agenda-tasks-process-headline
                         nil nil 'headline))))
 
+(defmacro +agenda-set-parent-minimum-status (status)
+  `(unless (= +agenda-level 0)
+     ,(if (symbolp status)
+          (cond ((eq status 'next)    '(setq +agenda-project-status 'next))
+                ((eq status 'planned) '(when (not (eq +agenda-project-status 'next))
+                                         (setq +agenda-project-status 'planned)))
+                (t '(unless +agenda-project-status (setq +agenda-project-status 'stuck))))
+        `(cond ((eq ,status 'next)     (setq +agenda-project-status 'next))
+               ((eq ,status 'planned)  (when (not (eq +agenda-project-status 'next))
+                                         (setq +agenda-project-status 'planned)))
+               (t (unless +agenda-project-status (setq +agenda-project-status 'stuck)))))))
+
 (defun +agenda-tasks-process-headline (headline)
   (let* ((todo (org-element-property :todo-keyword headline))
          (todo-type (org-element-property :todo-type headline))
@@ -2223,8 +2235,7 @@ Else, return full list of projects."
                 ;; NOTE(nox): Just process the children of this headline without todo keyword
                 (setq return (+agenda-process-children headline)))))
 
-        ;; NOTE(nox): This is a subtask, so at least it is stuck
-        (unless (or (= +agenda-level 0) +agenda-project-status) (setq +agenda-project-status 'stuck))
+        (+agenda-set-parent-minimum-status 'stuck)
 
         (if (or (eq todo-type 'done)
                 (string= (org-element-property :STYLE headline) "habit"))
@@ -2240,7 +2251,7 @@ Else, return full list of projects."
             (setf (+agenda-entry-planned entry) t)
             (if (= +agenda-level 0)
                 (push entry +agenda-planned-tasks)
-              (unless (eq +agenda-project-status 'next) (setq +agenda-project-status 'planned))
+              (+agenda-set-parent-minimum-status 'planned)
               (setq return entry)))
 
            ;; NOTE(nox): Hold
