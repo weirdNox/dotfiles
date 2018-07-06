@@ -2053,7 +2053,7 @@ Else, return full list of projects."
         (t (append (+agenda-flatten-list (car l)) (+agenda-flatten-list (cdr l))))))
 
 (defun +agenda-project-printer (list &optional parent-continuations)
-  (setq list (sort (+agenda-flatten-list list) #'+agenda-priority-sort))
+  (setq list (sort list #'+agenda-priority-sort))
 
   (if parent-continuations
       (while list
@@ -2250,7 +2250,7 @@ Else, return full list of projects."
            (t
             ;; NOTE(nox): Process children
             (let* ((+agenda-project-status nil)
-                   (children (+agenda-process-children headline t))
+                   (children (+agenda-flatten-list (+agenda-process-children headline t)))
                    tail prev)
               (setq project-status +agenda-project-status)
 
@@ -2321,7 +2321,9 @@ Else, return full list of projects."
            (let ((+agenda-level 0)
                  +agenda-parent-tags)
              (setq +agenda-projects
-                   (append (org-element-map ast 'headline #'+agenda-tasks-process-headline nil nil 'headline)
+                   (append
+                    (+agenda-flatten-list
+                     (org-element-map ast 'headline #'+agenda-tasks-process-headline nil nil 'headline))
                            +agenda-projects))))))
 
       (let ((inhibit-read-only t))
