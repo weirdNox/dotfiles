@@ -1399,6 +1399,17 @@ Needed for ivy fuzzy matching.
   #'recenter)
 #+END_SRC
 
+*** Electric
+#+BEGIN_SRC emacs-lisp
+(use-package electric
+  :init
+  (electric-indent-mode))
+
+(use-package elec-pair
+  :init
+  (electric-pair-mode))
+#+END_SRC
+
 *** Selection
 **** Expand region
 #+BEGIN_SRC emacs-lisp
@@ -2671,9 +2682,14 @@ session as the current block. ARG has same meaning as in
 #+END_SRC
 
 *** Dired
+**** Base and utility functions
 #+BEGIN_SRC emacs-lisp
 (use-package dired
   :config
+  (after! dired+ ;; This overrides the keys, so only after loading
+    (general-def :keymaps 'dired-mode-map
+      "e" #'nox/ediff-files))
+
   (gsetq dired-auto-revert-buffer t
          dired-dwim-target t
          dired-hide-details-hide-symlink-targets nil
@@ -2684,15 +2700,8 @@ session as the current block. ARG has same meaning as in
          image-dired-db-file (concat image-dired-dir "db.el")
          image-dired-gallery-dir (concat image-dired-dir "gallery/")
          image-dired-temp-image-file (concat image-dired-dir "temp-image")
-         image-dired-temp-rotate-image-file (concat image-dired-dir "temp-rotate-image")))
+         image-dired-temp-rotate-image-file (concat image-dired-dir "temp-rotate-image"))
 
-(use-package diredfl :ensure
-  :after-call (dired-mode-hook)
-  :config (diredfl-global-mode))
-
-(use-package dired+ :quelpa (dired+ :fetcher wiki)
-  :after-call (dired-mode-hook)
-  :config
   (defun dired|create-non-existent-directory ()
     "Create missing directories when creating new files."
     (let ((parent-directory (file-name-directory buffer-file-name)))
@@ -2700,145 +2709,171 @@ session as the current block. ARG has same meaning as in
                  (y-or-n-p (format "Directory `%s' does not exist! Create it?" parent-directory)))
         (make-directory parent-directory t))))
   (push #'dired|create-non-existent-directory find-file-not-found-functions)
+#+END_SRC
 
-  (defun nox-pdf-compress-merge-sentinel (process event)
-    (unless (process-live-p process)
-      (let ((exit-code (process-exit-status process)))
-        (if (/= exit-code 0)
-            (error "Something went wrong with the process! Exit code: %d" exit-code)
-          (let* ((data (process-get process 'data))
-                 (output (car data))
-                 (temp-output-name (car output))
-                 (output-name (cdr output))
-                 (files (cdr data)))
-            (dolist (file files)
-              (move-file-to-trash file))
-            (ignore-errors (rename-file temp-output-name output-name 1))
-            (message "Done compressing/merging PDF(s)."))))))
+***** PDF compressor and merger
+#+BEGIN_SRC emacs-lisp
+(defun nox-pdf-compress-merge-sentinel (process event)
+  (unless (process-live-p process)
+    (let ((exit-code (process-exit-status process)))
+      (if (/= exit-code 0)
+          (error "Something went wrong with the process! Exit code: %d" exit-code)
+        (let* ((data (process-get process 'data))
+               (output (car data))
+               (temp-output-name (car output))
+               (output-name (cdr output))
+               (files (cdr data)))
+          (dolist (file files)
+            (move-file-to-trash file))
+          (ignore-errors (rename-file temp-output-name output-name 1))
+          (message "Done compressing/merging PDF(s)."))))))
 
-  (defun nox/pdf-compress-merge (arg)
-    (interactive "P")
-    (let ((files (dired-get-marked-files))
-          (quality "ebook")
-          (color-conv-strat "UseDeviceIndependentColor")
-          (temp-output-name (format "MERGED_FILE_%d.pdf" (random 100000)))
-          output-name)
-      (if (< (length files) 1)
-          (user-error "You must select at least one file!")
-        (when arg
-          (setq quality (completing-read
-                         "Compression type: "
-                         '("default" "screen" "ebook" "printer" "prepress")
-                         nil t nil nil quality)
-                color-conv-strat (completing-read
-                                  "Color conversion strategy: "
-                                  '("LeaveColorUnchanged" "Gray" "RGB" "sRGB" "CMYK" "UseDeviceIndependentColor")
-                                  nil t nil nil color-conv-strat)))
-        (setq output-name (completing-read "Output name: "
-                                           (when (= (length files) 1)
-                                             files)))
-        (when (= (length output-name) 0) (setq output-name "Output.pdf"))
-        (process-put (make-process
-                      :name "PDF Compressor/Merger"
-                      :buffer "*PDF Compress*"
-                      :connection-type 'pipe
-                      :sentinel 'nox-pdf-compress-merge-sentinel
-                      :command
-                      (append
-                       (list "gs" "-dBATCH" "-dNOPAUSE" "-q" "-sDEVICE=pdfwrite"
-                             (concat "-sColorConversionStrategy=/" color-conv-strat)
-                             (concat "-sOutputFile=" temp-output-name)
-                             (concat "-dPDFSETTINGS=/" quality))
-                       files))
-                     'data (cons (cons temp-output-name output-name)  files)))))
+(defun nox/pdf-compress-merge (arg)
+  (interactive "P")
+  (let ((files (dired-get-marked-files))
+        (quality "ebook")
+        (color-conv-strat "UseDeviceIndependentColor")
+        (temp-output-name (format "MERGED_FILE_%d.pdf" (random 100000)))
+        output-name)
+    (if (< (length files) 1)
+        (user-error "You must select at least one file!")
+      (when arg
+        (setq quality (completing-read
+                       "Compression type: "
+                       '("default" "screen" "ebook" "printer" "prepress")
+                       nil t nil nil quality)
+              color-conv-strat (completing-read
+                                "Color conversion strategy: "
+                                '("LeaveColorUnchanged" "Gray" "RGB" "sRGB" "CMYK" "UseDeviceIndependentColor")
+                                nil t nil nil color-conv-strat)))
+      (setq output-name (completing-read "Output name: "
+                                         (when (= (length files) 1)
+                                           files)))
+      (when (= (length output-name) 0) (setq output-name "Output.pdf"))
+      (process-put (make-process
+                    :name "PDF Compressor/Merger"
+                    :buffer "*PDF Compress*"
+                    :connection-type 'pipe
+                    :sentinel 'nox-pdf-compress-merge-sentinel
+                    :command
+                    (append
+                     (list "gs" "-dBATCH" "-dNOPAUSE" "-q" "-sDEVICE=pdfwrite"
+                           (concat "-sColorConversionStrategy=/" color-conv-strat)
+                           (concat "-sOutputFile=" temp-output-name)
+                           (concat "-dPDFSETTINGS=/" quality))
+                     files))
+                   'data (cons (cons temp-output-name output-name)  files)))))
+#+END_SRC
 
-  (defun nox/whiteboard ()
-    (interactive)
-    (unless (executable-find "whiteboard") (error "No whiteboard script :("))
-    (let ((window-config (current-window-configuration))
-          (files (dired-get-marked-files)))
-      (dolist (file files)
-        (let ((result-name (file-name-sans-extension file))
-              (pos (make-vector 4 nil))
-              (command-arguments "whiteboard"))
-          (find-file file)
-          (if (not (eq major-mode 'image-mode))
-              (message "%s is not an image!" file)
+***** Whiteboard image creator
+#+BEGIN_SRC emacs-lisp
+(defun nox/whiteboard ()
+  (interactive)
+  (unless (executable-find "whiteboard") (error "No whiteboard script :("))
+  (let ((window-config (current-window-configuration))
+        (files (dired-get-marked-files)))
+    (dolist (file files)
+      (let ((result-name (file-name-sans-extension file))
+            (pos (make-vector 4 nil))
+            (command-arguments "whiteboard"))
+        (find-file file)
+        (if (not (eq major-mode 'image-mode))
+            (message "%s is not an image!" file)
 
-            (let* ((displayed-image (image-get-display-property))
-                   (original-image (image--image-without-parameters displayed-image))
-                   (factor (/ (float (car (image-size original-image t)))
-                              (float (car (image-size displayed-image t)))))
-                   (index 0)
-                   event)
-              (plist-put (cdr (image-get-display-property)) :pointer 'arrow)
+          (let* ((displayed-image (image-get-display-property))
+                 (original-image (image--image-without-parameters displayed-image))
+                 (factor (/ (float (car (image-size original-image t)))
+                            (float (car (image-size displayed-image t)))))
+                 (index 0)
+                 event)
+            (plist-put (cdr (image-get-display-property)) :pointer 'arrow)
 
-              (while (and (not (eq event 'return)) (not (aref pos 3)))
-                (delete-other-windows)
-                (setq event (read-event "Next corner..."))
-                (when (and (listp event) (eq 'mouse-1 (car event))
-                           (eq (selected-window) (posn-window (event-start event))))
-                  (setf (aref pos index) (cons (* (car (posn-x-y (event-start event))) factor)
-                                               (* (cdr (posn-x-y (event-start event))) factor)))
-                  (setq index (1+ index)))))
+            (while (and (not (eq event 'return)) (not (aref pos 3)))
+              (delete-other-windows)
+              (setq event (read-event "Next corner..."))
+              (when (and (listp event) (eq 'mouse-1 (car event))
+                         (eq (selected-window) (posn-window (event-start event))))
+                (setf (aref pos index) (cons (* (car (posn-x-y (event-start event))) factor)
+                                             (* (cdr (posn-x-y (event-start event))) factor)))
+                (setq index (1+ index)))))
 
-            (when (aref pos 3)
-              (setq command-arguments
-                    (concat command-arguments " -c \""
-                            (mapconcat (lambda (x) (format "%d,%d" (car x) (cdr x)))
-                                       pos " ")
-                            "\"")))
+          (when (aref pos 3)
+            (setq command-arguments
+                  (concat command-arguments " -c \""
+                          (mapconcat (lambda (x) (format "%d,%d" (car x) (cdr x)))
+                                     pos " ")
+                          "\"")))
 
-            (setq command-arguments (concat command-arguments " " (read-string "Extra arguments: ") " "
-                                            (shell-quote-argument file) " " (shell-quote-argument result-name)
-                                            "-whiteboard.png"))
+          (setq command-arguments (concat command-arguments " " (read-string "Extra arguments: ") " "
+                                          (shell-quote-argument file) " " (shell-quote-argument result-name)
+                                          "-whiteboard.png"))
 
-            (async-shell-command command-arguments))))
-      (set-window-configuration window-config)
-      (dired-unmark-all-marks)))
+          (async-shell-command command-arguments))))
+    (set-window-configuration window-config)
+    (dired-unmark-all-marks)))
+#+END_SRC
 
-  ;; From abo-abo
-  (defun nox/ediff-files ()
-    (interactive)
-    (let ((files (dired-get-marked-files))
-          (wnd (current-window-configuration)))
-      (if (<= (length files) 2)
-          (let ((file1 (car files))
-                (file2 (if (cdr files)
-                           (cadr files)
-                         (read-file-name
-                          "file: "
-                          (dired-dwim-target-directory)))))
-            (if (file-newer-than-file-p file1 file2)
-                (ediff-files file2 file1)
-              (ediff-files file1 file2))
-            (add-hook 'ediff-after-quit-hook-internal
-                      (lambda ()
-                        (setq ediff-after-quit-hook-internal nil)
-                        (set-window-configuration wnd))))
-        (error "no more than 2 files should be marked"))))
+***** Diff two files
+#+BEGIN_SRC emacs-lisp
+(defun nox/ediff-files ()
+  (interactive)
+  (let ((files (dired-get-marked-files))
+        (wnd (current-window-configuration)))
+    (if (<= (length files) 2)
+        (let ((file1 (car files))
+              (file2 (if (cdr files)
+                         (cadr files)
+                       (read-file-name
+                        "file: "
+                        (dired-dwim-target-directory)))))
+          (if (file-newer-than-file-p file1 file2)
+              (ediff-files file2 file1)
+            (ediff-files file1 file2))
+          (add-hook 'ediff-after-quit-hook-internal
+                    (lambda ()
+                      (setq ediff-after-quit-hook-internal nil)
+                      (set-window-configuration wnd))))
+      (error "no more than 2 files should be marked"))))
+#+END_SRC
 
-  (defun nox/dired-rsync (dest)
-    (interactive
-     (list
-      (expand-file-name
-       (read-file-name
-        "Rsync to:"
-        (dired-dwim-target-directory)))))
-    (let ((files (dired-get-marked-files
-                  nil current-prefix-arg))
-          (rsync-command
-           "rsync -arvz --progress "))
-      (dolist (file files)
-        (setq rsync-command
-              (concat rsync-command
-                      (shell-quote-argument file)
-                      " ")))
+***** Rsync
+#+BEGIN_SRC emacs-lisp
+(defun nox/dired-rsync (dest)
+  (interactive
+   (list
+    (expand-file-name
+     (read-file-name
+      "Rsync to:"
+      (dired-dwim-target-directory)))))
+  (let ((files (dired-get-marked-files
+                nil current-prefix-arg))
+        (rsync-command
+         "rsync -arvz --progress "))
+    (dolist (file files)
       (setq rsync-command
             (concat rsync-command
-                    (shell-quote-argument dest)))
-      (async-shell-command rsync-command "*rsync*")
-      (other-window 1))))
+                    (shell-quote-argument file)
+                    " ")))
+    (setq rsync-command
+          (concat rsync-command
+                  (shell-quote-argument dest)))
+    (async-shell-command rsync-command "*rsync*")
+    (other-window 1)))
+#+END_SRC
+
+***** End
+#+BEGIN_SRC emacs-lisp
+) ;; (use-package dired)
+#+END_SRC
+
+**** Diredfl and Dired+
+#+BEGIN_SRC emacs-lisp
+(use-package diredfl :ensure
+  :after-call (dired-mode-hook)
+  :config (diredfl-global-mode))
+
+(use-package dired+ :quelpa (dired+ :fetcher wiki)
+  :after-call (dired-mode-hook))
 #+END_SRC
 
 *** Deft
