@@ -2199,20 +2199,23 @@ Else, return full list of projects."
               (not (member "PRIVATE" (org-element-property :tags headline))))
       (if (not todo-type)
           (unless (member "TICKLER" (org-element-property :tags headline))
-            (let* ((first-child (org-element-map (org-element-contents headline) 'headline #'identity
-                                                 nil t 'headline))
-                   (timestamp (or scheduled-ts deadline-ts
-                                  (and contents-begin
-                                       (progn
-                                         (goto-char contents-begin)
-                                         (re-search-forward
-                                          org-ts-regexp
-                                          (or (and first-child (org-element-property :begin first-child))
-                                              (org-element-property :end headline))
-                                          t))
-                                       (match-string 1)))))
+            (let* ((timestamp (or scheduled-ts deadline-ts))
+                   (time-to-now (and timestamp (org-time-stamp-to-now timestamp)))
+                   first-child search-bound temp-time)
 
-              (if (and timestamp (< (org-time-stamp-to-now timestamp) -60))
+              ;; NOTE(nox): Find the most recent active timestamp
+              (when (and (not time-to-now) contents-begin)
+                (setq first-child (org-element-map (org-element-contents headline) 'headline #'identity
+                                                   nil t 'headline)
+                      search-bound (or (and first-child (org-element-property :begin first-child))
+                                       (org-element-property :end headline)))
+                (goto-char contents-begin)
+                (while (re-search-forward org-ts-regexp search-bound t)
+                  (setq temp-time (org-time-stamp-to-now (match-string 1)))
+                  (when (or (not time-to-now) (> temp-time time-to-now))
+                    (setq time-to-now temp-time))))
+
+              (if (and time-to-now (< time-to-now -60))
                   ;; NOTE(nox): This headline without todo keyword has a timestamp that is
                   ;; more than two months old.
                   (push entry +agenda-archivable-tasks)
