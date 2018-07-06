@@ -1982,6 +1982,12 @@ Else, return full list of projects."
 
 **** Renderer
 #+BEGIN_SRC emacs-lisp
+(defconst +agenda-projects-not-task-faces '(("NEXT" . '(:inherit org-todo :weight normal))
+                                            ("TODO" . '(:inherit org-todo :weight normal))))
+
+(defconst +agenda-projects-task-faces '(("NEXT" . '(:inherit org-todo :weight bold))
+                                        ("TODO" . '(:inherit org-todo :weight bold))))
+
 (defun +agenda-format-entry (prefix entry)
   (let ((props (list 'nox-custom-agenda t
                      'mouse-face 'highlight
@@ -2014,26 +2020,27 @@ Else, return full list of projects."
     (setq text (concat (org-add-props text props) "\n"))
     (org-agenda-highlight-todo text)))
 
-(defun +agenda-project-get-prefix (taskp parent-continuations)
-  (let ((prefix "  "))
+(defun +agenda-tip-for-effort (text low-effort &optional alt-text)
+  (if low-effort
+      (propertize text 'face '(:foreground "#b58900"))
+    (or alt-text text)))
+
+(defun +agenda-project-get-prefix (taskp parent-continuations &optional low-effort)
+  ;; IMPORTANT(nox): `parent-continuations' is in reverse order!
+  (let ((prefix "")
+        (tip t))
     (if taskp
-        (while parent-continuations
-          (setq prefix (concat prefix
-                               (if (cdr parent-continuations)
-                                   (if (car parent-continuations) "|  " "   ")
-                                 (propertize (if (car parent-continuations) "├⮚ " "╰⮚ ")
-                                             'face
-                                             (if (eq taskp 'low-effort)
-                                                 '(:foreground "#b58900")
-                                               nil)))))
-          (setq parent-continuations (cdr parent-continuations)))
-      (while parent-continuations
-        (setq prefix (concat prefix
-                             (if (cdr parent-continuations)
-                                 (if (car parent-continuations) "|  " "   ")
-                               (if (car parent-continuations) "├─╴" "╰─╴"))))
-        (setq parent-continuations (cdr parent-continuations))))
-    prefix))
+        (dolist (cont parent-continuations)
+          (setq prefix (concat (if tip
+                                   (+agenda-tip-for-effort (if cont "├⮚ " "╰⮚ ") low-effort)
+                                 (if cont "|  " "   "))
+                        prefix)
+                tip nil))
+
+      (dolist (cont parent-continuations)
+        (setq prefix (concat (if tip (if cont "├─╴" "╰─╴") (if cont "|  " "   ")) prefix)
+              tip nil)))
+    (concat "  " prefix)))
 
 (defun +agenda-priority-sort (a b)
   (let ((pa (or (+agenda-entry-priority a) ?B))
@@ -2051,31 +2058,26 @@ Else, return full list of projects."
   (if parent-continuations
       (while list
         (let ((entry (car list)))
-          (unless (cdr list) (setf (car (last parent-continuations)) nil))
+          (unless (cdr list) (setf (car parent-continuations) nil))
 
           (when (eq (+agenda-entry-project-status entry) 'stuck)
             (org-add-props (+agenda-entry-text entry) nil 'face 'org-priority))
 
 
           (let ((org-todo-keyword-faces (if (+agenda-entry-project-status entry)
-                                            '(("NEXT" . '(:inherit org-todo :weight normal))
-                                              ("TODO" . '(:inherit org-todo :weight normal)))
-                                          '(("NEXT" . '(:inherit org-todo :weight bold))
-                                            ("TODO" . '(:inherit org-todo :weight bold))))))
+                                            +agenda-projects-not-task-faces
+                                          +agenda-projects-task-faces)))
             (insert
-             (+agenda-format-entry (+agenda-project-get-prefix (and (not (+agenda-entry-project-status entry))
-                                                                    (or (and (+agenda-entry-low-effort entry)
-                                                                             'low-effort)
-                                                                        t))
-                                                               parent-continuations)
-                                   entry)))
+             (+agenda-format-entry
+              (+agenda-project-get-prefix (not (+agenda-entry-project-status entry)) parent-continuations
+                                          (+agenda-entry-low-effort entry))
+              entry)))
 
-          (+agenda-project-printer (+agenda-entry-children entry) (append parent-continuations (list t))))
+          (+agenda-project-printer (+agenda-entry-children entry) (cons t parent-continuations)))
         (setq list (cdr list)))
 
     (let ((first t)
-          (org-todo-keyword-faces '(("NEXT" . '(:inherit org-todo :weight normal))
-                                    ("TODO" . '(:inherit org-todo :weight normal)))))
+          (org-todo-keyword-faces +agenda-projects-not-task-faces))
       (dolist (entry list)
         (if first (setq first nil) (insert "\n"))
 
@@ -2089,9 +2091,7 @@ Else, return full list of projects."
   (setq list (sort list #'+agenda-priority-sort))
   (dolist (entry list)
     (insert
-     (+agenda-format-entry (if (+agenda-entry-low-effort entry)
-                               (propertize " ⮞" 'face '(:foreground "#b58900")) "  ")
-                           entry))))
+     (+agenda-format-entry (+agenda-tip-for-effort " ⮞" (+agenda-entry-low-effort entry) "  ") entry))))
 
 (defun +agenda-separator ()
   (unless (or (bobp) org-agenda-compact-blocks
