@@ -1291,8 +1291,10 @@ Needed for ivy fuzzy matching.
          projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
          projectile-globally-ignored-files '(".DS_Store" "Icon" "TAGS")
          projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
-         projectile-ignored-projects '("~" "/tmp")
-         projectile-globally-ignored-directories (append projectile-globally-ignored-directories
+         projectile-ignored-projects '("~" "/tmp"))
+
+  :config
+  (gsetq projectile-globally-ignored-directories (append projectile-globally-ignored-directories
                                                          (list (abbreviate-file-name nox-local-dir)
                                                                ".sync" "node_modules" "flow-typed"))
          projectile-other-file-alist (append projectile-other-file-alist
@@ -1301,8 +1303,6 @@ Needed for ivy fuzzy matching.
                                                ("sass" "css")
                                                ("less" "css")
                                                ("styl" "css"))))
-
-  :config
   (push ".project" projectile-project-root-files-bottom-up)
 
   (add-hook 'dired-before-readin-hook #'projectile-track-known-projects-find-file-hook)
@@ -1674,33 +1674,36 @@ Lisp function does not specify a special indentation."
 (add-hook! 'org-after-todo-statistics-hook #'nox|org-summary-todo)
 
 (defun nox|org-project-set-next-after-done ()
-    "Ask to TODO to NEXT when changing previous states to DONE."
-    (let ((done-keywords (or org-done-keywords org-done-keywords-for-agenda))
-          target break)
-      (when (and (member org-state done-keywords) (nox-org-parent-projects t))
-        (org-with-wide-buffer
-         (org-back-to-heading t)
-         (save-excursion
-           (while (and (not target) (org-get-next-sibling))
-             (let ((keyword (org-get-todo-state)))
-               (if (nox-org-project-p)
-                   (setq target 'cancel)
-                 (if (string= keyword "TODO")
-                     (setq target (cons (point) (org-get-heading t t t t)))
-                   (unless (member keyword done-keywords)
-                     (setq target 'cancel)))))))
-         (save-excursion
-           (while (and (consp target) (not break) (org-get-last-sibling))
-             (let ((keyword (org-get-todo-state)))
-               (if (string= keyword "NEXT")
-                   (setq target nil)
-                 (when (member keyword org-todo-keywords)
-                   (setq break t))))))
+  "Ask to TODO to NEXT when changing previous states to DONE."
+  (let ((done-keywords (or org-done-keywords org-done-keywords-for-agenda)))
+    (when (and (member org-state done-keywords) (+org-is-subtask))
+      (org-with-wide-buffer
+       (org-back-to-heading t)
+
+       (let (point keyword break)
+         (while (and (save-excursion (setq point (org-get-last-sibling))) (not break))
+           (goto-char point)
+           (setq keyword (org-get-todo-state))
+           (when (or (member keyword done-keywords)
+                     (and (not (+org-project-p))
+                          (string= keyword "TODO")))
+             (setq break t)
+             (org-get-next-sibling))))
+
+       (let (target keyword break)
+         (while (not (or target break))
+           (setq keyword (org-get-todo-state))
+           (unless (+org-project-p)
+             (if (string= keyword "TODO")
+                 (setq target (cons (point) (org-get-heading t t t t)))
+               (setq break (string= keyword "NEXT"))))
+           (setq break (or break (not (org-get-next-sibling)))))
+
          (when (consp target)
            (when (y-or-n-p (concat "Do you want to set " (cdr target) " to NEXT?"))
              (goto-char (car target))
-             (org-todo "NEXT")))))))
-  (add-hook 'org-after-todo-state-change-hook #'nox|org-project-set-next-after-done)
+             (org-todo "NEXT"))))))))
+(add-hook 'org-after-todo-state-change-hook #'nox|org-project-set-next-after-done)
 #+END_SRC
 
 **** Tasks and states
@@ -1829,77 +1832,33 @@ Lisp function does not specify a special indentation."
 #+END_SRC
 
 **** Helper functions
-***** Subtasks
+***** Projects and subtasks identification
 #+BEGIN_SRC emacs-lisp
-(defun nox-org-has-subtasks-p (&optional specific-keywords ignore-keywords)
-  "Any heading with subtasks.
-When SPECIFIC-KEYWORDS is nil, returns t or `all-planned' when has subtasks, and nil otherwise.
-When it is a list of keywords, returns (HAS-SUBTASKS . HAS-SPECIFIC).
-HAS-SPECIFIC is t or `all-planned'.
-`all-planned' is returned when every subtask found will not be shown in the agenda because of
-scheduling/deadline.
-Subtrees whose parent todo keyword is in IGNORE-KEYWORDS are ignored."
+(defun nox-org-has-subtasks-p ()
+  "Any heading with subtasks."
   (org-with-wide-buffer
    (let ((subtree-end (save-excursion (org-end-of-subtree t)))
-         has-subtasks has-specific)
-     (forward-line)
-     (while (and (< (point) subtree-end)
-                 (or (not (eq has-subtasks t))
-                     (and specific-keywords (not (eq has-specific t))))
-                 (re-search-forward org-todo-line-regexp subtree-end t))
-       (let ((keyword (match-string 2))
-             (planned (org-agenda-check-for-timestamp-as-reason-to-ignore-todo-item)))
-         (if (member keyword ignore-keywords)
-             (org-end-of-subtree t)
-           (if (member keyword specific-keywords)
-               (setq has-subtasks (or (eq has-subtasks t) (if planned 'all-planned t))
-                     has-specific (or (eq has-specific t) (if planned 'all-planned t)))
-             (when (member keyword org-todo-keywords-1)
-               (setq has-subtasks (or (eq has-subtasks t) (if planned 'all-planned t))))))))
-     (if specific-keywords
-         (cons has-subtasks has-specific)
-       has-subtasks))))
-#+END_SRC
+         has-subtasks)
+     (end-of-line)
+     (while (and (not has-subtasks) (re-search-forward org-todo-line-regexp subtree-end t))
+       (when (member (match-string 2) org-todo-keywords-1) (setq has-subtasks t)))
+     has-subtasks)))
 
-***** Projects
-#+BEGIN_SRC emacs-lisp
-(defun nox-org-project-p ()
+(defun +org-project-p ()
   "Any task that has subtasks."
   (and (org-get-todo-state) (nox-org-has-subtasks-p)))
 
-(defun nox-org-not-project-p ()
-  "Any task that doesn't have subtasks."
-  (and (org-get-todo-state) (not (nox-org-has-subtasks-p))))
-
-(defun nox-org-parent-projects (&optional first)
-  "Get projects that enclose this heading, each specified by (NAME . POS).
-When FIRST is non-nil, return only the closest parent project that contains this heading.
-Else, return full list of projects."
-  (let (projects components)
+(defun +org-is-subtask (&optional first)
+  "Return t if this task is a subtask."
+  (let (return)
     (org-with-wide-buffer
      (org-back-to-heading 'invisible-ok)
-     (while (and (not (and first projects))
-                 (org-up-heading-safe))
-       (setq components (org-heading-components))
-       (when (org-get-todo-state)
-         (push (cons (substring-no-properties (org-get-heading t t t t)) (point)) projects))))
-    (if first (car projects) projects)))
-
-(defun nox-org-project-status ()
-  "Return nil when heading is not project. When it is, returns `done', `stuck', `planned' or `has-next'."
-  (let ((todo-state (org-get-todo-state))
-        subtasks-p)
-    (when todo-state
-      (setq subtasks-p (nox-org-has-subtasks-p '("NEXT") '("CANCELLED" "HOLD")))
-      (when (car subtasks-p)
-        (if (member todo-state org-done-keywords)
-            'done
-          (if (cdr subtasks-p)
-              (if (eq (cdr subtasks-p) 'all-planned) 'planned 'has-next)
-            'stuck))))))
+     (while (and (not return) (org-up-heading-safe))
+       (when (org-get-todo-state) (setq return t))))
+    return))
 #+END_SRC
 
-***** Misc
+***** Tags
 #+BEGIN_SRC emacs-lisp
 (defun nox|org-offer-all-agenda-tags ()
   (setq-local org-complete-tags-always-offer-all-agenda-tags t))
@@ -2439,18 +2398,7 @@ Else, return full list of projects."
 #+BEGIN_SRC emacs-lisp
 (use-package org-clock
   :config
-  (defun nox-org-clock-in-switch-state (current)
-    "Switch a task from TODO to NEXT when clocking in.
-Skips capture tasks, projects, and subprojects.
-Switch projects and subprojects from NEXT back to TODO"
-    (when (not (and (boundp 'org-capture-mode) org-capture-mode))
-      (cond ((and (string= current "TODO") (nox-org-not-project-p))
-             "NEXT")
-            ((and (string= current "NEXT") (nox-org-project-p))
-             "TODO"))))
-
   (gsetq org-clock-in-resume t
-         org-clock-in-switch-to-state 'nox-org-clock-in-switch-state
          org-clock-out-remove-zero-time-clocks t
          org-clock-report-include-clocking-task t
          org-clock-persist t
