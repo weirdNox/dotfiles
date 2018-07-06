@@ -1748,12 +1748,6 @@ Lisp function does not specify a special indentation."
 (add-hook! 'org-after-refile-insert-hook
   (org-up-heading-safe)
   (org-update-statistics-cookies nil))
-
-(defun nox-verify-refile-target ()
-  (if (member (org-get-todo-state) org-done-keywords)
-      (progn (org-end-of-subtree t t) nil)
-    t))
-(gsetq org-refile-target-verify-function #'nox-verify-refile-target)
 #+END_SRC
 
 **** Logging
@@ -1973,13 +1967,10 @@ session as the current block. ARG has same meaning as in
   (nox-leader "a" '(org-agenda :wk "Agenda"))
 
   :config
-  (defun nox/org-agenda-finalize ()
-    (catch 'break
-      (message
-       (dolist (file (directory-files org-directory))
-         (when (string-match-p "sync-conflict" file)
-           (message-box "AVISO: Há conflitos de sincronização!")
-           (throw 'break t))))))
+  (defun +agenda|check-sync-conflicts ()
+    (when (directory-files org-directory nil "sync-conflict")
+      (message-box "AVISO: Há conflitos de sincronização!")))
+  (add-hook 'org-agenda-finalize-hook #'+agenda|check-sync-conflicts)
 
   (general-def :keymaps 'org-agenda-mode-map "P" #'+agenda/toggle-private)
 
