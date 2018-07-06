@@ -1605,18 +1605,7 @@ Lisp function does not specify a special indentation."
   :custom
   (inferior-octave-startup-args '("-i" "--line-editing"))
   (inferior-octave-prompt-read-only t)
-  (inferior-octave-prompt "^octave\\(octave\\|[ >]\\)*")
-
-  :config
-  ;; NOTE(nox): Defining functions on octave sometimes failed without this!
-  (setq-hook! inferior-octave-mode
-    eldoc-documentation-function nil)
-
-  ;; NOTE(nox): Remove whitespace from beginning when printing output
-  (defun nox*org-babel-octave-evaluate-session (orig-func session body result-type &optional matlabp)
-    (let ((result (funcall orig-func session body result-type matlabp)))
-      (if (eq result-type 'output) (string-trim-left result) result)))
-  (advice-add 'org-babel-octave-evaluate-session :around 'nox*org-babel-octave-evaluate-session))
+  (inferior-octave-prompt "^octave\\(octave\\|[ >]\\)*"))
 #+END_SRC
 
 *** Web
@@ -1822,6 +1811,7 @@ Lisp function does not specify a special indentation."
 **** Babel
 #+BEGIN_SRC emacs-lisp
 (gsetq org-confirm-babel-evaluate nil)
+
 (org-babel-do-load-languages
  'org-babel-load-languages
  '((gnuplot . t)
@@ -1832,6 +1822,70 @@ Lisp function does not specify a special indentation."
    (calc . t)))
 
 (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images)
+#+END_SRC
+
+***** Octave
+#+BEGIN_SRC emacs-lisp
+(use-package ob-octave
+  :configure
+  ;; NOTE(nox): Remove whitespace from beginning when printing output
+  (defun nox*org-babel-octave-trim-output (orig-func session body result-type &optional matlabp)
+    (let ((result (funcall orig-func session body result-type matlabp)))
+      (if (eq result-type 'output)
+          (string-trim-left result)
+        result)))
+  (advice-add 'org-babel-octave-evaluate-session :around 'nox*org-babel-octave-evaluate-session))
+#+END_SRC
+
+***** Sessions
+#+BEGIN_SRC emacs-lisp
+(defun +babel-get-src-info ()
+  "Return (LANG . SESSION)."
+  (let* ((info (org-babel-get-src-block-info t))
+         (params (nth 2 info)))
+    (cons (car info)
+          (cdr (assq :session params)))))
+
+(defun +babel/kill-session ()
+  "Kill session for current code block."
+  (interactive)
+  (org-babel-when-in-src-block
+   (let ((config (current-window-configuration)))
+     (org-babel-switch-to-session)
+     (set-process-query-on-exit-flag (get-buffer-process (current-buffer)) nil)
+     (kill-buffer)
+     (set-window-configuration config))))
+
+(defun +babel/restart-session-to-point (&optional arg)
+  "Restart session up to the src-block in the current point.
+Goes to beginning of buffer and executes each code block with
+`org-babel-execute-src-block' that has the same language and
+session as the current block. ARG has same meaning as in
+`org-babel-execute-src-block'."
+  (interactive "P")
+  (org-babel-when-in-src-block
+   (let ((search-bound (point-marker))
+         (info (+babel-get-src-info))
+         break)
+     (org-with-wide-buffer
+      (goto-char (point-min))
+      (while (and (not break) (re-search-forward org-babel-src-block-regexp nil t))
+        (goto-char (match-beginning 0))
+        (if (> (point) search-bound)
+            (setq break t)
+          (when (equal info (+babel-get-src-info)) (org-babel-execute-src-block arg)))
+        (forward-line))))))
+
+(defun +babel/remove-session-results ()
+  "Remove results from every code block of the selected session, in buffer."
+  (interactive)
+  (org-babel-when-in-src-block
+   (let ((info (+babel-get-src-info)))
+     (org-with-wide-buffer
+      (goto-char (point-min))
+      (while (re-search-forward org-babel-src-block-regexp nil t)
+        (when (equal info (+babel-get-src-info))
+          (org-babel-remove-result)))))))
 #+END_SRC
 
 **** Helper functions
