@@ -1343,19 +1343,37 @@ Needed for ivy fuzzy matching.
 **** Avy
 #+BEGIN_SRC emacs-lisp
 (use-package avy :ensure
-  :custom
-  (avy-all-windows nil)
-  (avy-background t))
+  :general
+  ("C-:"   #'avy-goto-char)
+  ("C-'"   #'avy-goto-char-timer)
+  ("M-g f" #'avy-goto-line)
+  ("M-g w" #'avy-goto-word-1)
+  :config
+  (gsetq avy-all-windows nil
+         avy-background t))
 #+END_SRC
 
 **** Dumb jump
 #+BEGIN_SRC emacs-lisp
 (use-package dumb-jump :ensure
   :commands dumb-jump-result-follow
+  :general
+  ("M-g j" #'nox@dumb-jump/body)
   :config
-  (setq dumb-jump-default-project nox-emacs-dir
+  (defhydra nox@dumb-jump (:color blue :columns 3)
+    "Dumb Jump"
+    ("j" dumb-jump-go "Go")
+    ("o" dumb-jump-go-other-window "Other window")
+    ("e" dumb-jump-go-prefer-external "Go external")
+    ("x" dumb-jump-go-prefer-external-other-window "Go external other window")
+    ("i" dumb-jump-go-prompt "Prompt")
+    ("l" dumb-jump-quick-look "Quick look")
+    ("b" dumb-jump-back "Back"))
+
+  (setq dumb-jump-selector 'ivy
+        dumb-jump-default-project nox-emacs-dir
         dumb-jump-aggressive nil
-        dumb-jump-selector 'ivy))
+        dumb-jump-use-visible-window nil))
 #+END_SRC
 
 **** Imenu
@@ -2372,7 +2390,8 @@ session as the current block. ARG has same meaning as in
 (defun +agenda/toggle-private ()
   (interactive)
   (setq +agenda-show-private (not +agenda-show-private))
-  (when  (equal major-mode 'org-agenda-mode) (org-agenda-redo)))
+  (when  (equal major-mode 'org-agenda-mode) (org-agenda-redo))
+  (message "Private tasks: %s" (if +agenda-show-private "Shown" "Hidden")))
 #+END_SRC
 
 **** Compatibility with their functions
