@@ -1961,6 +1961,8 @@ session as the current block. ARG has same meaning as in
 #+END_SRC
 
 *** Agenda
+[[https://raw.githubusercontent.com/weirdNox/dotfiles/screenshots/Agenda.png][https://raw.githubusercontent.com/weirdNox/dotfiles/screenshots/Agenda.png]]
+
 #+BEGIN_SRC emacs-lisp
 (use-package org-agenda
   :general
@@ -2068,13 +2070,13 @@ session as the current block. ARG has same meaning as in
     (if taskp
         (dolist (cont parent-continuations)
           (setq prefix (concat (if tip
-                                   (+agenda-tip-for-effort (if cont "├⮚ " "╰⮚ ") low-effort)
-                                 (if cont "|  " "   "))
+                                   (+agenda-tip-for-effort (if cont "├⮞ " "╰⮞ ") low-effort)
+                                 (if cont "│  " "   "))
                         prefix)
                 tip nil))
 
       (dolist (cont parent-continuations)
-        (setq prefix (concat (if tip (if cont "├─╴" "╰─╴") (if cont "|  " "   ")) prefix)
+        (setq prefix (concat (if tip (if cont "├─╴" "╰─╴") (if cont "│  " "   ")) prefix)
               tip nil)))
     (concat "  " prefix)))
 
