@@ -584,7 +584,7 @@ symbols.
 **** Setup Quelpa
 #+BEGIN_SRC emacs-lisp
 (use-package quelpa :ensure
-  :config
+  :init
   (setq-default quelpa-dir (concat nox-packages-dir "quelpa-cache/")
                 quelpa-verbose nox-debug-mode
 		        quelpa-melpa-recipe-stores nil
@@ -661,7 +661,8 @@ symbols.
 #+BEGIN_SRC emacs-lisp
 (gsetq abbrev-file-name               (concat nox-local-dir "abbrev.el")
        auto-save-file-name-transforms (list (list ".*" (concat nox-cache-dir "auto-save/") t))
-       auto-save-list-file-name       (concat nox-cache-dir "autosave-list")
+       auto-save-list-file-prefix     (concat nox-cache-dir "auto-save/.saves-")
+       auto-save-list-file-name       (concat nox-cache-dir "auto-save-list")
        backup-directory-alist         (list (cons "." (concat nox-cache-dir "backup/")))
        custom-file                    (concat nox-local-dir "custom.el")
        mc/list-file                   (concat nox-etc-dir "mc-lists.el")
@@ -1284,19 +1285,14 @@ Needed for ivy fuzzy matching.
   :commands (projectile-project-root projectile-project-name projectile-project-p)
   :general ("C-c p" '(:keymap projectile-command-map :wk "Projectile"))
 
-  :custom
-  (projectile-cache-file (concat nox-cache-dir "projectile.cache"))
-  (projectile-indexing-method (if IS-WINDOWS 'native 'alien))
-  (projectile-known-projects-file (concat nox-cache-dir "projectile.projects"))
-  (projectile-globally-ignored-files '(".DS_Store" "Icon" "TAGS"))
-  (projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o"))
-  (projectile-ignored-projects '("~" "/tmp"))
-
-  :config
-  (add-hook 'dired-before-readin-hook #'projectile-track-known-projects-find-file-hook)
-
-  (push ".project" projectile-project-root-files-bottom-up)
-  (gsetq projectile-globally-ignored-directories (append projectile-globally-ignored-directories
+  :init
+  (gsetq projectile-cache-file (concat nox-cache-dir "projectile.cache")
+         projectile-indexing-method (if IS-WINDOWS 'native 'alien)
+         projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
+         projectile-globally-ignored-files '(".DS_Store" "Icon" "TAGS")
+         projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
+         projectile-ignored-projects '("~" "/tmp")
+         projectile-globally-ignored-directories (append projectile-globally-ignored-directories
                                                          (list (abbreviate-file-name nox-local-dir)
                                                                ".sync" "node_modules" "flow-typed"))
          projectile-other-file-alist (append projectile-other-file-alist
@@ -1305,6 +1301,11 @@ Needed for ivy fuzzy matching.
                                                ("sass" "css")
                                                ("less" "css")
                                                ("styl" "css"))))
+
+  :config
+  (push ".project" projectile-project-root-files-bottom-up)
+
+  (add-hook 'dired-before-readin-hook #'projectile-track-known-projects-find-file-hook)
 
   ;; NOTE(nox): Projectile root-searching functions can cause an infinite loop on TRAMP
   ;; connections, so disable them
