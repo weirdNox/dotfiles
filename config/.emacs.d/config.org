@@ -1669,8 +1669,11 @@ Lisp function does not specify a special indentation."
         org-blank-before-new-entry '((heading . t) (plain-list-item . auto)))
 
 (defun nox|org-summary-todo (n-done n-not-done)
-  "Switch entry to DONE when all subentries are done, to TODO otherwise."
-  (let (org-log-done org-log-states) (org-todo (if (= n-not-done 0) "DONE" "TODO"))))
+  "Update todo keyword after changing the statistics cookie, when needed."
+  (let ((keyword (org-get-todo-state)))
+    (if (= n-not-done 0)
+        (when (not (member keyword org-done-keywords)) (org-todo "DONE"))
+      (when (member keyword org-done-keywords) (org-todo "TODO")))))
 (add-hook! 'org-after-todo-statistics-hook #'nox|org-summary-todo)
 
 (defun nox|org-project-set-next-after-done ()
