@@ -1281,14 +1281,11 @@ Needed for ivy fuzzy matching.
 *** Projects
 #+BEGIN_SRC emacs-lisp
 (use-package projectile :ensure
-  :after-call (pre-command-hook after-find-file dired-before-readin-hook)
-  :commands (projectile-project-root projectile-project-name projectile-project-p)
   :general ("C-c p" '(:keymap projectile-command-map :wk "Projectile"))
-
   :init
-  (gsetq projectile-cache-file (concat nox-cache-dir "projectile.cache")
+  (gsetq projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
+         projectile-cache-file (concat nox-cache-dir "projectile.cache")
          projectile-indexing-method (if IS-WINDOWS 'native 'alien)
-         projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
          projectile-globally-ignored-files '(".DS_Store" "Icon" "TAGS")
          projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
          projectile-ignored-projects '("~" "/tmp"))
@@ -1304,8 +1301,6 @@ Needed for ivy fuzzy matching.
                                                ("less" "css")
                                                ("styl" "css"))))
   (push ".project" projectile-project-root-files-bottom-up)
-
-  (add-hook 'dired-before-readin-hook #'projectile-track-known-projects-find-file-hook)
 
   ;; NOTE(nox): Projectile root-searching functions can cause an infinite loop on TRAMP
   ;; connections, so disable them
@@ -1323,6 +1318,7 @@ Needed for ivy fuzzy matching.
       (apply orig-fun args)))
   (advice-add #'projectile-cache-current-file :around #'nox*projectile-cache-current-file)
 
+  (projectile-load-known-projects)
   (projectile-mode))
 
 (use-package counsel-projectile :ensure
@@ -1850,7 +1846,7 @@ Lisp function does not specify a special indentation."
 ***** Octave
 #+BEGIN_SRC emacs-lisp
 (use-package ob-octave
-  :configure
+  :config
   ;; NOTE(nox): Remove whitespace from beginning when printing output
   (defun nox*org-babel-octave-trim-output (orig-func session body result-type &optional matlabp)
     (let ((result (funcall orig-func session body result-type matlabp)))
