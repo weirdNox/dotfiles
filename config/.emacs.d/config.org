@@ -387,6 +387,17 @@ When ARG is:
       (save-buffers-kill-terminal save-without-asking))))
 #+END_SRC
 
+**** Time measurement
+#+BEGIN_SRC emacs-lisp
+(defmacro nox-measure-time (&rest body)
+  "Measure and return the running time of the code block."
+  (declare (indent defun))
+  (let ((start (make-symbol "start")))
+    `(let ((,start (float-time)))
+       ,@body
+       (- (float-time) ,start))))
+#+END_SRC
+
 **** Helpers
 #+BEGIN_SRC emacs-lisp
 (defun nox-pos-at-line (line &optional column)
@@ -1647,6 +1658,8 @@ Lisp function does not specify a special indentation."
   (nox-leader :infix "o"
     ""  '(:ignore t :wk "Org")
     "l" '(org-store-link :wk "Store link"))
+  (:keymaps 'org-mode-map
+   "C-c C-q" 'counsel-org-tag)
 
   :config
   (gsetq org-modules '(org-habit org-id org-protocol org-timer))
@@ -1675,12 +1688,12 @@ Lisp function does not specify a special indentation."
 
 **** Behavior
 #+BEGIN_SRC emacs-lisp
-(gsetq  org-tags-column -92
-        org-catch-invisible-edits 'smart
-        org-return-follows-link t
-        org-list-allow-alphabetical t
-        org-loop-over-headlines-in-active-region t
-        org-blank-before-new-entry '((heading . t) (plain-list-item . auto)))
+(gsetq org-tags-column -110
+       org-catch-invisible-edits 'smart
+       org-return-follows-link t
+       org-list-allow-alphabetical t
+       org-loop-over-headlines-in-active-region t
+       org-blank-before-new-entry '((heading . t) (plain-list-item . auto)))
 
 (defun nox|org-summary-todo (n-done n-not-done)
   "Update todo keyword after changing the statistics cookie, when needed."
@@ -1739,7 +1752,9 @@ Lisp function does not specify a special indentation."
        org-outline-path-complete-in-steps nil
        org-refile-allow-creating-parent-nodes 'confirm
        org-refile-targets `((nil . (:maxlevel . 9))
-                            (org-agenda-files . (:maxlevel . 9))))
+                            (,nox-org-agenda-file . (:maxlevel . 9))))
+
+(after! deft (gsetq org-refile-targets (push '(deft-all-files . (:maxlevel . 1)) org-refile-targets)))
 
 (add-hook! 'org-after-refile-insert-hook
   (org-up-heading-safe)
@@ -1965,6 +1980,8 @@ session as the current block. ARG has same meaning as in
   (nox-leader "a" '(org-agenda :wk "Agenda"))
 
   :config
+  (general-def :keymaps 'org-agenda-mode-map "C-c C-q" 'counsel-org-tag-agenda)
+
   (defun +agenda|check-sync-conflicts ()
     (when (directory-files org-directory nil "sync-conflict")
       (message-box "AVISO: Há conflitos de sincronização!")))
@@ -2235,109 +2252,108 @@ session as the current block. ARG has same meaning as in
          (scheduled-past-or-now (and has-scheduling (not scheduled-future)))
          (effort (org-element-property :EFFORT headline))
          (contents-begin (org-element-property :contents-begin headline))
+         (tickler (member "TICKLER" (org-element-property :tags headline)))
          entry project-status return)
 
-    (setq entry (+agenda-entry headline (cl-remove-duplicates (append (org-element-property :tags headline)
-                                                                      +agenda-parent-tags)
-                                                              :test 'string=)))
-
-    (when (or +agenda-show-private
-              (not (member "PRIVATE" (org-element-property :tags headline))))
+    (when (or +agenda-show-private (not (member "PRIVATE" (org-element-property :tags headline))))
+      (setq entry
+            (+agenda-entry headline (cl-remove-duplicates
+                                     (append (org-element-property :tags headline) +agenda-parent-tags)
+                                     :test 'string=)))
       (if (not todo-type)
-          (unless (member "TICKLER" (org-element-property :tags headline))
-            (let* ((timestamp (or scheduled-ts deadline-ts))
-                   (time-to-now (and timestamp (org-time-stamp-to-now timestamp)))
-                   first-child search-bound temp-time)
+          ;; NOTE(nox): No todo keyword
+          (let* ((timestamp (or scheduled-ts deadline-ts))
+                 (time-to-now (and timestamp (org-time-stamp-to-now timestamp)))
+                 first-child search-bound temp-time)
 
-              ;; NOTE(nox): Find the most recent active timestamp
-              (when (and (not time-to-now) contents-begin)
-                (setq first-child (org-element-map (org-element-contents headline) 'headline #'identity
-                                                   nil t 'headline)
-                      search-bound (or (and first-child (org-element-property :begin first-child))
-                                       (org-element-property :end headline)))
-                (goto-char contents-begin)
-                (while (re-search-forward org-ts-regexp search-bound t)
-                  (setq temp-time (org-time-stamp-to-now (match-string 1)))
-                  (when (or (not time-to-now) (> temp-time time-to-now))
-                    (setq time-to-now temp-time))))
+            ;; NOTE(nox): Find the most recent active timestamp
+            (when (and (not time-to-now) contents-begin)
+              (setq first-child (org-element-map (org-element-contents headline) 'headline #'identity
+                                                 nil t 'headline)
+                    search-bound (or (and first-child (org-element-property :begin first-child))
+                                     (org-element-property :end headline)))
+              (goto-char contents-begin)
+              (while (re-search-forward org-ts-regexp search-bound t)
+                (setq temp-time (org-time-stamp-to-now (match-string 1)))
+                (when (or (not time-to-now) (> temp-time time-to-now))
+                  (setq time-to-now temp-time))))
 
-              (if (and time-to-now (< time-to-now -60))
-                  ;; NOTE(nox): This headline without todo keyword has a timestamp that is
-                  ;; more than two months old.
-                  (push entry +agenda-archivable-tasks)
+            (if (and time-to-now (< time-to-now -60))
+                ;; NOTE(nox): This headline without todo keyword has a timestamp that is
+                ;; more than two months old.
+                (push entry +agenda-archivable-tasks)
 
-                ;; NOTE(nox): Just process the children of this headline without todo keyword
-                (setq return (+agenda-process-children headline)))))
+              ;; NOTE(nox): Just process the children of this headline without todo keyword
+              (unless tickler (setq return (+agenda-process-children headline)))))
 
+        ;; NOTE(nox): Has todo keyword
         (+agenda-set-parent-minimum-status 'stuck)
 
-        (if (or (eq todo-type 'done)
-                (string= (org-element-property :STYLE headline) "habit"))
+        (if (eq todo-type 'done)
             ;; NOTE(nox): Archive all tasks that have been done for longer than 2 months
-            (when (and (eq todo-type 'done)
-                       (or (not closed-ts)
-                           (< (org-time-stamp-to-now closed-ts) -60)))
+            (when (or (not closed-ts) (< (org-time-stamp-to-now closed-ts) -60))
               (push entry +agenda-archivable-tasks))
 
-          (cond
-           ;; NOTE(nox): Planned
-           ((and (not (string= todo "NEXT")) scheduled-future)
-            (setf (+agenda-entry-planned entry) t)
-            (if (= +agenda-level 0)
-                (push entry +agenda-planned-tasks)
-              (+agenda-set-parent-minimum-status 'planned)
-              (setq return entry)))
-
-           ;; NOTE(nox): Hold
-           ((or (string= todo "HOLD") (string= todo "WAITING"))
-            (push entry +agenda-hold-tasks))
-
-           (t
-            ;; NOTE(nox): Process children
-            (let* ((+agenda-project-status nil)
-                   (children (+agenda-flatten-list (+agenda-process-children headline t)))
-                   tail prev)
-              (setq project-status +agenda-project-status)
-
-              ;; NOTE(nox): When this project is not planned, we need to remove its
-              ;; planned tasks and insert them in the planned list
-              ;; IMPORTANT(nox): A project that is stuck doesn't have any planned children
-              ;; so, for this check, not planned ≡ next
-              (when (eq project-status 'next)
-                (setq tail children)
-                (while tail
-                  (if (or (+agenda-entry-planned (car tail))
-                          (eq (+agenda-entry-project-status (car tail)) 'planned))
-                      (progn
-                        (push (car tail) +agenda-planned-tasks)
-                        (if prev
-                            (setcdr prev (cdr tail))
-                          (setq children (cdr tail))))
-                    (setq prev tail))
-                  (setq tail (cdr tail))))
-
-              (setf (+agenda-entry-project-status entry) project-status
-                    (+agenda-entry-children entry) children))
-
-            ;; NOTE(nox): Update parent project status
-            (unless (or (= +agenda-level 0) (eq +agenda-project-status 'next))
-              (if project-status
-                  (when (memq project-status '(next planned)) (setq +agenda-project-status project-status))
-                (when (or (string= todo "NEXT") scheduled-past-or-now)
-                  (setq +agenda-project-status 'next))))
-
-            (if project-status
-                (if (and (eq project-status 'planned) (= +agenda-level 0))
-                    (push entry +agenda-planned-tasks)
-                  (setq return entry))
-
+          (unless tickler
+            (cond
+             ;; NOTE(nox): Planned
+             ((and (not (string= todo "NEXT")) scheduled-future)
+              (setf (+agenda-entry-planned entry) t)
               (if (= +agenda-level 0)
-                  (unless (+agenda-filter-priorities entry)
-                    (when (or (not has-scheduling) (and (string= todo "NEXT")
-                                                        scheduled-future))
-                      (push entry +agenda-isolated-tasks)))
+                  (push entry +agenda-planned-tasks)
+                (+agenda-set-parent-minimum-status 'planned)
+                (setq return entry)))
 
-                (when (or (string= todo "NEXT") scheduled-past-or-now) (setq return entry))))))))
+             ;; NOTE(nox): Hold
+             ((or (string= todo "HOLD") (string= todo "WAITING"))
+              (push entry +agenda-hold-tasks))
+
+             (t
+              ;; NOTE(nox): Process children
+              (let* ((+agenda-project-status nil)
+                     (children (+agenda-flatten-list (+agenda-process-children headline t)))
+                     tail prev)
+                (setq project-status +agenda-project-status)
+
+                ;; NOTE(nox): When this project is not planned, we need to remove its
+                ;; planned tasks and insert them in the planned list
+                ;; IMPORTANT(nox): A project that is stuck doesn't have any planned children
+                ;; so, for this check, not planned ≡ next
+                (when (eq project-status 'next)
+                  (setq tail children)
+                  (while tail
+                    (if (or (+agenda-entry-planned (car tail))
+                            (eq (+agenda-entry-project-status (car tail)) 'planned))
+                        (progn
+                          (push (car tail) +agenda-planned-tasks)
+                          (if prev
+                              (setcdr prev (cdr tail))
+                            (setq children (cdr tail))))
+                      (setq prev tail))
+                    (setq tail (cdr tail))))
+
+                (setf (+agenda-entry-project-status entry) project-status
+                      (+agenda-entry-children entry) children))
+
+              ;; NOTE(nox): Update parent project status
+              (unless (or (= +agenda-level 0) (eq +agenda-project-status 'next))
+                (if project-status
+                    (when (memq project-status '(next planned)) (setq +agenda-project-status project-status))
+                  (when (or (string= todo "NEXT") scheduled-past-or-now)
+                    (setq +agenda-project-status 'next))))
+
+              (if project-status
+                  (if (and (eq project-status 'planned) (= +agenda-level 0))
+                      (push entry +agenda-planned-tasks)
+                    (setq return entry))
+
+                (if (= +agenda-level 0)
+                    (unless (+agenda-filter-priorities entry)
+                      (when (or (not has-scheduling) (and (string= todo "NEXT")
+                                                          scheduled-future))
+                        (push entry +agenda-isolated-tasks)))
+
+                  (when (or (string= todo "NEXT") scheduled-past-or-now) (setq return entry)))))))))
       return)))
 
 (defun +agenda-tasks (&optional _)
@@ -2369,7 +2385,7 @@ session as the current block. ARG has same meaning as in
                    (append
                     (+agenda-flatten-list
                      (org-element-map ast 'headline #'+agenda-tasks-process-headline nil nil 'headline))
-                           +agenda-projects))))))
+                    +agenda-projects))))))
 
       (let ((inhibit-read-only t))
 	    (goto-char (point-max))
@@ -2437,8 +2453,8 @@ session as the current block. ARG has same meaning as in
                             "* NEXT %i%?" :clock-in t :clock-resume t)
                            ("c" "Calendário" entry (file "")
                             "* %?\n%^t")
-                           ("n" "Nota" entry (file "")
-                            "* %?" :clock-in t :clock-resume t)
+                           ("i" "Interrupção" entry (file+olp nox-org-agenda-file "Interrupções")
+                            "* %?\n" :clock-in t :clock-resume t)
                            ("d" "Diário" entry (file+olp+datetree nox-org-journal-file)
                             "* %?" :clock-in t :clock-resume t)
                            ("w" "Web bookmark" entry (file "")
