@@ -2092,7 +2092,7 @@ session as the current block. ARG has same meaning as in
           (setq prefix (concat (if tip
                                    (+agenda-tip-for-effort (if cont "├⮞ " "╰⮞ ") low-effort)
                                  (if cont "│  " "   "))
-                        prefix)
+                               prefix)
                 tip nil))
 
       (dolist (cont parent-continuations)
@@ -2113,37 +2113,28 @@ session as the current block. ARG has same meaning as in
 (defun +agenda-project-printer (list &optional parent-continuations)
   (setq list (sort list #'+agenda-priority-sort))
 
-  (if parent-continuations
-      (while list
-        (let ((entry (car list)))
+  (let ((first t) entry)
+    (while list
+      (setq entry (car list))
+      (if parent-continuations
           (unless (cdr list) (setf (car parent-continuations) nil))
+        (unless first (insert "\n")))
 
-          (when (eq (+agenda-entry-project-status entry) 'stuck)
-            (org-add-props (+agenda-entry-text entry) nil 'face 'org-priority))
+      (when (eq (+agenda-entry-project-status entry) 'stuck)
+        (org-add-props (+agenda-entry-text entry) nil 'face 'org-priority 'nox-face 'org-priority))
 
+      (let ((org-todo-keyword-faces (if (+agenda-entry-project-status entry)
+                                        +agenda-projects-not-task-faces
+                                      +agenda-projects-task-faces))
 
-          (let ((org-todo-keyword-faces (if (+agenda-entry-project-status entry)
-                                            +agenda-projects-not-task-faces
-                                          +agenda-projects-task-faces)))
-            (insert
-             (+agenda-format-entry
-              (+agenda-project-get-prefix (not (+agenda-entry-project-status entry)) parent-continuations
-                                          (+agenda-entry-low-effort entry))
-              entry)))
+            (prefix (+agenda-project-get-prefix (not (+agenda-entry-project-status entry))
+                                                parent-continuations
+                                                (+agenda-entry-low-effort entry))))
+        (insert (+agenda-format-entry prefix entry)))
 
-          (+agenda-project-printer (+agenda-entry-children entry) (cons t parent-continuations)))
-        (setq list (cdr list)))
-
-    (let ((first t)
-          (org-todo-keyword-faces +agenda-projects-not-task-faces))
-      (dolist (entry list)
-        (if first (setq first nil) (insert "\n"))
-
-        (when (eq (+agenda-entry-project-status entry) 'stuck)
-          (org-add-props (+agenda-entry-text entry) nil 'face 'org-priority))
-        (insert (+agenda-format-entry "  " entry))
-
-        (+agenda-project-printer (+agenda-entry-children entry) (list t))))))
+      (+agenda-project-printer (+agenda-entry-children entry) (cons t parent-continuations))
+      (setq list (cdr list)
+            first nil))))
 
 (defun +agenda-simple-printer (list)
   (setq list (sort list #'+agenda-priority-sort))
@@ -2421,8 +2412,11 @@ session as the current block. ARG has same meaning as in
 #+BEGIN_SRC emacs-lisp
 (defun +agenda*change-all-lines-fixface (newhead hdmarker &optional fixface just-this)
   (when (org-get-at-bol 'nox-custom-agenda)
-    (let ((inhibit-read-only t))
-	  (add-text-properties (point-at-bol) (point-at-eol) '(face nil)))))
+    (let* ((inhibit-read-only t)
+           (bol (point-at-bol))
+           (eol (point-at-eol))
+           (position (next-single-property-change bol 'nox-face nil eol)))
+	  (add-text-properties bol eol `(face ,(and position (get-text-property position 'nox-face)))))))
 (advice-add 'org-agenda-change-all-lines :before '+agenda*change-all-lines-fixface)
 #+END_SRC
 
