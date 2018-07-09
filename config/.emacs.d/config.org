@@ -1761,6 +1761,13 @@ Lisp function does not specify a special indentation."
   (org-update-statistics-cookies nil))
 #+END_SRC
 
+**** Priorities
+#+BEGIN_SRC emacs-lisp
+(gsetq org-highest-priority ?A
+       org-default-priority ?C
+       org-lowest-priority  ?D)
+#+END_SRC
+
 **** Logging
 #+BEGIN_SRC emacs-lisp
 (gsetq org-log-done 'time
@@ -2094,8 +2101,8 @@ session as the current block. ARG has same meaning as in
     (concat "  " prefix)))
 
 (defun +agenda-priority-sort (a b)
-  (let ((pa (or (+agenda-entry-priority a) ?B))
-        (pb (or (+agenda-entry-priority b) ?B)))
+  (let ((pa (or (+agenda-entry-priority a) org-default-priority))
+        (pb (or (+agenda-entry-priority b) org-default-priority)))
     (< pa pb)))
 
 (defun +agenda-flatten-list (l)
@@ -2215,7 +2222,7 @@ session as the current block. ARG has same meaning as in
 (defun +agenda-filter-priorities (entry)
   (let ((priority (+agenda-entry-priority entry)))
     (cond ((eq priority ?A) (push entry +agenda-high-priority))
-          ((eq priority ?C) (push entry +agenda-low-priority)))))
+          ((eq priority ?D) (push entry +agenda-low-priority)))))
 
 (defmacro +agenda-process-children (parent &optional task-children)
   (if task-children
