@@ -1420,7 +1420,8 @@ Position the cursor at its beginning, according to the current mode."
 *** Selection
 **** Expand region
 #+BEGIN_SRC emacs-lisp
-(use-package expand-region :ensure)
+(use-package expand-region :ensure
+  :general ("C-=" 'er/expand-region))
 #+END_SRC
 
 **** Multiple cursors
