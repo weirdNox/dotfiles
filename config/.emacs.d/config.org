@@ -948,15 +948,23 @@ ARGS are the same as in `custom-set-faces'."
 
 **** Extra programming keywords
 #+BEGIN_SRC emacs-lisp
-(defface font-lock-todo-face      '((t (:foreground "#dc322f" :weight bold :underline t))) "Face for TODO keywords.")
-(defface font-lock-important-face '((t (:foreground "#b58900" :weight bold :underline t))) "Face for IMPORTANT keywords.")
-(defface font-lock-note-face      '((t (:foreground "#228b22" :weight bold :underline t))) "Face for NOTE keywords.")
-(defface font-lock-study-face     '((t (:foreground "#41728e" :weight bold :underline t))) "Face for STUDY keywords.")
+(defface font-lock-todo-face      '((t (:foreground "#dc322f" :weight bold :underline t)))
+  "Face for TODO keywords.")
+
+(defface font-lock-important-face '((t (:foreground "#b58900" :weight bold :underline t)))
+  "Face for IMPORTANT keywords.")
+
+(defface font-lock-note-face      '((t (:foreground "#228b22" :weight bold :underline t)))
+  "Face for NOTE keywords.")
+
+(defface font-lock-study-face     '((t (:foreground "#8470ff" :weight bold :underline t)))
+  "Face for STUDY keywords.")
+
 (add-hook! prog-mode (font-lock-add-keywords
-                      nil '(("\\<\\(TODO\\|FIXME\\)" 1 'font-lock-todo-face t)
+                      nil '(("\\<\\(TODO\\|FIXME\\|OPTIMIZE\\|HACK\\)" 1 'font-lock-todo-face t)
                             ("\\<\\(IMPORTANT\\)" 1 'font-lock-important-face t)
                             ("\\<\\(NOTE\\)" 1 'font-lock-note-face t)
-                            ("\\<\\(STUDY\\)" 1 'font-lock-study-face t))))
+                            ("\\<\\(STUDY\\|REVIEW\\)" 1 'font-lock-study-face t))))
 #+END_SRC
 
 *** Icons
@@ -987,7 +995,8 @@ Disable fringes in the minibuffer window.
 #+BEGIN_SRC emacs-lisp
 (use-package doom-modeline :ensure
   :config
-  (gsetq doom-modeline-enable-word-count t))
+  (gsetq doom-modeline-enable-word-count t)
+  (display-time-mode))
 #+END_SRC
 
 *** Appearance setup
