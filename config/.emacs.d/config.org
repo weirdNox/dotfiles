@@ -1762,6 +1762,7 @@ Lisp function does not specify a special indentation."
 #+BEGIN_SRC emacs-lisp
 (gsetq
  org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)")
+                     (type "WATCH(v)" "READ(r)" "|")
                      (sequence "HOLD(h@/!)" "WAITING(w@/!)" "|" "CANCELLED(c@/!)"))
  org-treat-S-cursor-todo-selection-as-state-change nil
  org-columns-default-format "%80ITEM(Task) %10Effort(Effort){:} %10CLOCKSUM"
@@ -2459,17 +2460,39 @@ session as the current block. ARG has same meaning as in
 #+BEGIN_SRC emacs-lisp
 (use-package org-capture
   :init
-  (defun nox-org-capture-frame ()
+  (defun +capture-frame ()
     (modify-frame-parameters nil '((name . "Org Capture")
                                    (org-capture-frame . t)
                                    (width . 110) (height . 40)))
     (org-capture))
 
   :config
-  (defun nox-org-capture-add-created-property ()
-    (org-set-property "CREATED" (format-time-string
-                                 (concat "[" (substring (cdr org-time-stamp-formats) 1 -1) "]"))))
-  (add-hook 'org-capture-before-finalize-hook 'nox-org-capture-add-created-property)
+  (require 'deft)
+  (defconst nox-movies-series-books-file (concat deft-directory "filmes-series-livros.org"))
+
+  (defun nox-org-inactive-timestamp (&optional time)
+    (format-time-string (concat "[" (substring (cdr org-time-stamp-formats) 1 -1) "]") time))
+
+  (defun +capture|add-created-property ()
+    (unless (org-before-first-heading-p) (org-set-property "CREATED" (nox-org-inactive-timestamp))))
+  (add-hook 'org-capture-before-finalize-hook '+capture|add-created-property)
+
+  (defun +capture-bookmark-find-buffer ()
+    (set-buffer
+     (if (org-capture-get :bookmark-new-file)
+         (find-file-noselect (deft-absolute-filename (org-capture-get :bookmark-title)))
+       (find-file-noselect (read-file-name "Target file: " deft-directory nil 'confirm))))
+    (goto-char (point-max)))
+
+  (defun +capture-bookmark-get-template ()
+    (let ((title (completing-read "Title: " (list (plist-get org-store-link-plist :description))))
+          (create-new (y-or-n-p "Create new file?")))
+      (org-capture-put :bookmark-title title)
+      (org-capture-put :bookmark-new-file create-new)
+      (if create-new
+          (format "#+TITLE: %s\n#+PROPERTY: CREATED %s\n\n[[%s][Link]]\n"
+                  title (nox-org-inactive-timestamp) (plist-get org-store-link-plist :link))
+        (format "* [[%s][%s]]\n" (plist-get org-store-link-plist :link) title))))
 
   (gsetq
    org-capture-templates '(("t" "Tarefa" entry (file "")
@@ -2480,8 +2503,14 @@ session as the current block. ARG has same meaning as in
                             "* %?" :clock-in t :clock-resume t :empty-lines 1)
                            ("d" "Diário" entry (file+olp+datetree nox-org-journal-file)
                             "* %?" :clock-in t :clock-resume t)
-                           ("w" "Web bookmark" entry (file "")
-                            "* [[%:link][%^{Title|%:description}]]\n%?" :clock-in t :clock-resume t)))
+                           ("f" "Filme" entry (file+olp nox-movies-series-books-file "Filmes")
+                            "* WATCH %?" :empty-lines-after 1 :prepend t)
+                           ("s" "Série" entry (file+olp nox-movies-series-books-file "Séries")
+                            "* WATCH %?" :empty-lines-after 1 :prepend t)
+                           ("l" "Livro" entry (file+olp nox-movies-series-books-file "Livros")
+                            "* READ %?" :empty-lines-after 1 :prepend t)
+                           ("w" "Web bookmark" plain (function +capture-bookmark-find-buffer)
+                            (function +capture-bookmark-get-template) :empty-lines 1)))
 
   (add-hook 'org-capture-mode-hook 'nox|org-offer-all-agenda-tags)
 
