@@ -336,37 +336,6 @@ Body forms can access the hook's arguments through the let-bound variable
           (kill-buffer))))))
 #+END_SRC
 
-**** Line movement
-#+BEGIN_SRC emacs-lisp
-(defun nox/previous-blank-line ()
-  "Move point to the previous blank line"
-  (interactive)
-  (move-end-of-line nil)
-  (if (search-backward-regexp "^[\t ]*\n[\t ]*[^\t\n ]+" nil "NOERROR") nil
-    (goto-char (point-min))))
-
-(defun nox/next-blank-line ()
-  "Move point to the next blank line"
-  (interactive)
-  (move-beginning-of-line nil)
-  (if (not (search-forward-regexp "[^\t\n ]\n[\t ]*$" nil "NOERROR"))
-      (goto-char (point-max))))
-
-(defun nox/open-line-above ()
-  "Insert an empty line above the current line.
-Position the cursor at its beginning, according to the current mode."
-  (interactive)
-  (move-end-of-line 0)
-  (newline-and-indent))
-
-(defun nox/open-line-below ()
-  "Insert an empty line below the current line.
-Position the cursor at its beginning, according to the current mode."
-  (interactive)
-  (move-end-of-line nil)
-  (newline-and-indent))
-#+END_SRC
-
 **** Exiting
 #+BEGIN_SRC emacs-lisp
 (defun nox/exit-emacs (arg)
@@ -1406,6 +1375,37 @@ Needed for ivy fuzzy matching.
   #'recenter)
 #+END_SRC
 
+**** Line movement functions
+#+BEGIN_SRC emacs-lisp
+(defun nox/previous-blank-line ()
+  "Move point to the previous blank line"
+  (interactive)
+  (move-end-of-line nil)
+  (if (search-backward-regexp "^[\t ]*\n[\t ]*[^\t\n ]+" nil "NOERROR") nil
+    (goto-char (point-min))))
+
+(defun nox/next-blank-line ()
+  "Move point to the next blank line"
+  (interactive)
+  (move-beginning-of-line nil)
+  (if (not (search-forward-regexp "[^\t\n ]\n[\t ]*$" nil "NOERROR"))
+      (goto-char (point-max))))
+
+(defun nox/open-line-above ()
+  "Insert an empty line above the current line.
+Position the cursor at its beginning, according to the current mode."
+  (interactive)
+  (move-end-of-line 0)
+  (newline-and-indent))
+
+(defun nox/open-line-below ()
+  "Insert an empty line below the current line.
+Position the cursor at its beginning, according to the current mode."
+  (interactive)
+  (move-end-of-line nil)
+  (newline-and-indent))
+#+END_SRC
+
 *** Electric
 #+BEGIN_SRC emacs-lisp
 (use-package electric
@@ -1432,6 +1432,27 @@ Needed for ivy fuzzy matching.
    "M-«"   'mc/mark-previous-like-this
    "C-M-»" 'mc/mark-all-like-this
    "M-<mouse-1>" 'mc/add-cursor-on-click))
+#+END_SRC
+
+*** Number incrementation and decrementation functions
+From [[https://www.emacswiki.org/emacs/IncrementNumber][EmacsWiki]].
+
+#+BEGIN_SRC emacs-lisp
+(defun nox/increment-number-decimal (&optional arg)
+  "Increment the number forward from point by 'arg'."
+  (interactive "p*")
+  (save-excursion
+    (save-match-data
+      (let (inc-by field-width answer)
+        (setq inc-by (if arg arg 1))
+        (skip-chars-backward "0123456789")
+        (when (re-search-forward "[0-9]+" nil t)
+          (setq field-width (- (match-end 0) (match-beginning 0)))
+          (setq answer (+ (string-to-number (match-string 0) 10) inc-by))
+          (when (< answer 0)
+            (setq answer (+ (expt 10 field-width) answer)))
+          (replace-match (format (concat "%0" (int-to-string field-width) "d")
+                                 answer)))))))
 #+END_SRC
 
 *** Large file verification
