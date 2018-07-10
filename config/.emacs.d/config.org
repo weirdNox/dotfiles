@@ -1329,10 +1329,10 @@ Needed for ivy fuzzy matching.
 #+BEGIN_SRC emacs-lisp
 (use-package avy :ensure
   :general
-  ("C-:"   #'avy-goto-char)
-  ("C-'"   #'avy-goto-char-timer)
-  ("M-g f" #'avy-goto-line)
-  ("M-g w" #'avy-goto-word-1)
+  ("C-:"   #'avy-goto-char
+   "C-'"   #'avy-goto-char-timer
+   "M-g f" #'avy-goto-line
+   "M-g w" #'avy-goto-word-1)
   :config
   (gsetq avy-all-windows nil
          avy-background t))
@@ -2588,8 +2588,8 @@ session as the current block. ARG has same meaning as in
 #+BEGIN_SRC emacs-lisp
 (use-package org-noter :ensure
   :general
-  (nox-local-leader :keymaps 'org-mode-map
-    "n" '(org-noter :wk "Org Noter"))
+  (nox-local-leader :keymaps 'org-mode-map      "n" '(org-noter :wk "Org Noter"))
+  (nox-local-leader :keymaps 'pdf-view-mode-map "n" '(org-noter :wk "Org Noter"))
 
   :config
   (gsetq org-noter-default-heading-title "Notas da página $p$"
@@ -2963,8 +2963,10 @@ session as the current block. ARG has same meaning as in
 **** PDF Tools
 #+BEGIN_SRC emacs-lisp
 (use-package pdf-tools :ensure
-  :mode (("\\.pdf\\'" . pdf-view-mode))
+  :mode ("\\.pdf\\'" . pdf-view-mode)
   :commands (org-pdfview-open org-pdfview-store-link org-pdfview-complete-link)
+  :general
+  (:keymaps 'pdf-view-mode-map "C-s" 'isearch-forward)
   :config
   ;; Adapted from https://github.com/markus1189/org-pdfview
   (defun org-pdfview-open (link)
