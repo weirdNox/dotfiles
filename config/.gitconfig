@@ -1,4 +1,6 @@
 [merge]
 	conflictStyle = diff3
+[rebase]
+	autosquash = true
 [include]
     path = ~/.gitconfig_local
