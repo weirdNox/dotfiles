@@ -416,19 +416,19 @@ else (except for `window-setup-hook').")
 
 **** Window and buffer switch
 #+BEGIN_SRC emacs-lisp
-(defvar nox-before-switch-window-hook nil
+(defvar nox-exit-window-hook nil
   "Hook run before `switch-window' or `switch-frame' are called. See
-`nox-after-switch-window-hook'.")
+`nox-enter-window-hook'.")
 
-(defvar nox-after-switch-window-hook nil
+(defvar nox-enter-window-hook nil
   "Hook run after `switch-window' or `switch-frame' are called. See
-`nox-before-switch-window-hook'.")
+`nox-exit-window-hook'.")
 
-(defvar nox-before-switch-buffer-hook nil
+(defvar nox-exit-buffer-hook nil
   "Hook run before `switch-to-buffer', `pop-to-buffer' or `display-buffer' are
 called. The buffer to be switched to is current when these hooks run.")
 
-(defvar nox-after-switch-buffer-hook nil
+(defvar nox-enter-buffer-hook nil
   "Hook run after `switch-to-buffer', `pop-to-buffer' or `display-buffer' are
 called. The buffer to be switched to is current when these hooks run.")
 
@@ -443,19 +443,20 @@ called. The buffer to be switched to is current when these hooks run.")
           (window-minibuffer-p window))
       (funcall orig-fn window norecord)
     (let ((nox-inhibit-switch-window-hooks t))
-      (run-hooks 'nox-before-switch-window-hook)
+      (run-hooks 'nox-exit-window-hook)
       (prog1 (funcall orig-fn window norecord)
         (with-selected-window window
-          (run-hooks 'nox-after-switch-window-hook))))))
+          (run-hooks 'nox-enter-window-hook))))))
+
 (defun nox*switch-buffer-hooks (orig-fn buffer-or-name &rest args)
   (if (or nox-inhibit-switch-buffer-hooks
           (eq (get-buffer buffer-or-name) (current-buffer)))
       (apply orig-fn buffer-or-name args)
     (let ((nox-inhibit-switch-buffer-hooks t))
-      (run-hooks 'nox-before-switch-buffer-hook)
+      (run-hooks 'nox-exit-buffer-hook)
       (prog1 (apply orig-fn buffer-or-name args)
         (with-current-buffer buffer-or-name
-          (run-hooks 'nox-after-switch-buffer-hook))))))
+          (run-hooks 'nox-enter-buffer-hook))))))
 
 (defun nox|setup-switch-hooks (&optional disable)
   (dolist (spec '((select-window . nox*switch-window-hooks)
@@ -776,7 +777,7 @@ with functions that require it."
 **** Highlight matching parentheses
 #+BEGIN_SRC emacs-lisp
 (use-package paren
-  :after-call (after-find-file nox-before-switch-buffer-hook)
+  :after-call (after-find-file nox-exit-buffer-hook)
   :config
   (setq show-paren-delay 0
         show-paren-highlight-openparen t
@@ -974,9 +975,12 @@ ARGS are the same as in `custom-set-faces'."
   (defun nox*disable-all-the-icons-in-tty (orig-fn &rest args)
     (when (display-graphic-p)
       (apply orig-fn args)))
-  (dolist (fn '(all-the-icons-octicon all-the-icons-material
-                all-the-icons-faicon all-the-icons-fileicon
-                all-the-icons-wicon all-the-icons-alltheicon))
+  (dolist (fn '(all-the-icons-alltheicon
+                all-the-icons-faicon
+                all-the-icons-fileicon
+                all-the-icons-material
+                all-the-icons-octicon
+                all-the-icons-wicon))
     (advice-add fn :around #'nox*disable-all-the-icons-in-tty)))
 #+END_SRC
 
@@ -995,7 +999,8 @@ Disable fringes in the minibuffer window.
 #+BEGIN_SRC emacs-lisp
 (use-package doom-modeline :ensure
   :config
-  (gsetq doom-modeline-enable-word-count t)
+  (gsetq doom-modeline-enable-word-count t
+         display-time-default-load-average nil)
   (display-time-mode))
 #+END_SRC
 
