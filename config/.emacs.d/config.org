@@ -1710,6 +1710,39 @@ Lisp function does not specify a special indentation."
        org-agenda-files (list nox-org-agenda-file))
 #+END_SRC
 
+**** Helper functions
+***** Projects and subtasks identification
+#+BEGIN_SRC emacs-lisp
+(defun nox-org-has-subtasks-p ()
+  "Any heading with subtasks."
+  (org-with-wide-buffer
+   (let ((subtree-end (save-excursion (org-end-of-subtree t)))
+         has-subtasks)
+     (end-of-line)
+     (while (and (not has-subtasks) (re-search-forward org-todo-line-regexp subtree-end t))
+       (when (member (match-string 2) org-todo-keywords-1) (setq has-subtasks t)))
+     has-subtasks)))
+
+(defun +org-project-p ()
+  "Any task that has subtasks."
+  (and (org-get-todo-state) (nox-org-has-subtasks-p)))
+
+(defun +org-is-subtask (&optional first)
+  "Return t if this task is a subtask."
+  (let (return)
+    (org-with-wide-buffer
+     (org-back-to-heading 'invisible-ok)
+     (while (and (not return) (org-up-heading-safe))
+       (when (org-get-todo-state) (setq return t))))
+    return))
+#+END_SRC
+
+***** Tags
+#+BEGIN_SRC emacs-lisp
+(defun nox|org-offer-all-agenda-tags ()
+  (setq-local org-complete-tags-always-offer-all-agenda-tags t))
+#+END_SRC
+
 **** Appearance
 #+BEGIN_SRC emacs-lisp
 (gsetq org-startup-indented t
@@ -1966,37 +1999,37 @@ session as the current block. ARG has same meaning as in
           (org-babel-remove-result)))))))
 #+END_SRC
 
-**** Helper functions
-***** Projects and subtasks identification
+**** Fix blank line insertion in lists
 #+BEGIN_SRC emacs-lisp
-(defun nox-org-has-subtasks-p ()
-  "Any heading with subtasks."
-  (org-with-wide-buffer
-   (let ((subtree-end (save-excursion (org-end-of-subtree t)))
-         has-subtasks)
-     (end-of-line)
-     (while (and (not has-subtasks) (re-search-forward org-todo-line-regexp subtree-end t))
-       (when (member (match-string 2) org-todo-keywords-1) (setq has-subtasks t)))
-     has-subtasks)))
+(use-package org-list
+  :config
+  (defun org-list-separating-blank-lines-number (pos struct prevs)
+    "Return number of blank lines that should separate items in list.
 
-(defun +org-project-p ()
-  "Any task that has subtasks."
-  (and (org-get-todo-state) (nox-org-has-subtasks-p)))
+POS is the position of point where `org-list-insert-item' was called.
 
-(defun +org-is-subtask (&optional first)
-  "Return t if this task is a subtask."
-  (let (return)
-    (org-with-wide-buffer
-     (org-back-to-heading 'invisible-ok)
-     (while (and (not return) (org-up-heading-safe))
-       (when (org-get-todo-state) (setq return t))))
-    return))
-#+END_SRC
+STRUCT is the list structure.  PREVS is the alist of previous
+items, as returned by `org-list-prevs-alist'.
 
-***** Tags
-#+BEGIN_SRC emacs-lisp
-(defun nox|org-offer-all-agenda-tags ()
-  (setq-local org-complete-tags-always-offer-all-agenda-tags t))
+Assume point is at item's beginning.  If the item is alone, apply
+some heuristics to guess the result."
+    (save-excursion
+      (let ((item (point))
+	        (insert-blank-p (cdr (assq 'plain-list-item org-blank-before-new-entry)))
+	        (count-blanks (lambda ()
+	                        (save-excursion
+		                      (count-lines (goto-char (point-at-bol))
+			                               (progn (skip-chars-backward " \r\t\n")
+				                                  (forward-line) (point))))))
+            (top (org-list-get-top-point struct)))
+        (cond
+         ;; NOTE(nox): Trivial cases
+         ((not insert-blank-p) 0)
+         ((eq insert-blank-p t) 1)
+         ;; NOTE(nox): `plain-list-item' is 'auto.
+         ((> item top) ;; Item is not the first
+	      (funcall count-blanks))
+	     (t 0))))))
 #+END_SRC
 
 **** PDF Tools support
