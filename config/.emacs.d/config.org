@@ -2648,6 +2648,7 @@ some heuristics to guess the result."
 
 ** Tools and utilities
 *** Compilation
+**** General settings and bindings
 #+BEGIN_SRC emacs-lisp
 (use-package compile
   :general
@@ -2664,125 +2665,147 @@ some heuristics to guess the result."
     ("c" +compile "Recompile")
     ("q" nil "Quit"))
 
-  (gsetq
-   compilation-ask-about-save nil
-   compilation-always-kill t
-   compilation-scroll-output 'first-error
-   compilation-context-lines 2
-   compilation-environment '("TERM=xterm"))
-
-  (cl-defstruct +compile-info type path last-args last-time buffer-name should-close)
-  (defvar-local +compile-info nil)
-  (defvar +compile-info-table (make-hash-table :test 'equal))
-
-  (defconst +compile-sh-names (if (eq system-type 'windows-nt)
-                                  '("build-nox.bat" "build.bat")
-                                '("build-nox.sh" "build.sh")))
-  (defconst +compile-makefile-names '("makefile" "Makefile"))
-  (defconst +compile-script-names (append +compile-sh-names +compile-makefile-names))
-
-  (defun +compile-buffer-name (arg)
-    ;; NOTE(nox): This serves  2 purposes: one is creating the  buffer name itself, called
-    ;; from nox/compile  with arg  = info;  the other  is returning  the buffer  name when
-    ;; called  from compilation-start,  which  is  returned from  the  local  info in  the
-    ;; compilation buffer.
-    (if +compile-info (+compile-info-buffer-name +compile-info)
-      (let ((project-name (projectile-project-name)))
-        (if project-name
-            (format "*[%s] - Compile %s*" project-name (file-name-nondirectory (+compile-info-path arg)))
-          (format "*Compile %s*" (+compile-info-path arg))))))
-
-  (defun +compile (arg)
-    (interactive "P")
-    (let ((default-script (when +compile-info (cons (+compile-info-path +compile-info)
-                                                    +compile-info)))
-          (start-file-name (or (buffer-file-name) ""))
-          script script-list buffer)
-      (dolist (test-script +compile-script-names (setq script-list (nreverse script-list)))
-        (let ((found-script-dir (locate-dominating-file default-directory test-script))
-              full-path info)
-          (when found-script-dir
-            (setq full-path (expand-file-name test-script found-script-dir)
-                  info
-                  (or
-                   (gethash full-path +compile-info-table)
-                   (make-+compile-info :type (if (member test-script +compile-makefile-names) 'make 'sh)
-                                       :path full-path
-                                       :last-time '(0 0 0 0))))
-
-            (push (cons (+compile-info-path info) info) script-list)
-            (when (and (not +compile-info)
-                       (or (not default-script) (time-less-p (+compile-info-last-time (cdr default-script))
-                                                             (+compile-info-last-time info))))
-              (setq default-script (car script-list))))))
-
-      (if (not script-list)
-          (error "No build script found")
-        (if (or (not arg) (= (length script-list) 1))
-            (setq script (cdr default-script))
-          (setq script (cdr (assoc
-                             (completing-read "Which build script? "
-                                              script-list nil t nil nil (car default-script))
-                             script-list))))
-
-        (setf (+compile-info-buffer-name script) (+compile-buffer-name script))
-        (setq buffer (get-buffer-create (+compile-info-buffer-name script)))
-
-        (if (projectile-project-p) (projectile-save-project-buffers) (save-some-buffers t))
-
-        (if (= (length (window-list)) 1)
-            (setf (+compile-info-should-close script) t)
-          (unless (get-buffer-window buffer) (setf (+compile-info-should-close script) nil)))
-
-        (with-current-buffer buffer
-          (cd (file-name-directory (+compile-info-path script)))
-          (let (command command-args)
-            (if (eq (+compile-info-type script) 'make)
-                (setq command "make"
-                      command-args (or (+compile-info-last-args script) "-k"))
-
-              (setq command (shell-quote-argument
-                             (concat "./" (file-name-nondirectory (+compile-info-path script))))
-                    command-args (or (+compile-info-last-args script) "%f")))
-
-            (when arg (setq command-args (read-string "Arguments: " command-args)))
-
-            (setf (+compile-info-last-args script) command-args)
-            (setq command-args (replace-regexp-in-string
-                                (regexp-quote "%f") (shell-quote-argument start-file-name) command-args))
-
-            (setq +compile-info script)
-
-            (setf (+compile-info-last-time script) (current-time))
-            (compilation-start (concat command " " command-args) nil '+compile-buffer-name)
-            ;; NOTE(nox): Need to set it again in order to persist after changing the
-            ;; major mode
-            (setq +compile-info script)))
-
-        (puthash (+compile-info-path script) script +compile-info-table))))
-
-  (defun +compile|bury-buffer (buffer string)
-    "Bury compilation buffer if it succeeded."
-    (with-current-buffer buffer
-      (when +compile-info
-        (message "Compilation time: %.3fs"
-                 (float-time (time-subtract (current-time) (+compile-info-last-time +compile-info))))
-        (when (and (string= string "finished\n")
-                   (save-excursion (not (ignore-errors (compilation-next-error 1 nil 1)))))
-          (let ((windows (get-buffer-window-list buffer t)))
-            (dolist (window windows)
-              (if (and (> (length (window-list (window-frame window))) 1)
-                       (+compile-info-should-close +compile-info))
-                  (delete-window window)
-                (switch-to-prev-buffer window))))
-          (bury-buffer buffer)))))
-  (add-hook 'compilation-finish-functions '+compile|bury-buffer)
+  (gsetq compilation-ask-about-save nil
+         compilation-always-kill t
+         compilation-scroll-output 'first-error
+         compilation-context-lines 2
+         compilation-environment '("TERM=xterm"))
 
   (defun +compile|ansi-color-apply ()
     "Applies ansi codes to the compilation buffers. Meant for `compilation-filter-hook'."
     (with-silent-modifications
       (ansi-color-apply-on-region compilation-filter-start (point))))
-  (add-hook! 'compilation-filter-hook #'+compile|ansi-color-apply))
+  (add-hook! 'compilation-filter-hook #'+compile|ansi-color-apply)
+#+END_SRC
+
+**** List of scripts
+#+BEGIN_SRC emacs-lisp
+(defconst +compile-sh-names
+  (if (eq system-type 'windows-nt) '("build-nox.bat" "build.bat") '("build-nox.sh" "build.sh")))
+(defconst +compile-makefile-names '("makefile" "Makefile"))
+(defconst +compile-script-names (append +compile-sh-names +compile-makefile-names))
+#+END_SRC
+
+**** Compilation command
+#+BEGIN_SRC emacs-lisp
+(cl-defstruct +compile-info type path last-time last-args should-delete-window)
+(defvar-local +compile-info nil)
+(defvar +compile-info-table (make-hash-table :test 'equal))
+(defvar +compile-buffer-name) ;; NOTE(nox): Let-bound
+
+(defun +compile-get-buffer-name (&rest _)
+  (or +compile-buffer-name "*Compile*"))
+
+(defun +compile-info (script-name path)
+  (let* ((default-directory (file-name-directory path)))
+    (make-+compile-info :type (if (member script-name +compile-makefile-names) 'make 'sh)
+                        :path path
+                        :last-time '(0 0 0 0))))
+
+(defun +compile (arg)
+  (interactive "P")
+  ;; NOTE(nox): When running in a compilation buffer, use the script that created it.
+  (let ((chosen-cons (when +compile-info (cons (+compile-info-path +compile-info) +compile-info)))
+        (calling-file-name (or (buffer-file-name) ""))
+        cons-list)
+
+    ;; NOTE(nox): Find script files in parent folders
+    (dolist (script-name +compile-script-names)
+      (let ((start-directory default-directory)
+            found-script-directory path info)
+        (while (setq found-script-directory (locate-dominating-file start-directory script-name))
+          (setq
+           start-directory (file-name-directory (directory-file-name found-script-directory))
+           path (expand-file-name script-name found-script-directory)
+           info (or (gethash path +compile-info-table) (+compile-info script-name path))
+           script-cons (cons path info))
+
+          (push script-cons cons-list)
+
+          (when (and (not +compile-info)
+                     (or (not chosen-cons)
+                         (time-less-p (+compile-info-last-time (cdr chosen-cons))
+                                      (+compile-info-last-time info))))
+            (setq chosen-cons script-cons)))))
+    (setq cons-list (nreverse cons-list))
+
+    (if (not cons-list)
+        (error "No build script found")
+
+      (let* ((info
+              (if (and arg (> (length cons-list) 1))
+                  (cdr (assoc (completing-read "Which build script? " cons-list nil t nil nil (car chosen-cons))
+                              cons-list))
+                (cdr chosen-cons)))
+             +compile-buffer-name buffer command command-args)
+
+        (cond
+         ((projectile-project-p)
+          (projectile-save-project-buffers)
+          (setq +compile-buffer-name
+                (format "*[%s] - Compile %s*"
+                        (projectile-project-name)
+                        (file-name-nondirectory (+compile-info-path info)))))
+         (t
+          (save-some-buffers t)
+          (setq +compile-buffer-name (format "*Compile %s*" (+compile-info-path info)))))
+
+        (setq buffer (get-buffer-create +compile-buffer-name))
+
+        (if (= (length (window-list)) 1)
+            (setf (+compile-info-should-delete-window info) t)
+          (unless (get-buffer-window buffer) (setf (+compile-info-should-delete-window info) nil)))
+
+        (cond ((eq (+compile-info-type info) 'make)
+               (setq command "make"
+                     command-args (or (+compile-info-last-args info) "-k")))
+              (t
+               (setq command (shell-quote-argument (concat "./"
+                                                           (file-name-nondirectory (+compile-info-path info))))
+                     command-args (or (+compile-info-last-args info) "%f"))))
+
+
+        (when arg (setq command-args (read-string "Arguments: " command-args)))
+
+        (setf (+compile-info-last-args info) command-args)
+        (setq command-args (replace-regexp-in-string (regexp-quote "%f")
+                                                     (shell-quote-argument calling-file-name)
+                                                     command-args))
+
+        (setf (+compile-info-last-time info) (current-time))
+
+        (with-current-buffer buffer
+          (cd (file-name-directory (+compile-info-path info)))
+          (compilation-start (concat command " " command-args) nil #'+compile-get-buffer-name)
+          (setq-local +compile-info info))
+
+        (puthash (+compile-info-path info) info +compile-info-table)))))
+#+END_SRC
+
+**** Bury the compilation buffer
+#+BEGIN_SRC emacs-lisp
+(defun +compile|bury-buffer (buffer string)
+  "Bury compilation buffer if it succeeded."
+  (with-current-buffer buffer
+    (when +compile-info
+      (message "Compilation time: %.3fs"
+               (float-time (time-subtract (current-time) (+compile-info-last-time +compile-info))))
+      (when (and (string= string "finished\n")
+                 (save-excursion (not (ignore-errors (compilation-next-error 1 nil 1)))))
+        (let ((windows (get-buffer-window-list buffer t)))
+          (dolist (window windows)
+            (if (and (> (length (window-list (window-frame window))) 1)
+                     (+compile-info-should-delete-window +compile-info))
+                (delete-window window)
+              (switch-to-prev-buffer window))))
+        (bury-buffer buffer)))))
+
+(add-hook 'compilation-finish-functions '+compile|bury-buffer)
+#+END_SRC
+
+**** End
+#+BEGIN_SRC emacs-lisp
+) ;; (use-package compile)
 #+END_SRC
 
 *** Dired
