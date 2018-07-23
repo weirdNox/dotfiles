@@ -1708,6 +1708,7 @@ Lisp function does not specify a special indentation."
 (gsetq org-directory "~/Personal/Org/")
 (defconst nox-org-agenda-file (concat org-directory "Agenda.org"))
 (defconst nox-org-journal-file (concat org-directory "Journal.org"))
+(defconst nox-org-someday-file (concat org-directory "Someday.org"))
 (gsetq org-default-notes-file (concat org-directory "Inbox.org")
        org-agenda-files (list nox-org-agenda-file))
 #+END_SRC
@@ -1825,7 +1826,8 @@ Lisp function does not specify a special indentation."
        org-outline-path-complete-in-steps nil
        org-refile-allow-creating-parent-nodes 'confirm
        org-refile-targets `((nil . (:maxlevel . 9))
-                            (,nox-org-agenda-file . (:maxlevel . 9))))
+                            (,nox-org-agenda-file .  (:maxlevel . 9))
+                            (,nox-org-someday-file . (:maxlevel . 1))))
 
 (after! deft (gsetq org-refile-targets (push '(deft-all-files . (:maxlevel . 1)) org-refile-targets)))
 
@@ -3474,13 +3476,13 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 *** Tramp
 #+BEGIN_SRC emacs-lisp
 (use-package tramp
-  :custom
-  (tramp-default-method "ssh")
-  (tramp-backup-directory-alist '(("." . "/tmp/tramp-backup-files/")))
-  (tramp-auto-save-directory   (concat nox-cache-dir "tramp-auto-save/"))
-  (tramp-persistency-file-name (concat nox-cache-dir "tramp-persistency.el"))
-  (tramp-default-proxies-alist '(((regexp-quote (system-name)) nil nil)
-                                 (nil "\\`root\\'" "/ssh:%h:"))))
+  :config
+  (gsetq tramp-default-method "ssh"
+         tramp-backup-directory-alist '(("." . "/tmp/tramp-backup-files/"))
+         tramp-auto-save-directory   (concat nox-cache-dir "tramp-auto-save/")
+         tramp-persistency-file-name (concat nox-cache-dir "tramp-persistency.el")
+         tramp-default-proxies-alist '(((regexp-quote (system-name)) nil nil)
+                                       (nil "\\`root\\'" "/ssh:%h:"))))
 #+END_SRC
 
 *** Treemacs
