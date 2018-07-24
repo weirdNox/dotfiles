@@ -3450,10 +3450,11 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 **** Spelling
 #+BEGIN_SRC emacs-lisp
 (use-package ispell
-  :when (executable-find "hunspell")
-  :custom
-  (ispell-program-name "hunspell")
-  (ispell-really-hunspell t))
+  :config
+  (gsetq ispell-program-name (or (executable-find "hunspell")
+                                 (executable-find "aspell")
+                                 (executable-find "ispell")
+                                 "ispell")))
 #+END_SRC
 
 **** Uniquify
