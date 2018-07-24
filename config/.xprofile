@@ -1,2 +1,4 @@
 #!/usr/bin/env sh
+# This file is loaded at the beginning of the X user session.
+
 setxkbmap -layout us,us -variant intl,colemak -option ctrl:nocaps,shift:both_capslock,compose:rwin

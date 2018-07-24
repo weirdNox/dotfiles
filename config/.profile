@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+# This file is loaded by many shells, including graphical ones.
 
 export PATH="$HOME/.local/bin:$PATH"
 
