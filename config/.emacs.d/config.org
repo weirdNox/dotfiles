@@ -1706,11 +1706,12 @@ Lisp function does not specify a special indentation."
 **** Directories and files
 #+BEGIN_SRC emacs-lisp
 (gsetq org-directory "~/Personal/Org/")
-(defconst nox-org-agenda-file (concat org-directory "Agenda.org"))
+(defconst nox-org-agenda-file  (concat org-directory "Agenda.org"))
+(defconst nox-org-tickler-file (concat org-directory "Tickler.org"))
 (defconst nox-org-journal-file (concat org-directory "Journal.org"))
 (defconst nox-org-someday-file (concat org-directory "Someday.org"))
-(gsetq org-default-notes-file (concat org-directory "Inbox.org")
-       org-agenda-files (list nox-org-agenda-file))
+(gsetq org-default-notes-file  (concat org-directory "Inbox.org")
+       org-agenda-files (list org-default-notes-file nox-org-agenda-file nox-org-tickler-file))
 #+END_SRC
 
 **** Helper functions
@@ -1827,6 +1828,7 @@ Lisp function does not specify a special indentation."
        org-refile-allow-creating-parent-nodes 'confirm
        org-refile-targets `((nil . (:maxlevel . 9))
                             (,nox-org-agenda-file .  (:maxlevel . 9))
+                            (,nox-org-tickler-file . (:maxlevel . 2))
                             (,nox-org-someday-file . (:maxlevel . 1))))
 
 (after! deft (gsetq org-refile-targets (push '(deft-all-files . (:maxlevel . 1)) org-refile-targets)))
@@ -2074,10 +2076,9 @@ some heuristics to guess the result."
   (gsetq
    org-agenda-custom-commands
    '(("n" "Agenda"
-      ((agenda "" ((org-agenda-files (list org-default-notes-file nox-org-agenda-file))
-                   (org-agenda-span 3)))
+      ((agenda "" ((org-agenda-span 3)))
        (+agenda-inbox nil ((org-agenda-files (list org-default-notes-file))))
-       (+agenda-tasks))))
+       (+agenda-tasks nil ((org-agenda-files (list nox-org-agenda-file)))))))
 
    org-agenda-prefix-format '((agenda . "  %?-12t% s"))
    org-agenda-skip-deadline-prewarning-if-scheduled 'pre-scheduled
