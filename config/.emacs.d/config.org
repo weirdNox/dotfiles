@@ -1149,7 +1149,7 @@ Needed for ivy fuzzy matching.
        sentence-end-double-space nil
        tab-always-indent t
        tabify-regexp "^\t* [ \t]+"
-       fill-column 90
+       fill-column 105
        word-wrap t
        truncate-lines t
        truncate-partial-width-windows 70)
