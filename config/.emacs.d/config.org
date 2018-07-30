@@ -1252,10 +1252,10 @@ Needed for ivy fuzzy matching.
          company-transformers '(company-sort-by-occurrence))
 
   (setq-hook! prog-mode
-    company-backends '((:separate company-dabbrev-code company-capf company-yasnippet)))
+    company-backends '((company-capf company-dabbrev-code :with company-yasnippet)))
 
   (setq-hook! text-mode
-    company-backends '((:separate company-dabbrev company-capf company-yasnippet)))
+    company-backends '((company-capf company-dabbrev :with company-yasnippet)))
 
   (global-company-mode))
 
@@ -3035,6 +3035,8 @@ some heuristics to guess the result."
   :general
   (:keymaps 'pdf-view-mode-map "C-s" 'isearch-forward)
   :config
+  (unless noninteractive (pdf-tools-install))
+
   ;; Adapted from https://github.com/markus1189/org-pdfview
   (defun org-pdfview-open (link)
     "Open LINK in pdf-view-mode."
@@ -3089,8 +3091,7 @@ and append it."
 
   (gsetq pdf-view-display-size 'fit-page
          pdf-cache-image-limit 200
-         pdf-view-use-imagemagick t)
-  (pdf-tools-install))
+         pdf-view-use-imagemagick t))
 #+END_SRC
 
 **** Nov.el
