@@ -911,9 +911,9 @@ ARGS are the same as in `custom-set-faces'."
   (after! org (doom-themes-org-config))
 
   (nox-add-customize-theme-hook "^doom-"
-    (nox-theme-set-faces '(org-level-1 ((t (:height 1.0))))
-                         '(org-level-2 ((t (:height 1.0))))
-                         '(org-level-3 ((t (:height 1.0)))))
+    (nox-theme-set-faces '(outline-1 ((t (:height 1.0))))
+                         '(outline-2 ((t (:height 1.0))))
+                         '(outline-3 ((t (:height 1.0)))))
     (custom-theme-set-faces
      theme
      '(org-special-keyword ((t (:inherit shadow))))
