@@ -908,7 +908,12 @@ ARGS are the same as in `custom-set-faces'."
   (gsetq doom-one-brighter-comments t
          doom-one-comment-bg nil)
 
-  (after! org (doom-themes-org-config))
+  (use-package doom-themes-org :after org :demand)
+
+  (use-package doom-themes-treemacs
+    :after treemacs :demand
+    :init
+    (gsetq doom-treemacs-enable-variable-pitch nil))
 
   (nox-add-customize-theme-hook "^doom-"
     (nox-theme-set-faces '(outline-1 ((t (:height 1.0))))
@@ -3544,8 +3549,10 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 *** Treemacs
 #+BEGIN_SRC emacs-lisp
 (use-package treemacs :ensure
-  :init
-  (gsetq treemacs-persist-file (concat nox-cache-dir "treemacs-persist")))
+  :config
+  (gsetq treemacs-collapse-dirs (if (executable-find "python") 3 0)
+         treemacs-follow-after-init t
+         treemacs-persist-file (concat nox-cache-dir "treemacs-persist")))
 #+END_SRC
 
 ** Keybindings
