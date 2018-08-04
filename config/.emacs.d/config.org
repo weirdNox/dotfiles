@@ -2562,8 +2562,11 @@ some heuristics to guess the result."
                             "* WATCH %?" :empty-lines-after 1 :prepend t)
                            ("l" "Livro" entry (file+olp nox-movies-series-books-file "Livros")
                             "* READ %?" :empty-lines-after 1 :prepend t)
-                           ("w" "Web bookmark" plain (function +capture-bookmark-find-buffer)
-                            (function +capture-bookmark-get-template) :empty-lines 1)))
+                           ("w" "Web related templates")
+                           ("wb" "Bookmark" plain (function +capture-bookmark-find-buffer)
+                            (function +capture-bookmark-get-template) :empty-lines 1)
+                           ("wc" "Capture" entry (file "")
+                            "* [[%:link][%^{Title|%:description}]]\n%?" :clock-in t :clock-resume t)))
 
   (add-hook 'org-capture-mode-hook 'nox|org-offer-all-agenda-tags)
 

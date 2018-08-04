@@ -10,6 +10,11 @@ Must setup a global shortcut that runs ~ec -ce "(nox-org-capture-frame)"~
 In order to update the desktop database, run ~update-desktop-database .local/share/applications/~
 
 Bookmark:
-#+BEGIN_EXAMPLE
-javascript:location.href='org-protocol://capture?template=w&url=' + encodeURIComponent(location.href) + '&title=' + encodeURIComponent(document.title)
-#+END_EXAMPLE
+#+BEGIN_SRC
+javascript:location.href='org-protocol://capture?template=wb&url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)
+#+END_SRC
+
+Normal capture (goes to inbox):
+#+BEGIN_SRC
+javascript:location.href='org-protocol://capture?template=wc&url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)
+#+END_SRC
