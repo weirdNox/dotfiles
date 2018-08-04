@@ -2078,11 +2078,11 @@ some heuristics to guess the result."
   (gsetq
    org-agenda-custom-commands
    '(("n" "Agenda"
-      ((agenda "" ((org-agenda-span 3)))
+      ((agenda "" ((org-agenda-span 3)
+                   (org-agenda-prefix-format " %(+agenda-schedule-get-prefix)%?-12t% s")))
        (+agenda-inbox nil ((org-agenda-files (list org-default-notes-file))))
        (+agenda-tasks nil ((org-agenda-files (list nox-org-agenda-file)))))))
 
-   org-agenda-prefix-format '((agenda . "  %?-12t% s"))
    org-agenda-skip-deadline-prewarning-if-scheduled 'pre-scheduled
    org-agenda-tags-todo-honor-ignore-options t
    org-agenda-todo-ignore-scheduled 'all
@@ -2102,6 +2102,11 @@ some heuristics to guess the result."
 
 **** Entry
 #+BEGIN_SRC emacs-lisp
+(defun +agenda-is-low-effort (effort-text &optional todo-type)
+  (and effort-text
+       (or (not todo-type) (eq todo-type 'todo))
+       (< (org-duration-to-minutes effort-text) 20)))
+
 (cl-defstruct +agenda-entry todo priority text tags planned low-effort marker project-status children)
 
 (defun +agenda-entry (headline &optional tags)
@@ -2112,7 +2117,7 @@ some heuristics to guess the result."
      :priority (org-element-property :priority headline)
      :text (org-element-property :raw-value headline)
      :tags (or tags (org-element-property :tags headline))
-     :low-effort (and effort (eq todo-type 'todo) (< (org-duration-to-minutes effort) 20))
+     :low-effort (+agenda-is-low-effort effort todo-type)
      :marker (org-agenda-new-marker (org-element-property :begin headline)))))
 #+END_SRC
 
@@ -2160,6 +2165,9 @@ some heuristics to guess the result."
   (if low-effort
       (propertize text 'face '(:foreground "#b58900"))
     (or alt-text text)))
+
+(defun +agenda-schedule-get-prefix ()
+  (+agenda-tip-for-effort "⮞" (+agenda-is-low-effort effort) " "))
 
 (defun +agenda-project-get-prefix (taskp parent-continuations &optional low-effort)
   ;; IMPORTANT(nox): `parent-continuations' is in reverse order!
