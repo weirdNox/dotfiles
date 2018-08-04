@@ -7,13 +7,14 @@
 
 (unless (boundp 'early-init-file) (load (concat (file-name-directory load-file-name) "early-init") nil t))
 
-(let* ((org (expand-file-name "config.org" user-emacs-directory))
+(let* ((inhibit-message t)
+       (org (expand-file-name "config.org" user-emacs-directory))
        (el  (expand-file-name "config.el" user-emacs-directory))
        (elc (concat el "c")))
   (when (and (file-exists-p elc)
              (file-newer-than-file-p org elc))
     (message "Byte compiled init is old - deleting...")
-    (dolist (file (directory-files user-emacs-directory nil ".*\.elc"))
+    (dolist (file (directory-files user-emacs-directory nil "\\.elc$"))
       (delete-file (expand-file-name file user-emacs-directory))))
 
   (cond ((file-exists-p elc) (load elc nil t))
