@@ -2676,7 +2676,10 @@ some heuristics to guess the result."
 :Custom_ID: ${=key=}
 :NOTER_DOCUMENT: %s${=key=}.pdf
 :END:
-" org-ref-pdf-directory))
+"
+                                                           org-ref-pdf-directory)
+         bibtex-completion-display-formats
+         '((t . "${=type=:7} | ${title:*} ${author:20} ${year:4} ${=has-pdf=:1}${=has-note=:1}  ${keywords:80}")))
 
   (defun nox*disable-completion-notes-mode (&optional arg) (widen))
   (advice-add #'bibtex-completion-notes-mode :override #'nox*disable-completion-notes-mode))
