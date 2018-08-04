@@ -2641,6 +2641,43 @@ some heuristics to guess the result."
          org-noter-hide-other t))
 #+END_SRC
 
+*** Org Ref
+#+BEGIN_SRC emacs-lisp
+(use-package org-ref :ensure
+  :after bibtex
+  :demand
+  :config
+  (gsetq org-ref-default-bibliography '("~/Documents/Bibliography/References.bib")
+         org-ref-bibliography-notes "~/Documents/Bibliography/Notes.org"
+         org-ref-pdf-directory "~/Documents/Bibliography/PDFs/"
+         reftex-default-bibliography org-ref-default-bibliography
+         bibtex-completion-bibliography (car org-ref-default-bibliography)
+         bibtex-completion-notes-path org-ref-bibliography-notes
+         bibtex-completion-library-path org-ref-pdf-directory
+
+         ;; NOTE(nox): Key generation
+         bibtex-autokey-names 2
+         bibtex-autokey-names-stretch 1
+         bibtex-autokey-name-separator "-"
+         bibtex-autokey-additional-names "-et_al"
+         bibtex-autokey-year-length 4
+         bibtex-autokey-year-title-separator "_")
+
+  (require 'org-ref-ivy))
+
+(use-package ivy-bibtex :ensure
+  :config
+  (gsetq bibtex-completion-notes-template-one-file (format "* ${title} - ${year}
+:PROPERTIES:
+:Custom_ID: ${=key=}
+:NOTER_DOCUMENT: %s${=key=}.pdf
+:END:
+" org-ref-pdf-directory))
+
+  (defun nox*disable-completion-notes-mode (&optional arg) (widen))
+  (advice-add #'bibtex-completion-notes-mode :override #'nox*disable-completion-notes-mode))
+#+END_SRC
+
 *** Source blocks
 #+BEGIN_SRC emacs-lisp
 (use-package org-src
