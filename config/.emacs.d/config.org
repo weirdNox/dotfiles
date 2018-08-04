@@ -1707,11 +1707,13 @@ Lisp function does not specify a special indentation."
 #+BEGIN_SRC emacs-lisp
 (gsetq org-directory "~/Personal/Org/")
 (defconst nox-org-agenda-file  (concat org-directory "Agenda.org"))
-(defconst nox-org-tickler-file (concat org-directory "Tickler.org"))
 (defconst nox-org-journal-file (concat org-directory "Journal.org"))
 (defconst nox-org-someday-file (concat org-directory "Someday.org"))
+(defconst nox-org-tickler-file (concat org-directory "Tickler.org"))
+(defconst nox-org-tracker-file (concat org-directory "Tracker.org"))
 (gsetq org-default-notes-file  (concat org-directory "Inbox.org")
-       org-agenda-files (list org-default-notes-file nox-org-agenda-file nox-org-tickler-file))
+       org-agenda-files (list org-default-notes-file nox-org-agenda-file nox-org-tickler-file
+                              nox-org-tracker-file))
 #+END_SRC
 
 **** Helper functions
@@ -1814,7 +1816,6 @@ Lisp function does not specify a special indentation."
 #+BEGIN_SRC emacs-lisp
 (gsetq
  org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)")
-                     (type "WATCH(v)" "READ(r)" "|")
                      (sequence "HOLD(h@/!)" "WAITING(w@/!)" "|" "CANCELLED(c@/!)"))
  org-treat-S-cursor-todo-selection-as-state-change nil
  org-columns-default-format "%80ITEM(Task) %10Effort(Effort){:} %10CLOCKSUM"
@@ -2521,7 +2522,6 @@ some heuristics to guess the result."
 
   :config
   (require 'deft)
-  (defconst nox-movies-series-books-file (concat deft-directory "filmes-series-livros.org"))
 
   (defun nox-org-inactive-timestamp (&optional time)
     (format-time-string (concat "[" (substring (cdr org-time-stamp-formats) 1 -1) "]") time))
@@ -2556,13 +2556,14 @@ some heuristics to guess the result."
                             "* %?" :clock-in t :clock-resume t :empty-lines 1)
                            ("d" "Diário" entry (file+olp+datetree nox-org-journal-file)
                             "* %?" :clock-in t :clock-resume t)
-                           ("f" "Filme" entry (file+olp nox-movies-series-books-file "Filmes")
+                           ("f" "Tracking")
+                           ("ff" "Filme" entry (file+olp nox-org-tracker-file "Filmes")
                             "* WATCH %?" :empty-lines-after 1 :prepend t)
-                           ("s" "Série" entry (file+olp nox-movies-series-books-file "Séries")
+                           ("fs" "Série" entry (file+olp nox-org-tracker-file "Séries")
                             "* WATCH %?" :empty-lines-after 1 :prepend t)
-                           ("l" "Livro" entry (file+olp nox-movies-series-books-file "Livros")
+                           ("fl" "Livro" entry (file+olp nox-org-tracker-file "Livros")
                             "* READ %?" :empty-lines-after 1 :prepend t)
-                           ("w" "Web related templates")
+                           ("w" "Web")
                            ("wb" "Bookmark" plain (function +capture-bookmark-find-buffer)
                             (function +capture-bookmark-get-template) :empty-lines 1)
                            ("wc" "Capture" entry (file "")
