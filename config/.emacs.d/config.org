@@ -2529,14 +2529,20 @@ some heuristics to guess the result."
 (use-package org-capture
   :init
   (defun +capture-frame ()
-    (modify-frame-parameters nil '((name . "Org Capture")
-                                   (org-capture-frame . t)
-                                   (width . 110) (height . 40)))
-    (org-capture))
+    (let ((capture-frame (catch 'capture-frame
+                           (dolist (frame (frame-list))
+                             (when (frame-parameter frame 'org-capture-frame)
+                               (throw 'capture-frame frame))))))
+      (cond (capture-frame
+             (delete-frame)
+             (select-frame-set-input-focus capture-frame))
+
+            (t
+             (modify-frame-parameters nil '((name . "Org Capture") (org-capture-frame . t)
+                                            (width . 110) (height . 40)))
+             (org-capture)))))
 
   :config
-  (require 'deft)
-
   (defun nox-org-inactive-timestamp (&optional time)
     (format-time-string (concat "[" (substring (cdr org-time-stamp-formats) 1 -1) "]") time))
 
@@ -2545,6 +2551,7 @@ some heuristics to guess the result."
   (add-hook 'org-capture-before-finalize-hook '+capture|add-created-property)
 
   (defun +capture-bookmark-find-buffer ()
+    (require 'deft)
     (set-buffer
      (if (org-capture-get :bookmark-new-file)
          (find-file-noselect (deft-absolute-filename (org-capture-get :bookmark-title)))
@@ -2567,19 +2574,19 @@ some heuristics to guess the result."
                            ("c" "Calendário" entry (file "")
                             "* %?\n%^t")
                            ("i" "Interrupção" entry (file+olp nox-org-agenda-file "Interrupções")
-                            "* %?" :clock-in t :clock-resume t :empty-lines 1)
+                            "* %?" :clock-in t :clock-resume t)
                            ("d" "Diário" entry (file+olp+datetree nox-org-journal-file)
                             "* %?" :clock-in t :clock-resume t)
                            ("f" "Tracking")
                            ("ff" "Filme" entry (file+olp nox-org-tracker-file "Filmes")
-                            "* WATCH %?" :empty-lines-after 1 :prepend t)
+                            "* WATCH %?" :prepend t)
                            ("fs" "Série" entry (file+olp nox-org-tracker-file "Séries")
-                            "* WATCH %?" :empty-lines-after 1 :prepend t)
+                            "* WATCH %?" :prepend t)
                            ("fl" "Livro" entry (file+olp nox-org-tracker-file "Livros")
-                            "* READ %?" :empty-lines-after 1 :prepend t)
+                            "* READ %?"  :prepend t)
                            ("w" "Web")
                            ("wb" "Bookmark" plain (function +capture-bookmark-find-buffer)
-                            (function +capture-bookmark-get-template) :empty-lines 1)
+                            (function +capture-bookmark-get-template))
                            ("wc" "Capture" entry (file "")
                             "* [[%:link][%^{Title|%:description}]]\n%?" :clock-in t :clock-resume t)))
 
@@ -3072,7 +3079,7 @@ some heuristics to guess the result."
 (use-package deft :ensure
   :general (nox-leader "d" '(deft :wk "Deft"))
   :config
-  (gsetq deft-directory "~/Personal/Org/Deft/"
+  (gsetq deft-directory "~/Personal/Org/Logbook/"
          deft-extensions '("org" "txt" "md" "markdown")
          deft-default-extension (car deft-extensions)
          deft-use-filename-as-title nil
