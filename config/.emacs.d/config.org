@@ -1342,13 +1342,13 @@ Needed for ivy fuzzy matching.
 #+BEGIN_SRC emacs-lisp
 (use-package avy :ensure
   :general
-  ("C-:"   #'avy-goto-char
-   "C-'"   #'avy-goto-char-timer
+  ("C-:"   #'avy-goto-char-timer
    "M-g f" #'avy-goto-line
    "M-g w" #'avy-goto-word-1)
   :config
   (gsetq avy-all-windows nil
-         avy-background t))
+         avy-background t
+         avy-timeout-seconds .3))
 #+END_SRC
 
 **** Dumb jump
@@ -3162,7 +3162,9 @@ and append it."
 **** Nov.el
 #+BEGIN_SRC emacs-lisp
 (use-package nov :ensure
-  :mode (("\\.epub\\'" . nov-mode)))
+  :mode (("\\.epub\\'" . nov-mode))
+  :config
+  (gsetq nov-save-place-file (concat nox-cache-dir "nov-places")))
 #+END_SRC
 
 *** Ediff
