@@ -695,8 +695,7 @@ with functions that require it."
 ** OS specific
 #+BEGIN_SRC emacs-lisp
 (gsetq x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)
-       select-enable-clipboard t
-       select-enable-primary t)
+       select-enable-clipboard t)
 
 (cond (IS-MAC (setq mac-command-modifier 'meta
                     mac-option-modifier  'alt
