@@ -3092,6 +3092,13 @@ some heuristics to guess the result."
 #+END_SRC
 
 *** Document viewers
+**** Doc View
+#+BEGIN_SRC emacs-lisp
+(use-package doc-view
+  :config
+  (gsetq doc-view-resolution 200))
+#+END_SRC
+
 **** PDF Tools
 #+BEGIN_SRC emacs-lisp
 (use-package pdf-tools :ensure
