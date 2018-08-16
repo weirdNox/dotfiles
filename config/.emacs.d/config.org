@@ -1704,21 +1704,23 @@ Lisp function does not specify a special indentation."
   (:keymaps 'org-mode-map
    "C-c C-q" 'counsel-org-tag)
 
+  :init
+  (gsetq org-directory "~/Essential/Org/")
+
   :config
   (gsetq org-modules '(org-habit org-id org-protocol org-timer))
 #+END_SRC
 
 **** Directories and files
 #+BEGIN_SRC emacs-lisp
-(gsetq org-directory "~/Personal/Org/")
 (defconst nox-org-agenda-file  (concat org-directory "Agenda.org"))
-(defconst nox-org-journal-file (concat org-directory "Journal.org"))
-(defconst nox-org-someday-file (concat org-directory "Someday.org"))
 (defconst nox-org-tickler-file (concat org-directory "Tickler.org"))
 (defconst nox-org-tracker-file (concat org-directory "Tracker.org"))
 (gsetq org-default-notes-file  (concat org-directory "Inbox.org")
        org-agenda-files (list org-default-notes-file nox-org-agenda-file nox-org-tickler-file
                               nox-org-tracker-file))
+(defconst nox-org-journal-file (concat org-directory "Journal.org"))
+(defconst nox-org-someday-file (concat org-directory "Someday.org"))
 #+END_SRC
 
 **** Helper functions
@@ -3078,7 +3080,7 @@ some heuristics to guess the result."
 (use-package deft :ensure
   :general (nox-leader "d" '(deft :wk "Deft"))
   :config
-  (gsetq deft-directory "~/Personal/Org/Logbook/"
+  (gsetq deft-directory (concat org-directory "Logbook/")
          deft-extensions '("org" "txt" "md" "markdown")
          deft-default-extension (car deft-extensions)
          deft-use-filename-as-title nil
