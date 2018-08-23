@@ -1103,26 +1103,23 @@ Needed for ivy fuzzy matching.
 
   :config
   (defun counsel-find-file-as-root (x)
-    "Find file X with root privileges."
-    (counsel-require-program counsel-root-command)
-    (let* ((method (file-remote-p x 'method))
-           (user (file-remote-p x 'user))
-           (host (file-remote-p x 'host))
-           (file-name (concat (if (string= method "ssh")
-                                  (format "/ssh:%s%s|"
-                                          (if user (format "%s@" user) "")
-                                          host)
-                                "/")
-                              (format "%s:%s:%s"
-                                      counsel-root-command
-                                      (or host "")
-                                      (expand-file-name
-                                       (if host
-                                           (file-remote-p x 'localname)
-                                         x))))))
-      (if (eq (current-buffer) (get-file-buffer x))
-          (find-alternate-file file-name)
-        (find-file file-name))))
+  "Find file X with root privileges."
+  (counsel-require-program counsel-root-command)
+  (let* ((remote (file-remote-p x))
+         (host (file-remote-p x 'host))
+         (method (file-remote-p x 'method))
+         (file-name
+          (if (string= method counsel-root-command)
+              x
+            (concat (if remote
+                        (concat (substring remote 0 -1) "|")
+                      "/")
+                    (format "%s:%s:%s"
+                            counsel-root-command (or host "")
+                            (expand-file-name (if remote (file-remote-p x 'localname) x)))))))
+    (if (eq (current-buffer) (get-file-buffer x))
+        (find-alternate-file file-name)
+      (find-file file-name))))
 
   (counsel-mode))
 #+END_SRC
