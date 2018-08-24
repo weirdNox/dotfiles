@@ -730,7 +730,6 @@ with functions that require it."
        use-dialog-box nil
        pos-tip-internal-border-width 6
        pos-tip-border-width 1
-       window-resize-pixelwise t
        frame-resize-pixelwise t
        echo-keystrokes 0.2
        window-divider-default-places t
@@ -1283,6 +1282,14 @@ Needed for ivy fuzzy matching.
     (with-current-buffer buffer (derived-mode-p 'pdf-view-mode
                                                 'doc-view-mode)))
   (gsetq company-dabbrev-ignore-buffers #'nox-company-dabbrev-buffer-check))
+#+END_SRC
+
+**** Company box
+#+BEGIN_SRC emacs-lisp
+(use-package company-box :ensure
+  :ghook 'company-mode-hook
+  :config
+  (gsetq company-box-enable-icon nil))
 #+END_SRC
 
 *** Projects
