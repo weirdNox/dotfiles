@@ -725,7 +725,7 @@ with functions that require it."
        ring-bell-function #'ignore
        visible-bell nil
        custom-safe-themes t
-       frame-inhibit-implied-resXize t
+       frame-inhibit-implied-resize t
        mode-line-default-help-echo nil
        use-dialog-box nil
        pos-tip-internal-border-width 6
@@ -1077,6 +1077,16 @@ Needed for ivy fuzzy matching.
                                  (counsel-grep . ivy--regex-plus)
                                  (swiper . ivy--regex-plus)
                                  (t . ivy--regex-fuzzy))))
+#+END_SRC
+
+**** Ivy rich
+#+BEGIN_SRC emacs-lisp
+(use-package ivy-rich :ensure
+  :ghook 'ivy-mode-hook
+  :config
+  (gsetq ivy-rich-path-style 'abbrev
+         ivy-rich-switch-buffer-align-virtual-buffer t
+         ivy-rich-switch-buffer-name-max-length 40))
 #+END_SRC
 
 *** Counsel
