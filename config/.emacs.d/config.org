@@ -3208,6 +3208,13 @@ and append it."
   (add-hook! '(ediff-quit-hook ediff-suspend-hook) #'ediff|restore-wconf 'append))
 #+END_SRC
 
+*** Eshell
+#+BEGIN_SRC emacs-lisp
+(use-package eshell
+  :config
+  (gsetq eshell-directory-name (concat nox-cache-dir "eshell/")))
+#+END_SRC
+
 *** GDB support
 This should be replaced by my package emacs-gdb, if I ever end up finishing it...
 
