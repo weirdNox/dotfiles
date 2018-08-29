@@ -1532,71 +1532,37 @@ fundamental-mode) for performance sake."
   :mode (("\\.\\(c\\|h\\)\\'" . c-mode)
          ("\\.\\(c\\|h\\)pp\\'" . c++-mode)
          ("\\.ino\\'" . c++-mode))
+
   :config
-  (defun nox-header-format ()
-    (interactive)
-    (let ((definition
-            (concat (upcase (file-name-sans-extension (file-name-nondirectory buffer-file-name))) "_H")))
-      (insert (format "#if !defined(%s)\n#define %s\n\n\n\n#endif // %s" definition definition definition))
-      (forward-line -2)))
+  (defun +cc|write-header-guard ()
+    (when (and buffer-file-name (not (file-exists-p buffer-file-name))
+               (string-match "\\.h\\(pp\\)?\\'" buffer-file-name))
+      (let ((definition (concat (upcase (file-name-sans-extension (file-name-nondirectory buffer-file-name)))
+                                "_H")))
+        (insert (format "#if !defined(%s)\n#define %s\n\n\n\n#endif // %s" definition definition definition))
+        (forward-line -2))))
+  (add-hook! c-mode-common #'+cc|write-header-guard)
 
-  (defun nox-c-hook ()
-    (c-set-style "NoxStyle")
-    (c-toggle-auto-hungry-state -1)
-    (if (and buffer-file-name
-             (not (file-exists-p buffer-file-name))
-             (string-match "\\.h\\(pp\\)?\\'" buffer-file-name))
-        (nox-header-format)))
-  (add-hook! c-mode-common #'nox-c-hook)
+  (defun +cc-style-stmt-case-intro (info)
+    "When the case label has inline code, don't indent the next syntactic structure.
+     Eg.:
+        switch(...) {
+            case ...: { doIt(); } break
+            dontIndentThisMacroCall();
+        }"
+    (save-excursion
+      (goto-char (cdr info)) ;; NOTE(nox): Anchor
+      (when (and (search-forward ":" (line-end-position) t)
+                 (not (looking-at "[[:space:]]*$")))
+        0)))
 
-  (gsetq c-hanging-semi&comma-criteria '((lambda () 'stop)))
-
-  (c-add-style
-   "NoxStyle"
-   '((c-tab-always-indent . t)
-     (c-comment-only-line-offset . 0)
-
-     (c-hanging-braces-alist . ((block-close)
-                                (block-open)
-                                (brace-list-close)
-                                (brace-list-entry)
-                                (brace-list-intro)
-                                (brace-list-open)
-                                (class-close)
-                                (class-open)
-                                (class-open)
-                                (defun-close)
-                                (defun-open)
-                                (inline-close)
-                                (inline-open)
-                                (statement-case-open)
-                                (substatement-open)))
-
-     (c-hanging-colons-alist . ((access-key)
-                                (access-label)
-                                (case-label)
-                                (inher-intro)
-                                (label)
-                                (member-init-intro)))
-
-     (c-cleanup-list . (scope-operator list-close-comma defun-close-semi))
-
-     (c-offsets-alist . ((access-label . -4)
-                         (arglist-close . c-lineup-arglist)
-                         (block-open . 0)
-                         (brace-list-intro . 4)
-                         (brace-list-open . 0)
-                         (case-label . 4)
-                         (inline-open . 0)
-                         (knr-argdecl-intro . -4)
-                         (label . 0)
-                         (member-init-intro . ++)
-                         (statement-case-intro . 4)
-                         (substatement-open . 0)
-                         (substatement-label . 0)
-                         (topmost-intro-cont . 0)))
-
-     (c-echo-syntactic-information-p . t))))
+  (gsetq c-default-style "weirdNox")
+  (c-add-style c-default-style
+               '((c-basic-offset . 4)
+                 (c-offsets-alist . ((arglist-close . c-lineup-arglist)
+                                     (case-label . +)
+                                     (statement-case-intro . (+cc-style-stmt-case-intro +))
+                                     (substatement-open . 0))))))
 #+END_SRC
 
 *** Go
