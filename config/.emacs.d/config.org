@@ -77,21 +77,18 @@ Also create the directories if they don't exist.
 #+END_SRC
 
 *** Functions and macros
-**** From DOOM Emacs
+**** Helpers
 #+BEGIN_SRC emacs-lisp
-(defun nox-try-run-hook (hook)
-  "Run HOOK (a hook function), but marks thrown errors to make it a little
-easier to tell where the came from.
+(defmacro setq! (&rest settings)
+  "Like setq-default, but uses custom-set if it is set."
+  `(progn ,@(cl-loop for (var val) on settings by 'cddr
+                     collect `(funcall (or (get ',var 'custom-set) #'set-default)
+				       ',var ,val))))
 
-Meant to be used with `run-hook-wrapped'."
-  (when nox-debug-mode
-    (message "Running nox hook: %s" hook))
-  (condition-case e
-      (funcall hook)
-    ((debug error)
-     (signal 'nox-hook-error (list hook e))))
-  ;; return nil so `run-hook-wrapped' won't short circuit
-  nil)
+(defmacro lambda! (&rest body)
+  "A shortcut for inline interactive lambdas."
+  (declare (doc-string 1))
+  `(lambda () (interactive) ,@body))
 
 (defun nox-unquote (exp)
   "Return EXP unquoted."
@@ -105,18 +102,32 @@ Meant to be used with `run-hook-wrapped'."
   (declare (pure t) (side-effect-free t))
   (if (listp exp) exp (list exp)))
 
-(defun nox-keyword-intern (str)
-  "Converts STR (a string) into a keyword (`keywordp')."
-  (declare (pure t) (side-effect-free t))
-  (cl-check-type str string)
-  (intern (concat ":" str)))
+(defun nox-pos-at-line (line &optional column)
+  (save-excursion
+    (goto-char (point-min))
+    (forward-line (- line 1))
+    (move-to-column (or column 0))
+    (point)))
 
-(defun nox-keyword-name (keyword)
-  "Returns the string name of KEYWORD (`keywordp') minus the leading colon."
-  (declare (pure t) (side-effect-free t))
-  (cl-check-type :test keyword)
-  (substring (symbol-name keyword) 1))
+(defun nox-get-line-from-file (file line &optional trim)
+  (with-current-buffer (find-file-noselect file)
+    (save-excursion
+      (goto-char (point-min))
+      (forward-line (- line 1))
+      (let ((string (thing-at-point 'line)))
+        (if trim
+            (replace-regexp-in-string "\\(\\`[[:space:]\n]*\\|[[:space:]\n]*\\'\\)" "" string)
+          string)))))
 
+(defun nox-get-entire-buffer (buffer)
+  (with-current-buffer buffer
+    (save-restriction
+      (widen)
+      (buffer-substring-no-properties (point-min) (point-max)))))
+#+END_SRC
+
+**** Hooks
+#+BEGIN_SRC emacs-lisp
 (defun nox-resolve-hook-forms (hooks)
   (declare (pure t) (side-effect-free t))
   (cl-loop with quoted-p = (eq (car-safe hooks) 'quote)
@@ -127,118 +138,15 @@ Meant to be used with `run-hook-wrapped'."
            collect hook
            else collect (intern (format "%s-hook" (symbol-name hook)))))
 
-(defmacro λ! (&rest body)
-  "A shortcut for inline interactive lambdas."
-  (declare (doc-string 1))
-  `(lambda () (interactive) ,@body))
-
-(defalias 'lambda! 'λ!)
-
-(defmacro add-transient-hook! (hook &rest args)
-  "Attaches transient forms to a HOOK.
-
-This means FORMS will be evaluated once when that function/hook is first
-invoked, then never again.
-
-HOOK can be a quoted hook or a sharp-quoted function (which will be advised).
-
-ARGS can be a function, list of functions, or body forms to be wrapped in a lambda.
-When it is a function or a list of functions, they will be called with the hooks args."
-  (declare (indent 1))
-  (let ((append (if (eq (car args) :after) (pop args)))
-        (funcs
-         (let ((val (car args)))
-           (if (memq (car-safe val) '(quote function))
-               (if (cdr-safe (cadr val))
-                   (cadr val)
-                 (list (cadr val)))
-             (list args))))
-        (func-name (gensym "nox|transient-hook-")))
-    `(progn
-       (fset ',func-name
-             (lambda (&rest call-args)
-               ,@(cl-loop for fn in funcs
-                          collect (if (symbolp fn)
-                                      `(apply #',fn call-args)
-                                    `(progn ,@args)))
-               (cond ((functionp ,hook) (advice-remove ,hook #',func-name))
-                     ((symbolp ,hook)   (remove-hook ,hook #',func-name)))
-               (unintern ',func-name nil)))
-       (cond ((functionp ,hook)
-              (advice-add ,hook ,(if append :after :before) #',func-name))
-             ((symbolp ,hook)
-              (put ',func-name 'permanent-local-hook t)
-              (add-hook ,hook #',func-name ,append))))))
-
-(defmacro after! (targets &rest body)
-  "A smart wrapper around `with-eval-after-load'. Supresses warnings during
-compilation. This will no-op on features that have been disabled by the user."
-  (declare (indent defun) (debug t))
-  (unless (and (symbolp targets)
-               (memq targets (bound-and-true-p nox-disabled-packages)))
-    (list (if (or (not (bound-and-true-p byte-compile-current-file))
-                  (eq (car-safe targets) :when)
-                  (dolist (next (nox-enlist targets))
-                    (unless (keywordp next)
-                      (if (symbolp next)
-                          (require next nil :no-error)
-                        (load next :no-message :no-error)))))
-              #'progn
-            #'with-no-warnings)
-          (cond ((eq (car-safe targets) :when)
-                 `(if ,(cadr targets)
-                      (progn ,@body)
-                    ,(let ((fun (gensym "nox|delay-form-")))
-                       `(progn
-                          (fset ',fun (lambda (&rest args)
-                                        (when ,(or (car (cdr-safe targets)) t)
-                                          (remove-hook 'after-load-functions #',fun)
-                                          (unintern ',fun nil)
-                                          (ignore args)
-                                          ,@body)))
-                          (put ',fun 'permanent-local-hook t)
-                          (add-hook 'after-load-functions #',fun)))))
-                ((symbolp targets)
-                 `(with-eval-after-load ',targets
-                    ,@body))
-                ((and (consp targets)
-                      (memq (car targets) '(:or :any)))
-                 `(progn
-                    ,@(cl-loop for next in (cdr targets)
-                               collect `(after! ,next ,@body))))
-                ((and (consp targets)
-                      (memq (car targets) '(:and :all)))
-                 (dolist (next (cdr targets))
-                   (setq body `((after! ,next ,@body))))
-                 (car body))
-                ((listp targets)
-                 `(after! (:all ,@targets) ,@body))))))
-
-(defmacro quiet! (&rest forms)
-  "Run FORMS without making any output."
-  `(if nox-debug-mode
-       (progn ,@forms)
-     (let ((old-fn (symbol-function 'write-region)))
-       (cl-letf* ((standard-output (lambda (&rest _)))
-                  ((symbol-function 'load-file) (lambda (file) (load file nil t)))
-                  ((symbol-function 'message) (lambda (&rest _)))
-                  ((symbol-function 'write-region)
-                   (lambda (start end filename &optional append visit lockname mustbenew)
-                     (unless visit (setq visit 'no-message))
-                     (funcall old-fn start end filename append visit lockname mustbenew)))
-                  (inhibit-message t)
-                  (save-silently t))
-         ,@forms))))
-
 (defmacro add-hook! (&rest args)
   "A convenience macro for `add-hook'. Takes, in order:
 
-  1. Optional properties :local and/or :append, which will make the hook
-     buffer-local or append to the list of hooks (respectively),
-  2. The hooks: either an unquoted major mode, an unquoted list of major-modes,
-     a quoted hook variable or a quoted list of hook variables. If unquoted, the
-     hooks will be resolved by appending -hook to each symbol.
-  3. A function, list of functions, or body forms to be wrapped in a lambda.
+   1. Optional properties :local and/or :append, which will make the hook
+      buffer-local or append to the list of hooks (respectively),
+   2. The hooks: either an unquoted major mode, an unquoted list of major-modes,
+      a quoted hook variable or a quoted list of hook variables. If unquoted, the
+      hooks will be resolved by appending -hook to each symbol.
+   3. A function, list of functions, or body forms to be wrapped in a lambda.
 
 Examples:
     (add-hook! 'some-mode-hook 'enable-something)   (same as `add-hook')
@@ -250,8 +158,7 @@ Examples:
     (add-hook! (one-mode second-mode) (setq v 5) (setq a 2))
     (add-hook! :append :local (one-mode second-mode) (setq v 5) (setq a 2))
 
-Body forms can access the hook's arguments through the let-bound variable
-`args'."
+Body forms can access the hook's arguments through the let-bound variable `args'."
   (declare (indent defun) (debug t))
   (let ((hook-fn 'add-hook)
         append-p local-p)
@@ -261,13 +168,12 @@ Body forms can access the hook's arguments through the let-bound variable
         (:local  (setq local-p t))
         (:remove (setq hook-fn 'remove-hook))))
     (let ((hooks (nox-resolve-hook-forms (pop args)))
-          (funcs
-           (let ((val (car args)))
-             (if (memq (car-safe val) '(quote function))
-                 (if (cdr-safe (cadr val))
-                     (cadr val)
-                   (list (cadr val)))
-               (list args))))
+          (funcs (let ((arg (car args)))
+                   (if (memq (car-safe arg) '(quote function))
+                       (if (cdr-safe (cadr arg))
+                           (cadr arg)
+                         (list (cadr arg)))
+                     (list args))))
           forms)
       (dolist (fn funcs)
         (setq fn (if (symbolp fn)
@@ -281,8 +187,7 @@ Body forms can access the hook's arguments through the let-bound variable
       `(progn ,@(if append-p (nreverse forms) forms)))))
 
 (defmacro remove-hook! (&rest args)
-  "Convenience macro for `remove-hook'. Takes the same arguments as
-`add-hook!'."
+  "Convenience macro for `remove-hook'. Takes the same arguments as `add-hook!'."
   (declare (indent defun) (debug t))
   `(add-hook! :remove ,@args))
 
@@ -302,6 +207,86 @@ Body forms can access the hook's arguments through the let-bound variable
                  (val (pop rest)))
              (push `(setq-local ,var ,val) forms)))
          (nreverse forms))))
+
+(defmacro add-transient-hook! (hook-or-function &rest args)
+  "Attaches a self-removing function to HOOK-OR-FUNCTION.
+
+HOOK-OR-FUNCTION can be a quoted hook or a sharp-quoted function (which will be
+advised).
+
+ARGS can be a function, list of functions, or body forms to be wrapped in a lambda.
+When it is a function or a list of functions, they will be called with the hooks args."
+  (declare (indent 1))
+  (let ((append (if (eq (car args) :after) (pop args)))
+        ;; NOTE(nox):
+        ;; If args is a function or list of functions, funcs will be a list of functions
+        ;; If args is a list of forms, funcs will be a list containing only the list of forms
+        (funcs (let ((arg (car args)))
+                 (if (memq (car-safe arg) '(quote function))
+                     (if (cdr-safe (cadr arg))
+                         (cadr arg)
+                       (list (cadr arg)))
+                   (list args))))
+        (func-name (gensym "nox|transient-hook-")))
+    `(progn
+       (fset ',func-name
+             (lambda (&rest call-args)
+               ,@(cl-loop for fn in funcs
+                          collect (if (symbolp fn)
+                                      `(apply #',fn call-args)
+                                    `(progn ,@args)))
+               (cond ((functionp ,hook-or-function) (advice-remove ,hook-or-function #',func-name))
+                     ((symbolp ,hook-or-function)   (remove-hook ,hook-or-function #',func-name)))
+               (unintern ',func-name nil)))
+       (cond ((functionp ,hook-or-function)
+              (advice-add ,hook-or-function ,(if append :after :before) #',func-name))
+             ((symbolp ,hook-or-function)
+              (put ',func-name 'permanent-local-hook t)
+              (add-hook ,hook-or-function #',func-name ,append))))))
+
+(defmacro after! (targets &rest body)
+  "A smart wrapper around `with-eval-after-load'. Supresses warnings during
+compilation. This will no-op on features that have been disabled by the user."
+  (declare (indent defun) (debug t))
+  (list (if (or (not (bound-and-true-p byte-compile-current-file))
+                (dolist (next (nox-enlist targets))
+                  (unless (keywordp next)
+                    (if (symbolp next)
+                        (require next nil :no-error)
+                      (load next :no-message :no-error)))))
+            #'progn
+          #'with-no-warnings)
+        (if (symbolp targets)
+            `(with-eval-after-load ',targets ,@body)
+          (pcase (car-safe targets)
+            ((or :or :any)
+             (macroexp-progn
+              (cl-loop for next in (cdr targets)
+                       collect `(after! ,next ,@body))))
+            ((or :and :all)
+             (dolist (next (cdr targets))
+               (setq body `((after! ,next ,@body))))
+             (car body))
+            (_ `(after! (:and ,@targets) ,@body))))))
+#+END_SRC
+
+**** Shut things up
+#+BEGIN_SRC emacs-lisp
+(defmacro quiet! (&rest forms)
+  "Run FORMS without making any output."
+  `(if nox-debug-mode
+       (progn ,@forms)
+     (let ((old-fn (symbol-function 'write-region)))
+       (cl-letf* ((standard-output (lambda (&rest _)))
+                  ((symbol-function 'load-file) (lambda (file) (load file nil t)))
+                  ((symbol-function 'message) (lambda (&rest _)))
+                  ((symbol-function 'write-region)
+                   (lambda (start end filename &optional append visit lockname mustbenew)
+                     (unless visit (setq visit 'no-message))
+                     (funcall old-fn start end filename append visit lockname mustbenew)))
+                  (inhibit-message t)
+                  (save-silently t))
+         ,@forms))))
 
 (defun nox*shut-up (orig-fn &rest args)
   "Generic advisor for silencing noisy functions."
@@ -367,32 +352,6 @@ When ARG is:
        (- (float-time) ,start))))
 #+END_SRC
 
-**** Helpers
-#+BEGIN_SRC emacs-lisp
-(defun nox-pos-at-line (line &optional column)
-  (save-excursion
-    (goto-char (point-min))
-    (forward-line (- line 1))
-    (move-to-column (or column 0))
-    (point)))
-
-(defun nox-get-line-from-file (file line &optional trim)
-  (with-current-buffer (find-file-noselect file)
-    (save-excursion
-      (goto-char (point-min))
-      (forward-line (- line 1))
-      (let ((string (thing-at-point 'line)))
-        (if trim
-            (replace-regexp-in-string "\\(\\`[[:space:]\n]*\\|[[:space:]\n]*\\'\\)" "" string)
-          string)))))
-
-(defun nox-get-entire-buffer (buffer)
-  (with-current-buffer buffer
-    (save-restriction
-      (widen)
-      (buffer-substring-no-properties (point-min) (point-max)))))
-#+END_SRC
-
 **** Byte compilation
 #+BEGIN_SRC emacs-lisp
 (defun nox-byte-compile-init ()
@@ -402,18 +361,6 @@ When ARG is:
 #+END_SRC
 
 *** Hooks
-#+BEGIN_SRC emacs-lisp
-(defvar nox-post-init-hook nil
-  "A list of hooks to run when Emacs is fully initialized. Fires at the end of
-`emacs-startup-hook', as late as possible. Guaranteed to run after everything
-else (except for `window-setup-hook').")
-
-(defun nox|post-init ()
-  "Run `nox-post-init-hook'."
-  (run-hook-wrapped 'nox-post-init-hook #'nox-try-run-hook))
-(add-hook! 'emacs-startup-hook #'nox|post-init)
-#+END_SRC
-
 **** Window and buffer switch
 #+BEGIN_SRC emacs-lisp
 (defvar nox-exit-window-hook nil
@@ -466,7 +413,7 @@ called. The buffer to be switched to is current when these hooks run.")
     (if disable
         (advice-remove (car spec) (cdr spec))
       (advice-add (car spec) :around (cdr spec)))))
-(add-hook 'nox-post-init-hook #'nox|setup-switch-hooks)
+(add-hook 'emacs-startup-hook #'nox|setup-switch-hooks)
 #+END_SRC
 
 *** Emacs 25 compatibility
@@ -490,12 +437,12 @@ called. The buffer to be switched to is current when these hooks run.")
 *** Package ecosystem
 #+BEGIN_SRC emacs-lisp
 (require 'package)
-(setq-default package-user-dir      nox-packages-dir
-              package-gnupghome-dir nox-packages-dir
-              package-archives
-              '(("gnu"   . "https://elpa.gnu.org/packages/")
-                ("melpa" . "https://melpa.org/packages/")
-                ("org"   . "https://orgmode.org/elpa/")))
+(setq! package-user-dir      nox-packages-dir
+       package-gnupghome-dir nox-packages-dir
+       package-archives
+       '(("gnu"   . "https://elpa.gnu.org/packages/")
+         ("melpa" . "https://melpa.org/packages/")
+         ("org"   . "https://orgmode.org/elpa/")))
 
 (unless (bound-and-true-p gnutls-verify-error)
   (dolist (archive package-archives)
@@ -511,7 +458,7 @@ called. The buffer to be switched to is current when these hooks run.")
   (package-install 'use-package))
 
 (require 'use-package)
-(setq-default use-package-always-defer t
+(setq! use-package-always-defer t
               use-package-verbose nox-debug-mode
               use-package-compute-statistics nox-debug-mode
               use-package-minimum-reported-time (if nox-debug-mode 0 0.1)
@@ -566,12 +513,12 @@ symbols.
 #+BEGIN_SRC emacs-lisp
 (use-package quelpa :ensure
   :init
-  (setq-default quelpa-dir (concat nox-packages-dir "quelpa-cache/")
-                quelpa-verbose nox-debug-mode
-		        quelpa-melpa-recipe-stores nil
-		        quelpa-checkout-melpa-p nil
-		        quelpa-update-melpa-p nil
-		        quelpa-self-upgrade-p nil))
+  (setq! quelpa-dir (concat nox-packages-dir "quelpa-cache/")
+         quelpa-verbose nox-debug-mode
+	 quelpa-melpa-recipe-stores nil
+	 quelpa-checkout-melpa-p nil
+	 quelpa-update-melpa-p nil
+	 quelpa-self-upgrade-p nil))
 
 (use-package quelpa-use-package :ensure)
 
@@ -591,14 +538,13 @@ symbols.
 (use-package general :ensure
   :demand
   :config
-  (defalias 'gsetq 'general-setq)
   (general-create-definer nox-leader :prefix "C-c")
   (general-create-definer nox-local-leader :prefix "C-c m"))
 #+END_SRC
 
 ** General settings and tweaks
 #+BEGIN_SRC emacs-lisp
-(gsetq
+(setq!
  ad-redefinition-action 'accept
  auto-window-vscroll nil ;; https://emacs.stackexchange.com/a/28746
  autoload-compute-prefixes nil
@@ -623,7 +569,7 @@ symbols.
 
 **** Quiet startup
 #+BEGIN_SRC emacs-lisp
-(gsetq inhibit-startup-message t
+(setq! inhibit-startup-message t
        inhibit-startup-echo-area-message user-login-name
        inhibit-default-init t
        initial-major-mode 'fundamental-mode
@@ -640,7 +586,7 @@ symbols.
 
 **** Files
 #+BEGIN_SRC emacs-lisp
-(gsetq abbrev-file-name               (concat nox-local-dir "abbrev.el")
+(setq! abbrev-file-name               (concat nox-local-dir "abbrev.el")
        auto-save-file-name-transforms (list (list ".*" (concat nox-cache-dir "auto-save/") t))
        auto-save-list-file-prefix     (concat nox-cache-dir "auto-save/.saves-")
        auto-save-list-file-name       (concat nox-cache-dir "auto-save-list")
@@ -659,7 +605,7 @@ symbols.
 
 **** History and backup
 #+BEGIN_SRC emacs-lisp
-(gsetq delete-by-moving-to-trash t
+(setq! delete-by-moving-to-trash t
        delete-old-versions t
        history-length 500
        kept-new-versions 10
@@ -669,7 +615,7 @@ symbols.
 
 **** Security
 #+BEGIN_SRC emacs-lisp
-(gsetq gnutls-verify-error (not (getenv "INSECURE"))
+(setq! gnutls-verify-error (not (getenv "INSECURE"))
        tls-checktrust gnutls-verify-error
        tls-program (list "gnutls-cli --x509cafile %t -p %p %h"
                          "gnutls-cli -p %p %h"
@@ -694,7 +640,7 @@ with functions that require it."
 
 ** OS specific
 #+BEGIN_SRC emacs-lisp
-(gsetq x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)
+(setq! x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)
        select-enable-clipboard t)
 
 (cond (IS-MAC (setq mac-command-modifier 'meta
@@ -720,7 +666,7 @@ with functions that require it."
 ** UI
 *** Settings
 #+BEGIN_SRC emacs-lisp
-(gsetq initial-frame-alist '((fullscreen . fullboth)
+(setq! initial-frame-alist '((fullscreen . fullboth)
                              (fullscreen-restore . maximized))
        ring-bell-function #'ignore
        visible-bell nil
@@ -743,7 +689,7 @@ with functions that require it."
 
 **** Cursor
 #+BEGIN_SRC emacs-lisp
-(gsetq cursor-in-non-selected-windows t
+(setq! cursor-in-non-selected-windows t
        highlight-nonselected-windows nil
        visible-cursor nil
        x-stretch-cursor nil)
@@ -758,7 +704,7 @@ with functions that require it."
 
 **** Better (?) JIT font locking
 #+BEGIN_SRC emacs-lisp
-(gsetq jit-lock-defer-time nil
+(setq! jit-lock-defer-time nil
        jit-lock-stealth-nice 0.1
        jit-lock-stealth-time 0.2
        jit-lock-stealth-verbose nil)
@@ -767,9 +713,9 @@ with functions that require it."
 **** Highlight line
 #+BEGIN_SRC emacs-lisp
 (use-package hl-line
-  :ghook ('nox-post-init-hook #'global-hl-line-mode)
+  :ghook ('emacs-startup-hook #'global-hl-line-mode)
   :config
-  (gsetq hl-line-sticky-flag nil
+  (setq! hl-line-sticky-flag nil
          global-hl-line-sticky-flag nil))
 #+END_SRC
 
@@ -793,7 +739,7 @@ with functions that require it."
 #+BEGIN_SRC emacs-lisp
 (use-package speedbar
   :config
-  (gsetq speedbar-frame-parameters '((minibuffer . t)
+  (setq! speedbar-frame-parameters '((minibuffer . t)
                                      (unsplittable . t)
                                      (width . 30)
                                      (border-width . 0)
@@ -903,7 +849,7 @@ ARGS are the same as in `custom-set-faces'."
 #+BEGIN_SRC emacs-lisp
 (use-package doom-themes :ensure
   :config
-  (gsetq doom-one-brighter-comments t
+  (setq! doom-one-brighter-comments t
          doom-one-comment-bg nil)
 
   (use-package doom-themes-org :after org :demand)
@@ -911,7 +857,7 @@ ARGS are the same as in `custom-set-faces'."
   (use-package doom-themes-treemacs
     :after treemacs :demand
     :init
-    (gsetq doom-treemacs-enable-variable-pitch nil))
+    (setq! doom-treemacs-enable-variable-pitch nil))
 
   (nox-add-customize-theme-hook "^doom-"
     (nox-theme-set-faces '(outline-1 ((t (:height 1.0))))
@@ -931,7 +877,7 @@ ARGS are the same as in `custom-set-faces'."
 
 (use-package solarized :ensure solarized-theme
   :config
-  (gsetq solarized-use-variable-pitch nil
+  (setq! solarized-use-variable-pitch nil
 	     solarized-use-more-italic t
 	     solarized-high-contrast-mode-line nil
 	     solarized-scale-org-headlines nil)
@@ -995,7 +941,7 @@ Disable fringes in the minibuffer window.
 (defun nox|no-fringes-in-minibuffer (&rest _)
   "Disable fringes in the minibuffer window."
   (set-window-fringes (minibuffer-window) 0 0 nil))
-(add-hook! '(nox-post-init-hook minibuffer-setup-hook window-configuration-change-hook)
+(add-hook! '(emacs-startup-hook minibuffer-setup-hook window-configuration-change-hook)
            #'nox|no-fringes-in-minibuffer)
 #+END_SRC
 
@@ -1003,7 +949,7 @@ Disable fringes in the minibuffer window.
 #+BEGIN_SRC emacs-lisp
 (use-package doom-modeline :ensure
   :config
-  (gsetq doom-modeline-enable-word-count t
+  (setq! doom-modeline-enable-word-count t
          display-time-default-load-average nil)
   (display-time-mode))
 #+END_SRC
@@ -1022,7 +968,7 @@ Disable fringes in the minibuffer window.
       (split-window-right))
 
     ;; NOTE(nox): This needs to be here, else it doesn't work
-    (gsetq system-time-locale "C")))
+    (setq! system-time-locale "C")))
 
 (if (daemonp)
     (add-transient-hook! 'after-make-frame-functions 'nox-setup-appearance)
@@ -1037,7 +983,7 @@ Disable fringes in the minibuffer window.
   :after-call pre-command-hook
   :general ("C-x b" 'ivy-switch-buffer)
   :config
-  (gsetq ivy-count-format "(%d/%d) "
+  (setq! ivy-count-format "(%d/%d) "
          ivy-extra-directories nil
          ivy-fixed-height-minibuffer t
          ivy-format-function #'ivy-format-function-line
@@ -1070,7 +1016,7 @@ Needed for ivy fuzzy matching.
   :after ivy
   :demand
   :config
-  (gsetq ivy-re-builders-alist '((counsel-ag . ivy--regex-plus)
+  (setq! ivy-re-builders-alist '((counsel-ag . ivy--regex-plus)
                                  (counsel-rg . ivy--regex-plus)
                                  (counsel-pt . ivy--regex-plus)
                                  (counsel-grep . ivy--regex-plus)
@@ -1083,7 +1029,7 @@ Needed for ivy fuzzy matching.
 (use-package ivy-rich :ensure
   :ghook 'ivy-mode-hook
   :config
-  (gsetq ivy-rich-path-style 'abbrev
+  (setq! ivy-rich-path-style 'abbrev
          ivy-rich-switch-buffer-align-virtual-buffer t
          ivy-rich-switch-buffer-name-max-length 40))
 #+END_SRC
@@ -1143,7 +1089,7 @@ Needed for ivy fuzzy matching.
 ** Editor
 *** Settings
 #+BEGIN_SRC emacs-lisp
-(gsetq vc-follow-symlinks t
+(setq! vc-follow-symlinks t
        save-interprogram-paste-before-kill t
        enable-recursive-minibuffers t
        mouse-yank-at-point t)
@@ -1152,10 +1098,9 @@ Needed for ivy fuzzy matching.
 
 **** Whitespace, indentation & formatting
 #+BEGIN_SRC emacs-lisp
-(gsetq tab-width 4
+(setq! tab-width 4
        indent-tabs-mode nil
        require-final-newline t
-       mode-require-final-newline t
        sentence-end-double-space nil
        tab-always-indent t
        tabify-regexp "^\t* [ \t]+"
@@ -1170,7 +1115,7 @@ Needed for ivy fuzzy matching.
 
 **** Scrolling
 #+BEGIN_SRC emacs-lisp
-(gsetq scroll-margin 1
+(setq! scroll-margin 1
        hscroll-margin 2
        hscroll-step 1
        scroll-conservatively 101
@@ -1181,7 +1126,7 @@ Needed for ivy fuzzy matching.
 
 **** Limits
 #+BEGIN_SRC emacs-lisp
-(gsetq kill-ring-max 5000
+(setq! kill-ring-max 5000
        undo-limit (* 20 1024 1024)
        undo-strong-limit (* 40 1024 1024)
        undo-outer-limit (* 100 1024 1024)
@@ -1254,7 +1199,7 @@ Needed for ivy fuzzy matching.
    "<C-return>" 'company-template-forward-field)
 
   :config
-  (gsetq company-idle-delay nil
+  (setq! company-idle-delay nil
          company-tooltip-limit 15
          company-tooltip-align-annotations t
          company-require-match 'never
@@ -1281,7 +1226,7 @@ Needed for ivy fuzzy matching.
   (defun nox-company-dabbrev-buffer-check (buffer)
     (with-current-buffer buffer (derived-mode-p 'pdf-view-mode
                                                 'doc-view-mode)))
-  (gsetq company-dabbrev-ignore-buffers #'nox-company-dabbrev-buffer-check))
+  (setq! company-dabbrev-ignore-buffers #'nox-company-dabbrev-buffer-check))
 #+END_SRC
 
 **** Company box
@@ -1289,7 +1234,7 @@ Needed for ivy fuzzy matching.
 (use-package company-box :ensure
   :ghook 'company-mode-hook
   :config
-  (gsetq company-box-enable-icon nil))
+  (setq! company-box-enable-icon nil))
 #+END_SRC
 
 *** Projects
@@ -1297,7 +1242,7 @@ Needed for ivy fuzzy matching.
 (use-package projectile :ensure
   :general ("C-c p" '(:keymap projectile-command-map :wk "Projectile"))
   :init
-  (gsetq projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
+  (setq! projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
          projectile-cache-file (concat nox-cache-dir "projectile.cache")
          projectile-indexing-method (if IS-WINDOWS 'native 'alien)
          projectile-globally-ignored-files '(".DS_Store" "Icon" "TAGS")
@@ -1306,7 +1251,7 @@ Needed for ivy fuzzy matching.
          projectile-keymap-prefix (kbd "C-c p"))
 
   :config
-  (gsetq projectile-globally-ignored-directories (append projectile-globally-ignored-directories
+  (setq! projectile-globally-ignored-directories (append projectile-globally-ignored-directories
                                                          (list (abbreviate-file-name nox-local-dir)
                                                                ".sync" "node_modules" "flow-typed"))
          projectile-other-file-alist (append projectile-other-file-alist
@@ -1359,7 +1304,7 @@ Needed for ivy fuzzy matching.
    "M-g f" #'avy-goto-line
    "M-g w" #'avy-goto-word-1)
   :config
-  (gsetq avy-all-windows nil
+  (setq! avy-all-windows nil
          avy-background t
          avy-timeout-seconds .3))
 #+END_SRC
@@ -1556,7 +1501,7 @@ fundamental-mode) for performance sake."
                  (not (looking-at "[[:space:]]*$")))
         0)))
 
-  (gsetq c-default-style "weirdNox")
+  (setq! c-default-style "weirdNox")
   (c-add-style c-default-style
                '((c-basic-offset . 4)
                  (c-offsets-alist . ((arglist-close . c-lineup-arglist)
@@ -1685,10 +1630,10 @@ Lisp function does not specify a special indentation."
    "C-c C-q" 'counsel-org-tag)
 
   :init
-  (gsetq org-directory "~/Essential/Org/")
+  (setq! org-directory "~/Essential/Org/")
 
   :config
-  (gsetq org-modules '(org-habit org-id org-protocol org-timer))
+  (setq! org-modules '(org-habit org-id org-protocol org-timer))
 #+END_SRC
 
 **** Directories and files
@@ -1696,7 +1641,7 @@ Lisp function does not specify a special indentation."
 (defconst nox-org-agenda-file  (concat org-directory "Agenda.org"))
 (defconst nox-org-tickler-file (concat org-directory "Tickler.org"))
 (defconst nox-org-tracker-file (concat org-directory "Tracker.org"))
-(gsetq org-default-notes-file  (concat org-directory "Inbox.org")
+(setq! org-default-notes-file  (concat org-directory "Inbox.org")
        org-agenda-files (list org-default-notes-file nox-org-agenda-file nox-org-tickler-file
                               nox-org-tracker-file))
 (defconst nox-org-journal-file (concat org-directory "Journal.org"))
@@ -1738,7 +1683,7 @@ Lisp function does not specify a special indentation."
 
 **** Appearance
 #+BEGIN_SRC emacs-lisp
-(gsetq org-startup-indented t
+(setq! org-startup-indented t
        org-startup-with-inline-images t
        org-startup-with-latex-preview t
        org-pretty-entities t
@@ -1750,7 +1695,7 @@ Lisp function does not specify a special indentation."
 
 **** Behavior
 #+BEGIN_SRC emacs-lisp
-(gsetq org-tags-column -110
+(setq! org-tags-column -110
        org-catch-invisible-edits 'smart
        org-return-follows-link t
        org-list-allow-alphabetical t
@@ -1801,7 +1746,7 @@ Lisp function does not specify a special indentation."
 
 **** Tasks and states
 #+BEGIN_SRC emacs-lisp
-(gsetq
+(setq!
  org-todo-keywords '((sequence "TODO(t)" "NEXT(n)" "|" "DONE(d)")
                      (sequence "HOLD(h@/!)" "WAITING(w@/!)" "|" "CANCELLED(c@/!)"))
  org-treat-S-cursor-todo-selection-as-state-change nil
@@ -1811,7 +1756,7 @@ Lisp function does not specify a special indentation."
 
 **** Refiling
 #+BEGIN_SRC emacs-lisp
-(gsetq org-refile-use-outline-path 'file
+(setq! org-refile-use-outline-path 'file
        org-outline-path-complete-in-steps nil
        org-refile-allow-creating-parent-nodes 'confirm
        org-refile-targets `((nil . (:maxlevel . 9))
@@ -1819,7 +1764,7 @@ Lisp function does not specify a special indentation."
                             (,nox-org-tickler-file . (:maxlevel . 2))
                             (,nox-org-someday-file . (:maxlevel . 1))))
 
-(after! deft (gsetq org-refile-targets (push '(deft-all-files . (:maxlevel . 1)) org-refile-targets)))
+(after! deft (setq! org-refile-targets (push '(deft-all-files . (:maxlevel . 1)) org-refile-targets)))
 
 (add-hook! 'org-after-refile-insert-hook
   (org-up-heading-safe)
@@ -1828,21 +1773,21 @@ Lisp function does not specify a special indentation."
 
 **** Priorities
 #+BEGIN_SRC emacs-lisp
-(gsetq org-highest-priority ?A
+(setq! org-highest-priority ?A
        org-default-priority ?C
        org-lowest-priority  ?D)
 #+END_SRC
 
 **** Logging
 #+BEGIN_SRC emacs-lisp
-(gsetq org-log-done 'time
+(setq! org-log-done 'time
        org-log-reschedule 'time
        org-log-into-drawer t)
 #+END_SRC
 
 **** Latex
 #+BEGIN_SRC emacs-lisp
-(gsetq
+(setq!
  org-preview-latex-default-process 'dvisvgm
  org-latex-packages-alist '(("" "tikz" t) ("american,siunitx,smartlabels" "circuitikz" t)
                             ("" "mathtools" t))
@@ -1916,7 +1861,7 @@ Lisp function does not specify a special indentation."
 
 **** Babel
 #+BEGIN_SRC emacs-lisp
-(gsetq org-confirm-babel-evaluate nil)
+(setq! org-confirm-babel-evaluate nil)
 
 (org-babel-do-load-languages
  'org-babel-load-languages
@@ -2061,7 +2006,7 @@ some heuristics to guess the result."
 
   (general-def :keymaps 'org-agenda-mode-map "P" #'+agenda/toggle-private)
 
-  (gsetq
+  (setq!
    org-agenda-custom-commands
    '(("n" "Agenda"
       ((agenda "" ((org-agenda-span 3)
@@ -2501,7 +2446,7 @@ some heuristics to guess the result."
 #+BEGIN_SRC emacs-lisp
 (use-package org-attach
   :config
-  (gsetq org-attach-directory "Recursos/attach/"
+  (setq! org-attach-directory "Recursos/attach/"
          org-attach-method 'mv))
 #+END_SRC
 
@@ -2549,7 +2494,7 @@ some heuristics to guess the result."
                   title (nox-org-inactive-timestamp) (plist-get org-store-link-plist :link))
         (format "* [[%s][%s]]\n" (plist-get org-store-link-plist :link) title))))
 
-  (gsetq
+  (setq!
    org-capture-templates '(("t" "Tarefa" entry (file "")
                             "* NEXT %i%?" :clock-in t :clock-resume t)
                            ("c" "Calendário" entry (file "")
@@ -2601,7 +2546,7 @@ some heuristics to guess the result."
 #+BEGIN_SRC emacs-lisp
 (use-package org-clock
   :config
-  (gsetq org-clock-in-resume t
+  (setq! org-clock-in-resume t
          org-clock-out-remove-zero-time-clocks t
          org-clock-report-include-clocking-task t
          org-clock-persist t
@@ -2614,7 +2559,7 @@ some heuristics to guess the result."
 #+BEGIN_SRC emacs-lisp
 (use-package org-habit
   :config
-  (gsetq org-habit-graph-column 75
+  (setq! org-habit-graph-column 75
          org-habit-preceding-days 30
          org-habit-following-days 1
          org-habit-today-glyph ?@))
@@ -2624,7 +2569,7 @@ some heuristics to guess the result."
 #+BEGIN_SRC emacs-lisp
 (use-package org-id
   :config
-  (gsetq org-id-link-to-org-use-id 'create-if-interactive
+  (setq! org-id-link-to-org-use-id 'create-if-interactive
          org-id-locations-file (concat nox-cache-dir "org-id-locations")))
 #+END_SRC
 
@@ -2642,7 +2587,7 @@ some heuristics to guess the result."
   (nox-local-leader :keymaps 'pdf-view-mode-map "n" '(org-noter :wk "Org Noter"))
 
   :config
-  (gsetq org-noter-default-heading-title "Notas da página $p$"
+  (setq! org-noter-default-heading-title "Notas da página $p$"
          org-noter-default-notes-file-names '("Notes.org" "Notas.org")
          org-noter-hide-other t))
 #+END_SRC
@@ -2653,7 +2598,7 @@ some heuristics to guess the result."
   :after bibtex
   :demand
   :config
-  (gsetq org-ref-default-bibliography '("~/Documents/Bibliography/References.bib")
+  (setq! org-ref-default-bibliography '("~/Documents/Bibliography/References.bib")
          org-ref-bibliography-notes "~/Documents/Bibliography/Notes.org"
          org-ref-pdf-directory "~/Documents/Bibliography/PDFs/"
          reftex-default-bibliography org-ref-default-bibliography
@@ -2673,7 +2618,7 @@ some heuristics to guess the result."
 
 (use-package ivy-bibtex :ensure
   :config
-  (gsetq bibtex-completion-notes-template-one-file (format "* ${title} - ${year}
+  (setq! bibtex-completion-notes-template-one-file (format "* ${title} - ${year}
 :PROPERTIES:
 :Custom_ID: ${=key=}
 :NOTER_DOCUMENT: %s${=key=}.pdf
@@ -2717,7 +2662,7 @@ some heuristics to guess the result."
     ("c" +compile "Recompile")
     ("q" nil "Quit"))
 
-  (gsetq compilation-ask-about-save nil
+  (setq! compilation-ask-about-save nil
          compilation-always-kill t
          compilation-scroll-output 'first-error
          compilation-context-lines 2
@@ -2869,7 +2814,7 @@ some heuristics to guess the result."
     (general-def :keymaps 'dired-mode-map
       "e" #'nox/ediff-files))
 
-  (gsetq dired-auto-revert-buffer t
+  (setq! dired-auto-revert-buffer t
          dired-dwim-target t
          dired-hide-details-hide-symlink-targets nil
          dired-listing-switches "-alh"
@@ -3060,7 +3005,7 @@ some heuristics to guess the result."
 (use-package deft :ensure
   :general (nox-leader "d" '(deft :wk "Deft"))
   :config
-  (gsetq deft-directory (concat org-directory "Logbook/")
+  (setq! deft-directory (concat org-directory "Logbook/")
          deft-extensions '("org" "txt" "md" "markdown")
          deft-default-extension (car deft-extensions)
          deft-use-filename-as-title nil
@@ -3077,7 +3022,7 @@ some heuristics to guess the result."
 #+BEGIN_SRC emacs-lisp
 (use-package doc-view
   :config
-  (gsetq doc-view-resolution 200))
+  (setq! doc-view-resolution 200))
 #+END_SRC
 
 **** PDF Tools
@@ -3142,7 +3087,7 @@ and append it."
                             (:eval (number-to-string (pdf-cache-number-of-pages)))
                             "]"))))
 
-  (gsetq pdf-view-display-size 'fit-page
+  (setq! pdf-view-display-size 'fit-page
          pdf-cache-image-limit 200
          pdf-view-use-imagemagick t))
 #+END_SRC
@@ -3152,7 +3097,7 @@ and append it."
 (use-package nov :ensure
   :mode (("\\.epub\\'" . nov-mode))
   :config
-  (gsetq nov-save-place-file (concat nox-cache-dir "nov-places")))
+  (setq! nov-save-place-file (concat nox-cache-dir "nov-places")))
 #+END_SRC
 
 *** Ediff
@@ -3178,7 +3123,7 @@ and append it."
 #+BEGIN_SRC emacs-lisp
 (use-package eshell
   :config
-  (gsetq eshell-directory-name (concat nox-cache-dir "eshell/")))
+  (setq! eshell-directory-name (concat nox-cache-dir "eshell/")))
 #+END_SRC
 
 *** GDB support
@@ -3218,7 +3163,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
     ("M" (lambda () (interactive) (setq nox/gdb-disassembly-show-source
                                         (not nox/gdb-disassembly-show-source))) :exit nil))
 
-  (gsetq gdb-many-windows t
+  (setq! gdb-many-windows t
          gdb-show-main t
          gdb-display-buffer-other-frame-action
          '((display-buffer-reuse-window display-buffer-pop-up-frame)
@@ -3483,7 +3428,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   (calendar-location-name "Porto")
   (calendar-latitude  41.1579)
   (calendar-longitude -8.6291)
-  :config (gsetq calendar-date-display-form calendar-european-date-display-form))
+  :config (setq! calendar-date-display-form calendar-european-date-display-form))
 
 (use-package holidays
   :custom
@@ -3515,7 +3460,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 #+BEGIN_SRC emacs-lisp
 (use-package ispell
   :config
-  (gsetq ispell-program-name (or (executable-find "hunspell")
+  (setq! ispell-program-name (or (executable-find "hunspell")
                                  (executable-find "aspell")
                                  (executable-find "ispell")
                                  "ispell")))
@@ -3542,7 +3487,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 #+BEGIN_SRC emacs-lisp
 (use-package tramp
   :config
-  (gsetq tramp-default-method "ssh"
+  (setq! tramp-default-method "ssh"
          tramp-backup-directory-alist '(("." . "/tmp/tramp-backup-files/"))
          tramp-auto-save-directory   (concat nox-cache-dir "tramp-auto-save/")
          tramp-persistency-file-name (concat nox-cache-dir "tramp-persistency.el")
@@ -3554,7 +3499,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 #+BEGIN_SRC emacs-lisp
 (use-package treemacs :ensure
   :config
-  (gsetq treemacs-collapse-dirs (if (executable-find "python") 3 0)
+  (setq! treemacs-collapse-dirs (if (executable-find "python") 3 0)
          treemacs-follow-after-init t
          treemacs-persist-file (concat nox-cache-dir "treemacs-persist")))
 #+END_SRC
@@ -3568,7 +3513,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   "<backtab>" #'indent-for-tab-command
   "<C-tab>" #'indent-region
   "M-o" #'other-window
-  "M-O" (λ! (other-window -1))
+  "M-O" (lambda! (other-window -1))
   "C-x C-c" #'nox/exit-emacs)
 
 (nox-leader
@@ -3589,7 +3534,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
   :defer 1
   :after-call pre-command-hook
   :config
-  (gsetq which-key-sort-order #'which-key-prefix-then-key-order
+  (setq! which-key-sort-order #'which-key-prefix-then-key-order
          which-key-sort-uppercase-first nil
          which-key-add-column-padding 1
          which-key-max-display-columns nil
