@@ -1,6 +1,10 @@
 ;; early-init.el -*- lexical-binding: t -*-
 ;; Author: weirdNox (Gonçalo Santos)
 
+(eval-when-compile (and (version< emacs-version "25.1")
+                        (error "This config requires at least GNU Emacs 25.1, but you're running version %s."
+                               emacs-version)))
+
 (defvar nox--file-name-handler-alist file-name-handler-alist)
 
 (defun nox|reset-temporary-init-values ()
@@ -20,6 +24,6 @@ this, you'll get stuttering and random freezes) and resets `file-name-handler-al
 (setq load-prefer-newer noninteractive
       package-enable-at-startup nil)
 
-(if (fboundp 'tool-bar-mode) (tool-bar-mode -1))
-(if (fboundp 'menu-bar-mode) (menu-bar-mode -1))
+(if (fboundp 'tool-bar-mode)   (tool-bar-mode   -1))
+(if (fboundp 'menu-bar-mode)   (menu-bar-mode   -1))
 (if (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))

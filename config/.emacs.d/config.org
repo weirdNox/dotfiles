@@ -8,7 +8,7 @@
 :VISIBILITY: children
 :END:
 ** About
-This is Gonçalo Santos's Emacs configuration, based on =doom-emacs=.
+This is Gonçalo Santos's Emacs configuration.
 
 #+BEGIN_SRC emacs-lisp
 (setq-default user-full-name "Gonçalo Santos")
@@ -83,7 +83,7 @@ Also create the directories if they don't exist.
   "Like setq-default, but uses custom-set if it is set."
   `(progn ,@(cl-loop for (var val) on settings by 'cddr
                      collect `(funcall (or (get ',var 'custom-set) #'set-default)
-				       ',var ,val))))
+                       ',var ,val))))
 
 (defmacro lambda! (&rest body)
   "A shortcut for inline interactive lambdas."
@@ -459,10 +459,10 @@ called. The buffer to be switched to is current when these hooks run.")
 
 (require 'use-package)
 (setq! use-package-always-defer t
-              use-package-verbose nox-debug-mode
-              use-package-compute-statistics nox-debug-mode
-              use-package-minimum-reported-time (if nox-debug-mode 0 0.1)
-              use-package-expand-minimally noninteractive)
+       use-package-verbose nox-debug-mode
+       use-package-compute-statistics nox-debug-mode
+       use-package-minimum-reported-time (if nox-debug-mode 0 0.1)
+       use-package-expand-minimally noninteractive)
 #+END_SRC
 
 Add the :after-call keyword, that takes a symbol or list of symbols, where the symbols are
@@ -515,10 +515,10 @@ symbols.
   :init
   (setq! quelpa-dir (concat nox-packages-dir "quelpa-cache/")
          quelpa-verbose nox-debug-mode
-	 quelpa-melpa-recipe-stores nil
-	 quelpa-checkout-melpa-p nil
-	 quelpa-update-melpa-p nil
-	 quelpa-self-upgrade-p nil))
+     quelpa-melpa-recipe-stores nil
+     quelpa-checkout-melpa-p nil
+     quelpa-update-melpa-p nil
+     quelpa-self-upgrade-p nil))
 
 (use-package quelpa-use-package :ensure)
 
@@ -526,13 +526,7 @@ symbols.
 (require 'quelpa-use-package)
 #+END_SRC
 
-*** Base packages
-**** Hydra
-#+BEGIN_SRC emacs-lisp
-(use-package hydra :ensure
-  :custom (lv-use-separator t))
-#+END_SRC
-
+*** Packages
 **** General
 #+BEGIN_SRC emacs-lisp
 (use-package general :ensure
@@ -540,6 +534,42 @@ symbols.
   :config
   (general-create-definer nox-leader :prefix "C-c")
   (general-create-definer nox-local-leader :prefix "C-c m"))
+#+END_SRC
+
+**** Hydra
+#+BEGIN_SRC emacs-lisp
+(use-package hydra :ensure
+  :custom (lv-use-separator t))
+#+END_SRC
+
+**** Projectile
+#+BEGIN_SRC emacs-lisp
+(use-package projectile :ensure
+  :demand
+  :general (:keymaps 'projectile-mode-map
+            "C-c p" '(:keymap projectile-command-map :wk "Projectile"))
+  :init
+  (setq! projectile-cache-file (concat nox-cache-dir "projectile.cache"))
+
+  :config
+  (setq! projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
+         projectile-globally-ignored-files '(".DS_Store" "TAGS")
+         projectile-ignored-projects '("~" "/tmp")
+         projectile-indexing-method (if IS-WINDOWS 'native 'alien)
+         projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
+         projectile-other-file-alist (append projectile-other-file-alist
+                                             '(("css"  "scss" "sass" "less" "styl")
+                                               ("scss" "css")
+                                               ("sass" "css")
+                                               ("less" "css")
+                                               ("styl" "css"))))
+  (push ".project" projectile-project-root-files-bottom-up)
+
+  (defun +projectile-ignored-project-p (path)
+    (string-prefix-p nox-local-dir path))
+  (setq! projectile-ignored-project-function #'+projectile-ignored-project-p)
+
+  (projectile-mode))
 #+END_SRC
 
 ** General settings and tweaks
@@ -557,7 +587,7 @@ symbols.
  minibuffer-prompt-properties '(read-only t point-entered minibuffer-avoid-prompt face minibuffer-prompt))
 #+END_SRC
 
-**** UTF-8 as default
+*** UTF-8 as default
 #+BEGIN_SRC emacs-lisp
 (when (fboundp 'set-charset-priority)
   (set-charset-priority 'unicode))
@@ -567,7 +597,7 @@ symbols.
 (set-default-coding-systems  'utf-8-unix)
 #+END_SRC
 
-**** Quiet startup
+*** Quiet startup
 #+BEGIN_SRC emacs-lisp
 (setq! inhibit-startup-message t
        inhibit-startup-echo-area-message user-login-name
@@ -580,11 +610,10 @@ symbols.
   "Shup ut `server-execute' once."
   (quiet! (apply orig-fn args))
   (advice-remove 'server-execute 'nox*server-execute-quiet))
-(when (daemonp)
-  (advice-add 'server-execute :around 'nox*server-execute-quiet))
+(when (daemonp) (advice-add 'server-execute :around 'nox*server-execute-quiet))
 #+END_SRC
 
-**** Files
+*** Files
 #+BEGIN_SRC emacs-lisp
 (setq! abbrev-file-name               (concat nox-local-dir "abbrev.el")
        auto-save-file-name-transforms (list (list ".*" (concat nox-cache-dir "auto-save/") t))
@@ -603,7 +632,7 @@ symbols.
 (make-directory (cadar auto-save-file-name-transforms) t)
 #+END_SRC
 
-**** History and backup
+*** History and backup
 #+BEGIN_SRC emacs-lisp
 (setq! delete-by-moving-to-trash t
        delete-old-versions t
@@ -613,7 +642,7 @@ symbols.
        version-control t)
 #+END_SRC
 
-**** Security
+*** Security
 #+BEGIN_SRC emacs-lisp
 (setq! gnutls-verify-error (not (getenv "INSECURE"))
        tls-checktrust gnutls-verify-error
@@ -622,7 +651,7 @@ symbols.
                          "openssl s_client -connect %h:%p -no_ssl2 -no_ssl3 -ign_eof"))
 #+END_SRC
 
-**** Set indirect buffer name
+*** Set indirect buffer name
 #+BEGIN_SRC emacs-lisp
 (defun nox*set-indirect-buffer-filename (orig-fn base-buffer name &optional clone)
   "In indirect buffers, `buffer-file-name' is nil, which can cause problems
@@ -648,14 +677,7 @@ with functions that require it."
                     mac-redisplay-dont-reset-vscroll t
                     mac-mouse-wheel-smooth-scroll nil
                     ns-use-native-fullscreen nil
-                    ns-pop-up-frames nil)
-
-              (when (display-graphic-p)
-                (when (require 'exec-path-from-shell nil t)
-                  (setq exec-path-from-shell-check-startup-files nil
-                        exec-path-from-shell-arguments (delete "-i" exec-path-from-shell-arguments)
-                        exec-path-from-shell-debug nox-debug-mode)
-                  (exec-path-from-shell-initialize))))
+                    ns-pop-up-frames nil))
 
       (IS-LINUX (setq x-gtk-use-system-tooltips nil
                       x-underline-at-descent-line t))
@@ -878,23 +900,23 @@ ARGS are the same as in `custom-set-faces'."
 (use-package solarized :ensure solarized-theme
   :config
   (setq! solarized-use-variable-pitch nil
-	     solarized-use-more-italic t
-	     solarized-high-contrast-mode-line nil
-	     solarized-scale-org-headlines nil)
+         solarized-use-more-italic t
+         solarized-high-contrast-mode-line nil
+         solarized-scale-org-headlines nil)
 
   (nox-add-customize-theme-hook 'solarized-dark
     (solarized-with-color-variables 'dark
-				                    (custom-theme-set-faces
-				                     theme
-				                     `(org-block
-				                       ((t (:foreground ,(color-lighten-name base0 5) :background ,(color-lighten-name base03 5))))))))
+                                    (custom-theme-set-faces
+                                     theme
+                                     `(org-block
+                                       ((t (:foreground ,(color-lighten-name base0 5) :background ,(color-lighten-name base03 5))))))))
 
   (nox-add-customize-theme-hook 'solarized-light
     (solarized-with-color-variables 'light
-				                    (custom-theme-set-faces
-				                     theme
-				                     `(org-block
-				                       ((t (:foreground ,(color-darken-name base0 7) :background ,(color-darken-name base03 7)))))))))
+                                    (custom-theme-set-faces
+                                     theme
+                                     `(org-block
+                                       ((t (:foreground ,(color-darken-name base0 7) :background ,(color-darken-name base03 7)))))))))
 #+END_SRC
 
 **** Extra programming keywords
@@ -1086,6 +1108,15 @@ Needed for ivy fuzzy matching.
   (amx-save-file (concat nox-cache-dir "/amx-items")))
 #+END_SRC
 
+**** Better Projectile
+#+BEGIN_SRC emacs-lisp
+(use-package counsel-projectile :ensure
+  :after (:all projectile ivy counsel)
+  :demand
+  :config
+  (counsel-projectile-mode))
+#+END_SRC
+
 ** Editor
 *** Settings
 #+BEGIN_SRC emacs-lisp
@@ -1235,64 +1266,6 @@ Needed for ivy fuzzy matching.
   :ghook 'company-mode-hook
   :config
   (setq! company-box-enable-icon nil))
-#+END_SRC
-
-*** Projects
-#+BEGIN_SRC emacs-lisp
-(use-package projectile :ensure
-  :general ("C-c p" '(:keymap projectile-command-map :wk "Projectile"))
-  :init
-  (setq! projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
-         projectile-cache-file (concat nox-cache-dir "projectile.cache")
-         projectile-indexing-method (if IS-WINDOWS 'native 'alien)
-         projectile-globally-ignored-files '(".DS_Store" "Icon" "TAGS")
-         projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
-         projectile-ignored-projects '("~" "/tmp")
-         projectile-keymap-prefix (kbd "C-c p"))
-
-  :config
-  (setq! projectile-globally-ignored-directories (append projectile-globally-ignored-directories
-                                                         (list (abbreviate-file-name nox-local-dir)
-                                                               ".sync" "node_modules" "flow-typed"))
-         projectile-other-file-alist (append projectile-other-file-alist
-                                             '(("css"  "scss" "sass" "less" "styl")
-                                               ("scss" "css")
-                                               ("sass" "css")
-                                               ("less" "css")
-                                               ("styl" "css"))))
-  (push ".project" projectile-project-root-files-bottom-up)
-
-  ;; NOTE(nox): Projectile root-searching functions can cause an infinite loop on TRAMP
-  ;; connections, so disable them
-  (defun nox*projectile-locate-dominating-file (orig-fn &rest args)
-    "Don't traverse the file system if on a remote connection."
-    (unless (file-remote-p default-directory)
-      (apply orig-fn args)))
-  (advice-add #'projectile-locate-dominating-file :around #'nox*projectile-locate-dominating-file)
-
-  (defun nox*projectile-cache-current-file (orig-fun &rest args)
-    "Don't cache ignored files."
-    (unless (cl-loop for path in (projectile-ignored-directories)
-                     if (string-prefix-p (or buffer-file-name "") (expand-file-name path))
-                     return t)
-      (apply orig-fun args)))
-  (advice-add #'projectile-cache-current-file :around #'nox*projectile-cache-current-file)
-
-  (projectile-load-known-projects)
-  (projectile-mode))
-
-(use-package counsel-projectile :ensure
-  :general
-  (:keymaps 'projectile-command-map "SPC" 'counsel-projectile)
-  ([remap projectile-find-file]        #'counsel-projectile-find-file)
-  ([remap projectile-find-dir]         #'counsel-projectile-find-dir)
-  ([remap projectile-switch-to-buffer] #'counsel-projectile-switch-to-buffer)
-  ([remap projectile-grep]             #'counsel-projectile-grep)
-  ([remap projectile-ag]               #'counsel-projectile-ag)
-  ([remap projectile-switch-project]   #'counsel-projectile-switch-project)
-
-  :custom
-  (projectile-completion-system 'ivy))
 #+END_SRC
 
 *** Navigation
@@ -1518,85 +1491,6 @@ fundamental-mode) for performance sake."
   (add-hook! go-mode (add-hook! :local 'before-save-hook 'gofmt-before-save)))
 #+END_SRC
 
-*** Lisp
-#+BEGIN_SRC emacs-lisp
-(use-package lisp-mode
-  :config
-  (defun nox-lisp-indent-function (indent-point state)
-    "This function is the normal value of the variable `lisp-indent-function'.
-The function `calculate-lisp-indent' calls this to determine
-if the arguments of a Lisp function call should be indented specially.
-INDENT-POINT is the position at which the line being indented begins.
-Point is located at the point to indent under (for default indentation);
-STATE is the `parse-partial-sexp' state for that position.
-If the current line is in a call to a Lisp function that has a non-nil
-property `lisp-indent-function' (or the deprecated `lisp-indent-hook'),
-it specifies how to indent.  The property value can be:
-,,* `defun', meaning indent `defun'-style
-  \(this is also the case if there is no property and the function
-  has a name that begins with \"def\", and three or more arguments);
-,,* an integer N, meaning indent the first N arguments specially
-  (like ordinary function arguments), and then indent any further
-  arguments like a body;
-,,* a function to call that returns the indentation (or nil).
-  `lisp-indent-function' calls this function with the same two arguments
-  that it itself received.
-This function returns either the indentation to use, or nil if the
-Lisp function does not specify a special indentation."
-    (let ((normal-indent (current-column))
-          (orig-point (point)))
-      (goto-char (1+ (elt state 1)))
-      (parse-partial-sexp (point) calculate-lisp-indent-last-sexp 0 t)
-      (cond
-       ;; car of form doesn't seem to be a symbol, or is a keyword
-       ((and (elt state 2)
-             (or (not (looking-at "\\sw\\|\\s_"))
-                 (looking-at ":")))
-        (if (not (> (save-excursion (forward-line 1) (point))
-                    calculate-lisp-indent-last-sexp))
-            (progn (goto-char calculate-lisp-indent-last-sexp)
-                   (beginning-of-line)
-                   (parse-partial-sexp (point)
-                                       calculate-lisp-indent-last-sexp 0 t)))
-        ;; Indent under the list or under the first sexp on the same
-        ;; line as calculate-lisp-indent-last-sexp.  Note that first
-        ;; thing on that line has to be complete sexp since we are
-        ;; inside the innermost containing sexp.
-        (backward-prefix-chars)
-        (current-column))
-       ((and (save-excursion
-               (goto-char indent-point)
-               (skip-syntax-forward " ")
-               (not (looking-at ":")))
-             (save-excursion
-               (goto-char orig-point)
-               (looking-at ":")))
-        (save-excursion
-          (goto-char (+ 2 (elt state 1)))
-          (current-column)))
-       (t
-        (let ((function (buffer-substring (point)
-                                          (progn (forward-sexp 1) (point))))
-              method)
-          (setq method (or (function-get (intern-soft function)
-                                         'lisp-indent-function)
-                           (get (intern-soft function) 'lisp-indent-hook)))
-          (cond ((or (eq method 'defun)
-                     (and (null method)
-                          (> (length function) 3)
-                          (string-match "\\`def" function)))
-                 (lisp-indent-defform state indent-point))
-                ((integerp method)
-                 (lisp-indent-specform method state
-                                       indent-point normal-indent))
-                (method
-                 (funcall method indent-point state))))))))
-
-  (setq-hook! (lisp-mode emacs-lisp-mode)
-    lisp-indent-function 'nox-lisp-indent-function))
-
-#+END_SRC
-
 *** LaTeX
 #+BEGIN_SRC emacs-lisp
 (use-package tex :ensure auctex)
@@ -1665,7 +1559,7 @@ Lisp function does not specify a special indentation."
   "Any task that has subtasks."
   (and (org-get-todo-state) (nox-org-has-subtasks-p)))
 
-(defun +org-is-subtask (&optional first)
+(defun +org-is-subtask ()
   "Return t if this task is a subtask."
   (let (return)
     (org-with-wide-buffer
@@ -1703,7 +1597,7 @@ Lisp function does not specify a special indentation."
        org-blank-before-new-entry '((heading . auto)
                                     (plain-list-item . auto)))
 
-(defun nox|org-summary-todo (n-done n-not-done)
+(defun nox|org-summary-todo (_n-done n-not-done)
   "Update todo keyword after changing the statistics cookie, when needed."
   (let ((keyword (org-get-todo-state)))
     (if (= n-not-done 0)
@@ -1943,7 +1837,7 @@ session as the current block. ARG has same meaning as in
 #+BEGIN_SRC emacs-lisp
 (use-package org-list
   :config
-  (defun org-list-separating-blank-lines-number (pos struct prevs)
+  (defun org-list-separating-blank-lines-number (_pos struct _prevs)
     "Return number of blank lines that should separate items in list.
 
 POS is the position of point where `org-list-insert-item' was called.
@@ -1955,12 +1849,12 @@ Assume point is at item's beginning.  If the item is alone, apply
 some heuristics to guess the result."
     (save-excursion
       (let ((item (point))
-	        (insert-blank-p (cdr (assq 'plain-list-item org-blank-before-new-entry)))
-	        (count-blanks (lambda ()
-	                        (save-excursion
-		                      (count-lines (goto-char (point-at-bol))
-			                               (progn (skip-chars-backward " \r\t\n")
-				                                  (forward-line) (point))))))
+            (insert-blank-p (cdr (assq 'plain-list-item org-blank-before-new-entry)))
+            (count-blanks (lambda ()
+                            (save-excursion
+                              (count-lines (goto-char (point-at-bol))
+                                           (progn (skip-chars-backward " \r\t\n")
+                                                  (forward-line) (point))))))
             (top (org-list-get-top-point struct)))
         (cond
          ;; NOTE(nox): Trivial cases
@@ -1968,8 +1862,8 @@ some heuristics to guess the result."
          ((eq insert-blank-p t) 1)
          ;; NOTE(nox): `plain-list-item' is 'auto.
          ((> item top) ;; Item is not the first
-	      (funcall count-blanks))
-	     (t 0))))))
+          (funcall count-blanks))
+         (t 0))))))
 #+END_SRC
 
 **** PDF Tools support
@@ -2073,8 +1967,8 @@ some heuristics to guess the result."
                      'org-complex-heading-regexp org-complex-heading-regexp
                      'org-highest-priority org-highest-priority
                      'org-lowest-priority org-lowest-priority
-	                 'tags (mapcar 'org-downcase-keep-props (+agenda-entry-tags entry))
-	                 'format `(() ,prefix)))
+                     'tags (mapcar 'org-downcase-keep-props (+agenda-entry-tags entry))
+                     'format `(() ,prefix)))
         (text
          (concat prefix
                  (if (+agenda-entry-todo entry)
@@ -2088,7 +1982,7 @@ some heuristics to guess the result."
                      (concat " :" (mapconcat #'identity (+agenda-entry-tags entry) ":") ":")
                    ""))))
 
-	(add-text-properties (length prefix) (length text) '(org-heading t) text)
+    (add-text-properties (length prefix) (length text) '(org-heading t) text)
     (setq text (concat (org-add-props text props) "\n"))
     (org-agenda-highlight-todo text)))
 
@@ -2161,12 +2055,12 @@ some heuristics to guess the result."
 
 (defun +agenda-separator ()
   (unless (or (bobp) org-agenda-compact-blocks
-			  (not org-agenda-block-separator))
-	(insert "\n"
+              (not org-agenda-block-separator))
+    (insert "\n"
             (if (stringp org-agenda-block-separator)
                 org-agenda-block-separator
-			  (make-string (window-width) org-agenda-block-separator))
-		    "\n")))
+              (make-string (window-width) org-agenda-block-separator))
+            "\n")))
 
 (defun +agenda-render-block (data title &optional printer)
   (when data
@@ -2210,7 +2104,7 @@ some heuristics to guess the result."
                          +agenda-inbox)))))
 
       (let ((inhibit-read-only t))
-	    (goto-char (point-max))
+        (goto-char (point-max))
         (+agenda-render-block +agenda-inbox "Coisas a arrumar")))))
 #+END_SRC
 
@@ -2265,7 +2159,6 @@ some heuristics to guess the result."
                                  (deadline-ts  (> (org-time-stamp-to-now deadline-ts)
                                                   (org-get-wdays deadline-ts)))))
          (scheduled-past-or-now (and has-scheduling (not scheduled-future)))
-         (effort (org-element-property :EFFORT headline))
          (contents-begin (org-element-property :contents-begin headline))
          (tickler (member "TICKLER" (org-element-property :tags headline)))
          entry project-status return)
@@ -2403,7 +2296,7 @@ some heuristics to guess the result."
                     +agenda-projects))))))
 
       (let ((inhibit-read-only t))
-	    (goto-char (point-max))
+        (goto-char (point-max))
         (+agenda-render-block (nreverse +agenda-high-priority)    "Alta prioridade")
         (+agenda-render-block +agenda-projects                    "Projetos" #'+agenda-project-printer)
         (+agenda-render-block (nreverse +agenda-isolated-tasks)   "Tarefas isoladas")
@@ -2427,13 +2320,13 @@ some heuristics to guess the result."
 
 **** Compatibility with their functions
 #+BEGIN_SRC emacs-lisp
-(defun +agenda*change-all-lines-fixface (newhead hdmarker &optional fixface just-this)
+(defun +agenda*change-all-lines-fixface (&rest _)
   (when (org-get-at-bol 'nox-custom-agenda)
     (let* ((inhibit-read-only t)
            (bol (point-at-bol))
            (eol (point-at-eol))
            (position (next-single-property-change bol 'nox-face nil eol)))
-	  (add-text-properties bol eol `(face ,(and position (get-text-property position 'nox-face)))))))
+      (add-text-properties bol eol `(face ,(and position (get-text-property position 'nox-face)))))))
 (advice-add 'org-agenda-change-all-lines :before '+agenda*change-all-lines-fixface)
 #+END_SRC
 
@@ -2628,7 +2521,7 @@ some heuristics to guess the result."
          bibtex-completion-display-formats
          '((t . "${=type=:7} | ${title:*} ${author:20} ${year:4} ${=has-pdf=:1}${=has-note=:1}  ${keywords:80}")))
 
-  (defun nox*disable-completion-notes-mode (&optional arg) (widen))
+  (defun nox*disable-completion-notes-mode (&optional _) (widen))
   (advice-add #'bibtex-completion-notes-mode :override #'nox*disable-completion-notes-mode))
 #+END_SRC
 
@@ -2709,7 +2602,7 @@ some heuristics to guess the result."
     ;; NOTE(nox): Find script files in parent folders
     (dolist (script-name +compile-script-names)
       (let ((start-directory default-directory)
-            found-script-directory path info)
+            found-script-directory path info script-cons)
         (while (setq found-script-directory (locate-dominating-file start-directory script-name))
           (setq
            start-directory (file-name-directory (directory-file-name found-script-directory))
@@ -3250,7 +3143,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
       (comint-output-filter proc string)))
 
   (defun gud-display-line (true-file line)
-    (let* ((last-nonmenu-event t)	 ; Prevent use of dialog box for questions.
+    (let* ((last-nonmenu-event t)    ; Prevent use of dialog box for questions.
            (buffer
             (with-current-buffer gud-comint-buffer
               (gud-find-file true-file)))

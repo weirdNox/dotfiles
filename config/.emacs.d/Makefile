@@ -4,10 +4,10 @@ byte-compiled-files = $(addprefix ~/.emacs.d/, config.elc init.elc early-init.el
 all: ${byte-compiled-files}
 
 ${byte-compiled-files}: ${el} init.el early-init.el
-	emacs -q --batch -l init.el -f nox-byte-compile-init
+	emacs --batch -l init.el -f nox-byte-compile-init
 
 ${el}: config.org
-	emacs -q --batch -l ob-tangle --eval "(org-babel-tangle-file \"config.org\" \"$@\")"
+	emacs --batch -l ob-tangle --eval "(org-babel-tangle-file \"config.org\" \"$@\")"
 
 clean:
 	@rm -f ${byte-compiled-files} ${el}
