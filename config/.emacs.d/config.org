@@ -2481,8 +2481,7 @@ some heuristics to guess the result."
 
   :config
   (setq! org-noter-default-heading-title "Notas da página $p$"
-         org-noter-default-notes-file-names '("Notes.org" "Notas.org")
-         org-noter-hide-other t))
+         org-noter-default-notes-file-names '("Notes.org" "Notas.org")))
 #+END_SRC
 
 *** Org Ref
