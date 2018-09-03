@@ -1992,7 +1992,7 @@ some heuristics to guess the result."
     (or alt-text text)))
 
 (defun +agenda-schedule-get-prefix ()
-  (+agenda-tip-for-effort "⮞" (+agenda-is-low-effort effort) " "))
+  (+agenda-tip-for-effort "▶" (+agenda-is-low-effort effort) " "))
 
 (defun +agenda-project-get-prefix (taskp parent-continuations &optional low-effort)
   ;; IMPORTANT(nox): `parent-continuations' is in reverse order!
@@ -2001,7 +2001,7 @@ some heuristics to guess the result."
     (if taskp
         (dolist (cont parent-continuations)
           (setq prefix (concat (if tip
-                                   (+agenda-tip-for-effort (if cont "├⮞ " "╰⮞ ") low-effort)
+                                   (+agenda-tip-for-effort (if cont "├▶ " "╰▶ ") low-effort)
                                  (if cont "│  " "   "))
                                prefix)
                 tip nil))
@@ -2051,7 +2051,7 @@ some heuristics to guess the result."
   (setq list (sort list #'+agenda-priority-sort))
   (dolist (entry list)
     (insert
-     (+agenda-format-entry (+agenda-tip-for-effort " ⮞" (+agenda-entry-low-effort entry) "  ") entry))))
+     (+agenda-format-entry (+agenda-tip-for-effort " ▶" (+agenda-entry-low-effort entry) "  ") entry))))
 
 (defun +agenda-separator ()
   (unless (or (bobp) org-agenda-compact-blocks
