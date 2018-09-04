@@ -1311,11 +1311,27 @@ Needed for ivy fuzzy matching.
   :custom
   (imenu-auto-rescan-maxout 500000)
   (imenu-auto-rescan t))
+#+END_SRC
 
+***** Imenu across several buffers
+#+BEGIN_SRC emacs-lisp
 (use-package imenu-anywhere :ensure
-  :general (nox-leader "i" 'imenu-anywhere)
-  :custom
-  (imenu-anywhere-delimiter ": "))
+  :general (nox-leader "i" 'ivy-imenu-anywhere)
+  :config
+  (defun +imenu-anywhere-filter (current other)
+    (let ((current-mode (buffer-local-value 'major-mode current))
+          (other-mode   (buffer-local-value 'major-mode other))
+          projectile-require-project-root)
+      (and (or (eq current-mode other-mode)
+               (cl-some (lambda (friend-mode-list) (and (memq current-mode friend-mode-list)
+                                                        (memq other-mode   friend-mode-list)))
+                        imenu-anywhere-friendly-modes))
+           (projectile-project-buffer-p other (file-truename (projectile-project-root))))))
+
+  (push '(c-mode c++-mode) imenu-anywhere-friendly-modes)
+
+  (setq! imenu-anywhere-delimiter ": "
+         imenu-anywhere-buffer-filter-functions '(+imenu-anywhere-filter)))
 #+END_SRC
 
 **** Recenter after jumping
