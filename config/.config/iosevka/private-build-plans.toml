@@ -1,15 +1,8 @@
-[buildPlans.iosevka-custom]     # Plan name
-family = "Iosevka"              # Font menu family name
-design = [                      # Common Styles
-  "type",                       # Some symbols become full-width
-  "ss08",                       # Based on PragmataPro
-  "v-zero-slashed"              # Slashed 0
-]
+[buildPlans.iosevka-custom] # Plan name
+family = "Iosevka"          # Font menu family name
 
-[buildPlans.iosevka-custom-mono] # Plan name
-family = "Iosevka Mono"          # Font menu family name
-design = [                       # Common Styles
-  "term",                        # Only monospaced symbols
-  "ss08",                        # Based on PragmataPro
-  "v-zero-slashed"               # Slashed 0
+# Common styles to upright, italic, and oblique
+design = [
+  "term",                   # Monospaced symbols without ligatures
+  "ss08",                   # Based on PragmataPro
 ]
