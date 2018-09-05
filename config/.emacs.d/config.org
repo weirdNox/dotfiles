@@ -621,7 +621,6 @@ symbols.
        auto-save-list-file-name       (concat nox-cache-dir "auto-save-list")
        backup-directory-alist         (list (cons "." (concat nox-cache-dir "backup/")))
        custom-file                    (concat nox-local-dir "custom.el")
-       mc/list-file                   (concat nox-etc-dir "mc-lists.el")
        pcache-directory               (concat nox-cache-dir "pcache/")
        request-storage-directory      (concat nox-cache-dir "request")
        server-auth-dir                (concat nox-cache-dir "server/")
@@ -1398,10 +1397,15 @@ Position the cursor at its beginning, according to the current mode."
 (use-package multiple-cursors :ensure
   :general
   ("C-c l" 'mc/edit-lines
-   "M-»"   'mc/mark-next-like-this
-   "M-«"   'mc/mark-previous-like-this
    "C-M-»" 'mc/mark-all-like-this
-   "M-<mouse-1>" 'mc/add-cursor-on-click))
+   "M-»"   'mc/mark-next-like-this
+   "M-”"   'mc/skip-to-next-like-this
+   "M-«"   'mc/mark-previous-like-this
+   "M-“"   'mc/skip-to-previous-like-this
+   "M-<mouse-1>" 'mc/add-cursor-on-click)
+
+  :config
+  (setq! mc/list-file (concat nox-etc-dir "mc-lists.el")))
 #+END_SRC
 
 *** Number incrementation and decrementation functions
