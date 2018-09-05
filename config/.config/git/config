@@ -6,3 +6,6 @@
 
 [include]
     path = ~/.gitconfig_local
+
+[log]
+	date = iso
