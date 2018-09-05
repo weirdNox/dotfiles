@@ -1596,7 +1596,7 @@ fundamental-mode) for performance sake."
 ** Org Mode
 *** Base configuration
 #+BEGIN_SRC emacs-lisp
-(use-package org :ensure
+(use-package org :ensure org-plus-contrib
   :general
   (nox-leader :infix "o"
     ""  '(:ignore t :wk "Org")
