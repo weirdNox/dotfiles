@@ -1611,7 +1611,8 @@ fundamental-mode) for performance sake."
        org-list-allow-alphabetical t
        org-loop-over-headlines-in-active-region t
        org-blank-before-new-entry '((heading . auto)
-                                    (plain-list-item . auto)))
+                                    (plain-list-item . auto))
+       org-imenu-depth 4)
 
 (defun nox|org-summary-todo (_n-done n-not-done)
   "Update todo keyword after changing the statistics cookie, when needed."
@@ -1672,6 +1673,7 @@ fundamental-mode) for performance sake."
        org-refile-targets `((nil . (:maxlevel . 9))
                             (,nox-org-agenda-file .  (:maxlevel . 9))
                             (,nox-org-tickler-file . (:maxlevel . 2))
+                            (,nox-org-tracker-file . (:level    . 1))
                             (,nox-org-someday-file . (:maxlevel . 1))))
 
 (after! deft (setq! org-refile-targets (push '(deft-all-files . (:maxlevel . 1)) org-refile-targets)))
@@ -2364,10 +2366,9 @@ some heuristics to guess the result."
 (use-package org-capture
   :init
   (defun +capture-frame ()
-    (let ((capture-frame (catch 'capture-frame
-                           (dolist (frame (frame-list))
-                             (when (frame-parameter frame 'org-capture-frame)
-                               (throw 'capture-frame frame))))))
+    (let ((capture-frame (cl-loop for frame in (frame-list)
+                                  when (frame-parameter frame 'org-capture-frame)
+                                  return frame)))
       (cond (capture-frame
              (delete-frame)
              (select-frame-set-input-focus capture-frame))
@@ -2378,22 +2379,14 @@ some heuristics to guess the result."
              (org-capture)))))
 
   :config
-  (defun nox-org-inactive-timestamp (&optional time)
+  (defun +org-inactive-timestamp (&optional time)
     (format-time-string (concat "[" (substring (cdr org-time-stamp-formats) 1 -1) "]") time))
 
   (defun +capture|add-created-property ()
-    (unless (org-before-first-heading-p) (org-set-property "CREATED" (nox-org-inactive-timestamp))))
+    (unless (org-before-first-heading-p) (org-set-property "CREATED" (+org-inactive-timestamp))))
   (add-hook 'org-capture-before-finalize-hook '+capture|add-created-property)
 
-  (defun +capture-bookmark-find-buffer ()
-    (require 'deft)
-    (set-buffer
-     (if (org-capture-get :bookmark-new-file)
-         (find-file-noselect (deft-absolute-filename (org-capture-get :bookmark-title)))
-       (find-file-noselect (read-file-name "Target file: " deft-directory nil 'confirm))))
-    (goto-char (point-max)))
-
-  (defun +capture-bookmark-get-template ()
+  (defun +capture-bookmark-template ()
     (let ((title (completing-read "Title: " (list (plist-get org-store-link-plist :description))))
           (create-new (y-or-n-p "Create new file?")))
       (org-capture-put :bookmark-title title)
@@ -2402,6 +2395,63 @@ some heuristics to guess the result."
           (format "#+TITLE: %s\n#+PROPERTY: CREATED %s\n\n[[%s][Link]]\n"
                   title (nox-org-inactive-timestamp) (plist-get org-store-link-plist :link))
         (format "* [[%s][%s]]\n" (plist-get org-store-link-plist :link) title))))
+
+  (defun +capture-bookmark-location ()
+    (require 'deft)
+    (set-buffer
+     (if (org-capture-get :bookmark-new-file)
+         (find-file-noselect (deft-absolute-filename (org-capture-get :bookmark-title)))
+       (find-file-noselect (read-file-name "Target file: " deft-directory nil 'confirm))))
+    (goto-char (point-max)))
+
+  (defconst +capture-tracker-type-to-heading '(movie "Filmes" series "Séries" book "Livros"))
+  (defconst +capture-tracker-type-template   '(movie "* WATCH " series "* WATCH " book "* READ "))
+
+  (defun +capture-tracker-template ()
+    (with-current-buffer (find-file-noselect nox-org-tracker-file)
+      (font-lock-ensure (point-min) (point-max))
+      (let* ((track-type (org-capture-get :track-type))
+             (ast (org-element-contents (org-element-parse-buffer 'headline)))
+             (root (org-element-map ast 'headline
+                     (lambda (headline)
+                       (when (string= (org-element-property :title headline)
+                                      (plist-get +capture-tracker-type-to-heading track-type))
+                         headline))
+                     nil t 'headline))
+             (headings (org-element-contents root))
+             (collection (org-element-map headings 'headline
+                           (lambda (headline)
+                             (cons (format "%10s %s"
+                                           (org-element-property :todo-keyword headline)
+                                           (org-element-property :title headline))
+                                   headline))
+                           nil nil 'headline))
+             (selection (completing-read "Nome: " collection))
+             (selection-info (cdr (assoc-string selection collection))))
+        (cond
+         (selection-info
+          (let ((old-frame (selected-frame))
+                (target-frame (or (and (not (frame-parameter nil 'org-capture-frame)) (selected-frame))
+                                  (and (not (equal (next-frame) (selected-frame))) (next-frame))
+                                  (make-frame '((fullscreen . maximized)))))
+                (org-show-context-detail 'tree))
+            (with-selected-frame target-frame
+              (find-file nox-org-tracker-file)
+              (goto-char (org-element-property :begin selection-info))
+              (org-show-context))
+            (select-frame old-frame))
+          "")
+         (t
+          (org-capture-put :tracker-location (copy-marker (org-element-property :begin root)))
+          (concat (plist-get +capture-tracker-type-template track-type)
+                  selection))))))
+
+  (defun +capture-tracker-location ()
+    (let ((marker (org-capture-get :tracker-location)))
+      (when marker
+        (switch-to-buffer (marker-buffer marker))
+        (goto-char (marker-position marker))
+        (org-capture-put :prepend t))))
 
   (setq!
    org-capture-templates '(("t" "Tarefa" entry (file "")
@@ -2413,15 +2463,15 @@ some heuristics to guess the result."
                            ("d" "Diário" entry (file+olp+datetree nox-org-journal-file)
                             "* %?" :clock-in t :clock-resume t)
                            ("f" "Tracking")
-                           ("ff" "Filme" entry (file+olp nox-org-tracker-file "Filmes")
-                            "* WATCH %?" :prepend t)
-                           ("fs" "Série" entry (file+olp nox-org-tracker-file "Séries")
-                            "* WATCH %?" :prepend t)
-                           ("fl" "Livro" entry (file+olp nox-org-tracker-file "Livros")
-                            "* READ %?"  :prepend t)
+                           ("ff" "Filme" entry #'+capture-tracker-location
+                            #'+capture-tracker-template :track-type movie)
+                           ("fs" "Série" entry #'+capture-tracker-location
+                            #'+capture-tracker-template :track-type series)
+                           ("fl" "Livro" entry #'+capture-tracker-location
+                            #'+capture-tracker-template :track-type book)
                            ("w" "Web")
-                           ("wb" "Bookmark" plain (function +capture-bookmark-find-buffer)
-                            (function +capture-bookmark-get-template))
+                           ("wb" "Bookmark" plain #'+capture-bookmark-location
+                            #'+capture-bookmark-template)
                            ("wc" "Capture" entry (file "")
                             "* [[%:link][%^{Title|%:description}]]\n%?" :clock-in t :clock-resume t)))
 
