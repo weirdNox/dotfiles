@@ -546,8 +546,7 @@ symbols.
 #+BEGIN_SRC emacs-lisp
 (use-package projectile :ensure
   :demand
-  :general (:keymaps 'projectile-mode-map
-            "C-c p" '(:keymap projectile-command-map :wk "Projectile"))
+  :general (:keymaps 'projectile-mode-map "C-c p" '(:keymap projectile-command-map :wk "Projectile"))
   :init
   (setq! projectile-cache-file (concat nox-cache-dir "projectile.cache"))
 
@@ -568,6 +567,15 @@ symbols.
   (defun +projectile-ignored-project-p (path)
     (string-prefix-p nox-local-dir path))
   (setq! projectile-ignored-project-function #'+projectile-ignored-project-p)
+
+  (defun +projectile-project-buffers ()
+    (let* ((project-root (file-truename (projectile-project-root)))
+           (all-buffers (cl-remove-if-not
+                         (lambda (buffer) (projectile-project-buffer-p buffer project-root))
+                         (buffer-list))))
+      (if projectile-buffers-filter-function
+          (funcall projectile-buffers-filter-function all-buffers)
+        all-buffers)))
 
   (projectile-mode))
 #+END_SRC
@@ -1307,30 +1315,83 @@ Needed for ivy fuzzy matching.
 **** Imenu
 #+BEGIN_SRC emacs-lisp
 (use-package imenu
-  :custom
-  (imenu-auto-rescan-maxout 500000)
-  (imenu-auto-rescan t))
+  :general (nox-leader "i" #'+imenu)
+  :config
+  (setq! imenu-auto-rescan t
+         imenu-auto-rescan-maxout 500000)
 #+END_SRC
 
 ***** Imenu across several buffers
 #+BEGIN_SRC emacs-lisp
-(use-package imenu-anywhere :ensure
-  :general (nox-leader "i" 'ivy-imenu-anywhere)
-  :config
-  (defun +imenu-anywhere-filter (current other)
-    (let ((current-mode (buffer-local-value 'major-mode current))
-          (other-mode   (buffer-local-value 'major-mode other))
-          projectile-require-project-root)
-      (and (or (eq current-mode other-mode)
-               (cl-some (lambda (friend-mode-list) (and (memq current-mode friend-mode-list)
-                                                        (memq other-mode   friend-mode-list)))
-                        imenu-anywhere-friendly-modes))
-           (projectile-project-buffer-p other (file-truename (projectile-project-root))))))
+(defconst +imenu-friendly-modes '((c-mode c++-mode))
+  "List of lists which are groups of friend modes.")
 
-  (push '(c-mode c++-mode) imenu-anywhere-friendly-modes)
+(defvar-local +imenu-cache nil
+  "Vector [TICK CACHED-VALUE].")
 
-  (setq! imenu-anywhere-delimiter ": "
-         imenu-anywhere-buffer-filter-functions '(+imenu-anywhere-filter)))
+(defun +imenu-buffer-filter (current other)
+  (let ((current-mode (buffer-local-value 'major-mode current))
+        (other-mode   (buffer-local-value 'major-mode other)))
+    (or (eq current-mode other-mode)
+        (cl-some (lambda (friend-mode-list) (and (memq current-mode friend-mode-list)
+                                                 (memq other-mode   friend-mode-list)))
+                 +imenu-friendly-modes))))
+
+(defun +imenu-get-candidates-from (alist &optional prefix)
+  (cl-mapcan
+   (lambda (element)
+     (if (imenu--subalist-p element)
+         (+imenu-get-candidates-from (cdr element) (concat prefix (if prefix " | ") (car element)))
+       (let ((key (concat (and prefix (propertize (concat prefix  " | ") 'face 'compilation-info))
+                          (car element))))
+         (list (cons (replace-regexp-in-string "\n" " " key)
+                     (cond ((integerp (cdr element)) (copy-marker (cdr element)))
+                           ((overlayp (cdr element)) (copy-marker (overlay-start (cdr element))))
+                           (t (cdr element))))))))
+   alist))
+
+(defun +imenu-buffer-candidates ()
+  (setq imenu--index-alist nil)
+  (imenu--make-index-alist t)
+  (+imenu-get-candidates-from imenu--index-alist (buffer-name)))
+
+(defun +imenu-candidates ()
+  (let* (projectile-require-project-root
+         (current-buffer (current-buffer))
+         (buffers (cl-remove-if-not (lambda (buffer) (+imenu-buffer-filter current-buffer buffer))
+                                    (+projectile-project-buffers))))
+    (mapcan (lambda (buffer)
+              (with-current-buffer buffer
+                (let ((tick (buffer-modified-tick buffer)))
+                  (unless (and +imenu-cache (= (aref +imenu-cache 0) tick))
+                    (setq +imenu-cache (vector tick (+imenu-buffer-candidates))))
+                  (copy-sequence (aref +imenu-cache 1)))))
+            buffers)))
+
+(defun +imenu-goto (_name marker &optional _rest)
+  (cl-assert (markerp marker))
+  (let ((buffer   (marker-buffer marker))
+        (position (marker-position marker)))
+    (switch-to-buffer buffer)
+    (when (or (< position (point-min)) (> position (point-max))) (widen))
+    (goto-char position)))
+
+(defun +imenu ()
+  "Jump to a buffer position indexed by imenu."
+  (interactive)
+  (let ((items (+imenu-candidates))
+        (imenu-default-goto-function #'+imenu-goto))
+    (ivy-read "Jump to... " items
+              :preselect (thing-at-point 'symbol)
+              :require-match t
+              :action (lambda (candidate) (with-ivy-window (imenu candidate)
+                                                           (recenter)))
+              :caller #'+imenu)))
+#+END_SRC
+
+***** End
+#+BEGIN_SRC emacs-lisp
+) ;; (use-package imenu)
 #+END_SRC
 
 **** Recenter after jumping
