@@ -1322,6 +1322,8 @@ Needed for ivy fuzzy matching.
 #+END_SRC
 
 ***** Imenu across several buffers
+Adapted from =imenu-anywhere= and =counsel-imenu=.
+
 #+BEGIN_SRC emacs-lisp
 (defconst +imenu-friendly-modes '((c-mode c++-mode))
   "List of lists which are groups of friend modes.")
@@ -2570,6 +2572,33 @@ some heuristics to guess the result."
 #+BEGIN_SRC emacs-lisp
 (use-package org-clock
   :config
+  (defun org-clock-get-clock-string ()
+    "Form a clock-string, that will be shown in the mode line."
+    (let ((work-str (org-duration-from-minutes (org-clock-get-clocked-time))))
+      (if org-clock-effort
+          (format " [%s/%s]"
+                  work-str (org-duration-from-minutes (org-duration-to-minutes org-clock-effort)))
+        (format " [%s]" work-str))))
+
+  (defun org-clock-update-mode-line (&optional refresh)
+    "Update mode line with clock information.
+When optional argument is non-nil, refresh cached heading."
+    (let ((work-in-minutes (org-clock-get-clocked-time))
+          (effort-in-minutes (and org-clock-effort (org-duration-to-minutes org-clock-effort))))
+      (setq org-clock-task-overrun (and effort-in-minutes (> effort-in-minutes 0)
+                                        (>= work-in-minutes effort-in-minutes)))
+      (when refresh (setq org-clock-heading (org-clock--mode-line-heading)))
+
+      (let ((clock-string (org-clock-get-clock-string))
+            (help-text (concat "Clocked in at " org-clock-heading)))
+        (setq org-mode-line-string
+              (propertize clock-string
+                          'face (if org-clock-task-overrun 'org-priority 'org-mode-line-clock)
+                          'help-echo help-text
+                          'local-map org-clock-mode-line-map
+                          'mouse-face 'mode-line-highlight))))
+    (force-mode-line-update t))
+
   (setq! org-clock-in-resume t
          org-clock-out-remove-zero-time-clocks t
          org-clock-report-include-clocking-task t
