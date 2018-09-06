@@ -1008,8 +1008,7 @@ Disable fringes in the minibuffer window.
 *** Ivy
 #+BEGIN_SRC emacs-lisp
 (use-package ivy :ensure
-  :defer 1
-  :after-call pre-command-hook
+  :demand
   :general ("C-x b" 'ivy-switch-buffer)
   :config
   (setq! ivy-count-format "(%d/%d) "
@@ -1066,44 +1065,41 @@ Needed for ivy fuzzy matching.
 *** Counsel
 #+BEGIN_SRC emacs-lisp
 (use-package counsel :ensure
-  :defer 1
-  :after-call pre-command-hook
+  :demand
   :general
   (:keymaps 'ivy-minibuffer-map
-   "<return>" 'ivy-alt-done
-   "C-j" 'ivy-done)
-  (:keymaps 'ivy-minibuffer-map
-   "C-r" 'counsel-minibuffer-history)
-
-  :custom
-  (counsel-rg-base-command "rg -zS -M 120 --no-heading --line-number --color never %s .")
-  (counsel-ag-base-command "ag -zS --nocolor --nogroup %s")
-  (counsel-pt-base-command "pt -zS --nocolor --nogroup -e %s")
-  (counsel-grep-base-command
-   (cond ((executable-find "rg") "rg -zS -M 120 --no-heading --line-number --color never %s %s")
-         ((executable-find "ag") "ag -zS --nocolor --nogroup %s %s")
-         (t "grep -i -E -n -e %s %s")))
-  (counsel-find-file-ignore-regexp "\\(?:^[#.]\\)\\|\\(?:[#~]$\\)\\|\\(?:^Icon?\\)")
+            "<return>" 'ivy-alt-done
+            "C-j" 'ivy-done)
+  (:keymaps 'ivy-minibuffer-map "C-r" 'counsel-minibuffer-history)
 
   :config
   (defun counsel-find-file-as-root (x)
-  "Find file X with root privileges."
-  (counsel-require-program counsel-root-command)
-  (let* ((remote (file-remote-p x))
-         (host (file-remote-p x 'host))
-         (method (file-remote-p x 'method))
-         (file-name
-          (if (string= method counsel-root-command)
-              x
-            (concat (if remote
-                        (concat (substring remote 0 -1) "|")
-                      "/")
-                    (format "%s:%s:%s"
-                            counsel-root-command (or host "")
-                            (expand-file-name (if remote (file-remote-p x 'localname) x)))))))
-    (if (eq (current-buffer) (get-file-buffer x))
-        (find-alternate-file file-name)
-      (find-file file-name))))
+    "Find file X with root privileges."
+    (counsel-require-program counsel-root-command)
+    (let* ((remote (file-remote-p x))
+           (host (file-remote-p x 'host))
+           (method (file-remote-p x 'method))
+           (file-name
+            (if (string= method counsel-root-command)
+                x
+              (concat (if remote
+                          (concat (substring remote 0 -1) "|")
+                        "/")
+                      (format "%s:%s:%s"
+                              counsel-root-command (or host "")
+                              (expand-file-name (if remote (file-remote-p x 'localname) x)))))))
+      (if (eq (current-buffer) (get-file-buffer x))
+          (find-alternate-file file-name)
+        (find-file file-name))))
+
+  (setq! counsel-rg-base-command "rg -zS -M 120 --no-heading --line-number --color never %s ."
+         counsel-ag-base-command "ag -zS --nocolor --nogroup %s"
+         counsel-pt-base-command "pt -zS --nocolor --nogroup -e %s"
+         counsel-grep-base-command
+         (cond ((executable-find "rg") "rg -zS -M 120 --no-heading --line-number --color never %s %s")
+               ((executable-find "ag") "ag -zS --nocolor --nogroup %s %s")
+               (t "grep -i -E -n -e %s %s"))
+         counsel-find-file-ignore-regexp "\\(?:^[#.]\\)\\|\\(?:[#~]$\\)")
 
   (counsel-mode))
 #+END_SRC
