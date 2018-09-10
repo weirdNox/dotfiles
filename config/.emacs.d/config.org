@@ -1977,7 +1977,9 @@ some heuristics to guess the result."
       (message-box "AVISO: Há conflitos de sincronização!")))
   (add-hook 'org-agenda-finalize-hook #'+agenda|check-sync-conflicts)
 
-  (general-def :keymaps 'org-agenda-mode-map "P" #'+agenda/toggle-private)
+  (general-def :keymaps 'org-agenda-mode-map
+    "P" #'+agenda/toggle-private
+    "W" #'+agenda/toggle-weekly-review)
 
   (setq!
    org-agenda-custom-commands
@@ -2047,19 +2049,15 @@ some heuristics to guess the result."
                      'org-highest-priority org-highest-priority
                      'org-lowest-priority org-lowest-priority
                      'tags (mapcar 'org-downcase-keep-props (+agenda-entry-tags entry))
-                     'format `(() ,prefix)))
+                     'format `(nil ,prefix)))
         (text
          (concat prefix
-                 (if (+agenda-entry-todo entry)
-                     (concat (+agenda-entry-todo entry) " ")
-                   "")
-                 (if (+agenda-entry-priority entry)
-                     (string ?\[ ?# (+agenda-entry-priority entry) ?\] ? )
-                   "")
+                 (when (+agenda-entry-todo entry) (concat (+agenda-entry-todo entry) " "))
+                 (when (+agenda-entry-priority entry)
+                   (string ?\[ ?# (+agenda-entry-priority entry) ?\] ? ))
                  (+agenda-entry-text entry)
-                 (if (+agenda-entry-tags entry)
-                     (concat " :" (mapconcat #'identity (+agenda-entry-tags entry) ":") ":")
-                   ""))))
+                 (when (+agenda-entry-tags entry)
+                   (concat " :" (mapconcat #'identity (+agenda-entry-tags entry) ":") ":")))))
 
     (add-text-properties (length prefix) (length text) '(org-heading t) text)
     (setq text (concat (org-add-props text props) "\n"))
@@ -2110,8 +2108,11 @@ some heuristics to guess the result."
           (unless (cdr list) (setf (car parent-continuations) nil))
         (unless first (insert "\n")))
 
-      (when (eq (+agenda-entry-project-status entry) 'stuck)
+      (cond
+       ((eq (+agenda-entry-project-status entry) 'stuck)
         (org-add-props (+agenda-entry-text entry) nil 'face 'org-priority 'nox-face 'org-priority))
+       ((or (+agenda-entry-planned entry) (eq (+agenda-entry-project-status entry) 'planned))
+        (org-add-props (+agenda-entry-text entry) nil 'face 'org-date     'nox-face 'org-date)))
 
       (let ((org-todo-keyword-faces (if (+agenda-entry-project-status entry)
                                         +agenda-projects-not-task-faces
@@ -2302,11 +2303,10 @@ some heuristics to guess the result."
                      tail prev)
                 (setq project-status +agenda-project-status)
 
-                ;; NOTE(nox): When this project is not planned, we need to remove its
-                ;; planned tasks and insert them in the planned list
-                ;; IMPORTANT(nox): A project that is stuck doesn't have any planned children
-                ;; so, for this check, not planned ≡ next
-                (when (eq project-status 'next)
+                ;; NOTE(nox): When this project is not planned, we need to remove its planned tasks and
+                ;; insert them in the planned list. A stuck project doesn't have any planned children so,
+                ;; for this check, not planned ≡ next.
+                (when (and (eq project-status 'next) (not +agenda-weekly-review))
                   (setq tail children)
                   (while tail
                     (if (or (+agenda-entry-planned (car tail))
@@ -2393,20 +2393,35 @@ some heuristics to guess the result."
 (defun +agenda/toggle-private ()
   (interactive)
   (setq +agenda-show-private (not +agenda-show-private))
-  (when  (equal major-mode 'org-agenda-mode) (org-agenda-redo))
+  (when  (equal major-mode 'org-agenda-mode) (quiet! (org-agenda-redo)))
   (message "Private tasks: %s" (if +agenda-show-private "Shown" "Hidden")))
 #+END_SRC
 
-**** Compatibility with their functions
+**** Weekly review
 #+BEGIN_SRC emacs-lisp
-(defun +agenda*change-all-lines-fixface (&rest _)
+(defvar +agenda-weekly-review nil
+  "If non-nil, render agenda in weekly review mode.")
+
+(defun +agenda/toggle-weekly-review ()
+  (interactive)
+  (setq +agenda-weekly-review (not +agenda-weekly-review))
+  (when  (equal major-mode 'org-agenda-mode) (quiet! (org-agenda-redo)))
+  (message "Weekly review: %s" (if +agenda-weekly-review "On" "Off")))
+#+END_SRC
+
+**** Compatibility with their functions
+~org-agenda-change-all-lines~ is called, for example, when an entry is marked as done or clocked in,
+after removing the face property. This serves to restore the custom face set in the renderer.
+
+#+BEGIN_SRC emacs-lisp
+(defun +agenda*change-all-lines-reapply-face (&rest _)
   (when (org-get-at-bol 'nox-custom-agenda)
     (let* ((inhibit-read-only t)
            (bol (point-at-bol))
            (eol (point-at-eol))
            (position (next-single-property-change bol 'nox-face nil eol)))
       (add-text-properties bol eol `(face ,(and position (get-text-property position 'nox-face)))))))
-(advice-add 'org-agenda-change-all-lines :before '+agenda*change-all-lines-fixface)
+(advice-add 'org-agenda-change-all-lines :before #'+agenda*change-all-lines-reapply-face)
 #+END_SRC
 
 **** End
