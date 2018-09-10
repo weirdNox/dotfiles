@@ -1274,8 +1274,8 @@ Needed for ivy fuzzy matching.
 #+BEGIN_SRC emacs-lisp
 (use-package avy :ensure
   :general
-  ("C-:"   #'avy-goto-char-timer
-   "M-g f" #'avy-goto-line
+  ("C-."   #'avy-goto-char-timer
+   "M-g l" #'avy-goto-line
    "M-g w" #'avy-goto-word-1)
   :config
   (setq! avy-all-windows nil
