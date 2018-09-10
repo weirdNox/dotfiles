@@ -1,0 +1,5 @@
+# Include the default locale compose file
+include "%L"
+
+<Multi_key> <a> <a>  : "ª"  ordfeminine     # FEMININE  ORDINAL INDICATOR
+<Multi_key> <a> <o>  : "º"  masculine       # MASCULINE ORDINAL INDICATOR
