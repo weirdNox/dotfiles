@@ -1570,7 +1570,11 @@ fundamental-mode) for performance sake."
 
 *** LaTeX
 #+BEGIN_SRC emacs-lisp
-(use-package tex :ensure auctex)
+(use-package tex :ensure auctex
+  :config
+  (setq! TeX-auto-save t
+         TeX-parse-self t
+         TeX-view-program-selection '((output-pdf "PDF Tools"))))
 #+END_SRC
 
 *** Octave
