@@ -2343,7 +2343,7 @@ some heuristics to guess the result."
                     (setq +agenda-project-status 'next))))
 
               (if project-status
-                  (if (and (eq project-status 'planned) (= +agenda-level 0))
+                  (if (and (= +agenda-level 0) (eq project-status 'planned) (not +agenda-weekly-review))
                       (push entry +agenda-planned-tasks)
                     (setq return entry))
 
