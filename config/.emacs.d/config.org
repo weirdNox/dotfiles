@@ -526,6 +526,15 @@ symbols.
 (require 'quelpa-use-package)
 #+END_SRC
 
+**** Async package byte compilation
+#+BEGIN_SRC emacs-lisp
+(use-package async :ensure
+  :demand
+  :config
+  (async-bytecomp-package-mode)
+  (setq! async-bytecomp-allowed-packages '(all)))
+#+END_SRC
+
 *** Packages
 **** General
 #+BEGIN_SRC emacs-lisp
