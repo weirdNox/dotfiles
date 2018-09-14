@@ -3479,8 +3479,7 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 (use-package magit :ensure
   :when (executable-find "git")
   :config
-  (setq! magit-completing-read-function #'ivy-completing-read
-         magit-diff-refine-hunk 'all))
+  (setq! magit-diff-refine-hunk 'all))
 #+END_SRC
 
 *** Misc
