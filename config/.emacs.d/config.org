@@ -683,6 +683,13 @@ with functions that require it."
 (advice-add #'make-indirect-buffer :around #'nox*set-indirect-buffer-filename)
 #+END_SRC
 
+*** Enable disabled commands
+#+BEGIN_SRC emacs-lisp
+(put 'downcase-region 'disabled nil)
+(put 'upcase-region 'disabled nil)
+(put 'scroll-left 'disabled nil)
+#+END_SRC
+
 ** OS specific
 #+BEGIN_SRC emacs-lisp
 (setq! x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)
