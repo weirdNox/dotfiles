@@ -1477,7 +1477,7 @@ Position the cursor at its beginning, according to the current mode."
    "M-“"   'mc/skip-to-previous-like-this
    "M-<mouse-1>" 'mc/add-cursor-on-click)
 
-  :config
+  :init
   (setq! mc/list-file (concat nox-etc-dir "mc-lists.el")))
 #+END_SRC
 
