@@ -726,7 +726,8 @@ with functions that require it."
        window-divider-default-places t
        window-divider-default-bottom-width 1
        window-divider-default-right-width 1
-       frame-title-format '("%b - Emacs"))
+       frame-title-format '("%b - Emacs")
+       font-lock-maximum-decoration 2)
 
 (fset 'yes-or-no-p 'y-or-n-p)
 (minibuffer-depth-indicate-mode)
