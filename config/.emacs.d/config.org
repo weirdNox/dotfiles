@@ -2490,7 +2490,7 @@ after removing the face property. This serves to restore the custom face set in 
       (org-capture-put :bookmark-new-file create-new)
       (if create-new
           (format "#+TITLE: %s\n#+PROPERTY: CREATED %s\n\n[[%s][Link]]\n"
-                  title (nox-org-inactive-timestamp) (plist-get org-store-link-plist :link))
+                  title (+org-inactive-timestamp) (plist-get org-store-link-plist :link))
         (format "* [[%s][%s]]\n" (plist-get org-store-link-plist :link) title))))
 
   (defun +capture-bookmark-location ()
