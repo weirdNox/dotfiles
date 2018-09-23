@@ -997,7 +997,7 @@ Thanks to @seagle0128 for creating the =doom-modeline= package, on which this is
 
 #+BEGIN_SRC emacs-lisp
 (require 'all-the-icons)
-(require 'eldoc-eval)
+(use-package eldoc-eval :ensure :demand)
 (require 'projectile)
 (use-package shrink-path :ensure :demand)
 
@@ -2554,6 +2554,7 @@ fundamental-mode) for performance sake."
 \\tikzset{every picture/.style={color=fg}}")
 
 (add-hook! org-mode #'turn-on-org-cdlatex)
+(general-def :keymaps 'org-cdlatex-mode-map "^" 'org-self-insert-command "_" 'org-self-insert-command)
 #+END_SRC
 
 ***** Get different Latex fragments for different themes
