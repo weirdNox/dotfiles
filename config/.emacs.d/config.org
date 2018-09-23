@@ -560,7 +560,8 @@ symbols.
   (setq! projectile-cache-file (concat nox-cache-dir "projectile.cache"))
 
   :config
-  (setq! projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
+  (setq! projectile-completion-system 'ivy
+         projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
          projectile-globally-ignored-files '(".DS_Store" "TAGS")
          projectile-ignored-projects '("~" "/tmp")
          projectile-indexing-method (if IS-WINDOWS 'native 'alien)
@@ -578,7 +579,7 @@ symbols.
   (setq! projectile-ignored-project-function #'+projectile-ignored-project-p)
 
   (defun +projectile-project-buffers ()
-    (let* ((project-root (file-truename (projectile-project-root)))
+    (let* ((project-root (file-truename (projectile-ensure-project (projectile-project-root))))
            (all-buffers (cl-remove-if-not
                          (lambda (buffer) (projectile-project-buffer-p buffer project-root))
                          (buffer-list))))
@@ -994,6 +995,7 @@ Disable fringes in the minibuffer window.
 *** Modeline
 #+BEGIN_SRC emacs-lisp
 (use-package doom-modeline :ensure
+  :hook (after-init . doom-modeline-init)
   :config
   (setq! doom-modeline-enable-word-count t
          display-time-default-load-average nil)
