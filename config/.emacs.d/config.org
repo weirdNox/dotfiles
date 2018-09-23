@@ -993,13 +993,728 @@ Disable fringes in the minibuffer window.
 #+END_SRC
 
 *** Modeline
+Thanks to @seagle0128 for creating the =doom-modeline= package, on which this is based!
+
 #+BEGIN_SRC emacs-lisp
-(use-package doom-modeline :ensure
-  :hook (after-init . doom-modeline-init)
-  :config
-  (setq! doom-modeline-enable-word-count t
-         display-time-default-load-average nil)
-  (display-time-mode))
+(require 'all-the-icons)
+(require 'eldoc-eval)
+(require 'projectile)
+(use-package shrink-path :ensure :demand)
+
+;;
+;; Variables
+;;
+
+(defvar +modeline-height 23
+  "How tall the mode-line should be (only respected in GUI Emacs).")
+
+(defvar +modeline-bar-width 1
+  "How wide the mode-line bar should be (only respected in GUI Emacs).")
+
+(defvar +modeline-buffer-file-name-style 'truncate-upto-project
+  "Determines the style used by `+modeline-buffer-file-name'.
+
+Given ~/Projects/FOSS/emacs/lisp/comint.el
+  truncate-upto-project => ~/P/F/emacs/lisp/comint.el
+  truncate-upto-root => ~/P/F/e/lisp/comint.el
+  truncate-all => ~/P/F/e/l/comint.el
+  relative-from-project => emacs/lisp/comint.el
+  relative-to-project => lisp/comint.el
+  file-name => comint.el")
+
+;; externs
+(defvar text-scale-mode-amount)
+(defvar mc/mode-line)
+
+(declare-function eldoc-in-minibuffer-mode 'eldoc-eval)
+(declare-function face-remap-remove-relative 'face-remap)
+(declare-function image-get-display-property 'image-mode)
+(declare-function magit-toplevel 'magit-git)
+
+;;
+;; Custom faces
+;;
+
+(defface +modeline-buffer-path
+  '((t (:inherit (mode-line-emphasis bold))))
+  "Face used for the dirname part of the buffer path."
+  :group 'mode-line-faces)
+
+(defface +modeline-buffer-file
+  '((t (:inherit (mode-line-buffer-id bold))))
+  "Face used for the filename part of the mode-line buffer path."
+  :group 'mode-line-faces)
+
+(defface +modeline-buffer-modified
+  '((t (:inherit (error bold) :background nil)))
+  "Face used for the 'unsaved' symbol in the mode-line."
+  :group 'mode-line-faces)
+
+(defface +modeline-buffer-major-mode
+  '((t (:inherit (mode-line-emphasis bold))))
+  "Face used for the major-mode segment in the mode-line."
+  :group 'mode-line-faces)
+
+(defface +modeline-highlight
+  '((t (:inherit mode-line-emphasis)))
+  "Face for bright segments of the mode-line."
+  :group 'mode-line-faces)
+
+(defface +modeline-panel
+  '((t (:inherit mode-line-highlight)))
+  "Face for 'X out of Y' segments."
+  :group 'mode-line-faces)
+
+(defface +modeline-info
+  `((t (:inherit (success bold))))
+  "Face for info-level messages in the modeline."
+  :group 'mode-line-faces)
+
+(defface +modeline-warning
+  `((t (:inherit (warning bold))))
+  "Face for warnings in the modeline."
+  :group 'mode-line-faces)
+
+(defface +modeline-urgent
+  `((t (:inherit (error bold))))
+  "Face for errors in the modeline."
+  :group 'mode-line-faces)
+
+;; Bar
+(defface +modeline-bar '((t (:inherit highlight)))
+  "The face used for the left-most bar on the mode-line of an active window."
+  :group 'mode-line-faces)
+
+(defface +modeline-eldoc-bar '((t (:inherit shadow)))
+  "The face used for the left-most bar on the mode-line when eldoc-eval is active."
+  :group 'mode-line-faces)
+
+(defface +modeline-inactive-bar '((t (:inherit warning :inverse-video t)))
+  "The face used for the left-most bar on the mode-line of an inactive window."
+  :group 'mode-line-faces)
+
+;;
+;; Modeline library
+;;
+
+(defvar +modeline-fn-alist nil)
+(defvar +modeline-var-alist nil)
+
+(defmacro +modeline-def-segment (name &rest body)
+  "Defines a modeline segment NAME with BODY and byte compiles it."
+  (declare (indent defun) (doc-string 2))
+  (let ((sym (intern (format "+modeline-segment--%s" name)))
+        (docstring (if (stringp (car body))
+                       (pop body)
+                     (format "%s modeline segment" name))))
+    (cond ((and (symbolp (car body))
+                (not (cdr body)))
+           (add-to-list '+modeline-var-alist (cons name (car body)))
+           `(add-to-list '+modeline-var-alist (cons ',name ',(car body))))
+          (t
+           (add-to-list '+modeline-fn-alist (cons name sym))
+           `(progn
+              (fset ',sym (lambda () ,docstring ,@body))
+              (add-to-list '+modeline-fn-alist (cons ',name ',sym))
+              ,(unless (bound-and-true-p byte-compile-current-file)
+                 `(let (byte-compile-warnings)
+                    (byte-compile #',sym))))))))
+
+(defsubst +modeline--prepare-segments (segments)
+  "Prepare mode-line `SEGMENTS'."
+  (let (forms it)
+    (dolist (seg segments)
+      (cond ((stringp seg)
+             (push seg forms))
+            ((symbolp seg)
+             (cond ((setq it (cdr (assq seg +modeline-fn-alist)))
+                    (push (list it) forms))
+                   ((setq it (cdr (assq seg +modeline-var-alist)))
+                    (push it forms))
+                   ((error "%s is not a defined segment" seg))))
+            ((error "%s is not a valid segment" seg))))
+    (nreverse forms)))
+
+(defun +modeline-def-modeline (name lhs &optional rhs)
+  "Defines a modeline format and byte-compiles it.
+
+  NAME is a symbol to identify it (used by `+modeline' for retrieval).
+  LHS and RHS are lists of symbols of modeline segments defined with
+  `+modeline-def-segment'.
+
+  Example:
+  (+modeline-def-modeline 'minimal
+                              '(bar matches \" \" buffer-info)
+                              '(media-info major-mode))
+  (+modeline-set-modeline 'minimal t)"
+  (let ((sym (intern (format "+modeline-format--%s" name)))
+        (lhs-forms (+modeline--prepare-segments lhs))
+        (rhs-forms (+modeline--prepare-segments rhs)))
+    (defalias sym
+      (lambda ()
+        (let ((lhs (eval `(list ,@lhs-forms) t))
+              (rhs (eval `(list ,@rhs-forms) t)))
+          (let ((rhs-str (format-mode-line rhs)))
+            (list lhs
+                  (propertize
+                   " " 'display
+                   `((space :align-to (- (+ right right-fringe right-margin)
+                                         ,(+ 1 (string-width rhs-str))))))
+                  rhs-str))))
+      (concat "Modeline:\n"
+              (format "  %s\n  %s"
+                      (prin1-to-string lhs)
+                      (prin1-to-string rhs))))))
+
+(defun +modeline (key)
+  "Return a mode-line configuration associated with KEY (a symbol).
+
+  Throws an error if it doesn't exist."
+  (let ((fn (intern-soft (format "+modeline-format--%s" key))))
+    (when (functionp fn)
+      `(:eval (,fn)))))
+
+(defun +modeline-set-modeline (key &optional default)
+  "Set the modeline format. Does nothing if the modeline KEY doesn't exist.
+If DEFAULT is non-nil, set the default mode-line for all buffers."
+  (when-let ((modeline (+modeline key)))
+    (setf (if default
+              (default-value 'mode-line-format)
+            (buffer-local-value 'mode-line-format (current-buffer)))
+          (list "%e" modeline))))
+
+(defsubst +modeline-project-root ()
+  "Get the path to the root of your project."
+  (let (projectile-require-project-root) (projectile-ensure-project (projectile-project-root))))
+
+
+;;
+;; Plugins
+;;
+
+(defun +modeline-eldoc (text)
+  "Get eldoc TEXT for mode-line."
+  (concat (when (display-graphic-p)
+            (+modeline--make-xpm '+modeline-eldoc-bar +modeline-height +modeline-bar-width))
+          text))
+
+;; Show eldoc in the mode-line with `eval-expression'
+(defun +modeline--show-eldoc (input)
+  "Display string INPUT in the mode-line next to minibuffer."
+  (with-current-buffer (eldoc-current-buffer)
+    (let* ((str              (and (stringp input) input))
+           (mode-line-format (or (and str (or (+modeline-eldoc str) str))
+                                 mode-line-format))
+           mode-line-in-non-selected-windows)
+      (force-mode-line-update)
+      (sit-for eldoc-show-in-mode-line-delay))))
+(setq eldoc-in-minibuffer-show-fn #'+modeline--show-eldoc)
+
+(eldoc-in-minibuffer-mode 1)
+
+;; Keep `+modeline-current-window' up-to-date
+(defvar +modeline-current-window (frame-selected-window))
+(defun +modeline-set-selected-window (&rest _)
+  "Set `+modeline-current-window' appropriately."
+  (when-let ((win (frame-selected-window)))
+    (unless (minibuffer-window-active-p win)
+      (setq +modeline-current-window win)
+      (force-mode-line-update))))
+
+(defun +modeline-unset-selected-window ()
+  "Unset `+modeline-current-window' appropriately."
+  (setq +modeline-current-window nil)
+  (force-mode-line-update))
+
+(add-hook 'window-configuration-change-hook #'+modeline-set-selected-window)
+(advice-add #'handle-switch-frame :after #'+modeline-set-selected-window)
+(advice-add #'select-window :after #'+modeline-set-selected-window)
+(with-no-warnings
+  (cond ((not (boundp 'after-focus-change-function))
+         (add-hook 'focus-in-hook  #'+modeline-set-selected-window)
+         (add-hook 'focus-out-hook #'+modeline-unset-selected-window))
+        ((defun +modeline-refresh-frame ()
+           (setq +modeline-current-window nil)
+           (cl-loop for frame in (frame-list)
+                    if (eq (frame-focus-state frame) t)
+                    return (setq +modeline-current-window (frame-selected-window frame)))
+           (force-mode-line-update))
+         (add-function :after after-focus-change-function #'+modeline-refresh-frame))))
+
+
+;;
+;; Modeline helpers
+;;
+
+(defun +modeline-maybe-icon-octicon (&rest args)
+  "Display octicon via `ARGS'."
+  (when (display-graphic-p)
+    (apply 'all-the-icons-octicon args)))
+
+(defun +modeline-maybe-icon-faicon (&rest args)
+  "Display font awesome icon via `ARGS'."
+  (when (display-graphic-p)
+    (apply 'all-the-icons-faicon args)))
+
+(defun +modeline-maybe-icon-material (&rest args)
+  "Display material icon via `ARGS'."
+  (when (display-graphic-p)
+    (apply 'all-the-icons-material args)))
+
+(defun +modeline--active ()
+  "Whether is an active window."
+  (eq (selected-window) +modeline-current-window))
+
+(defun +modeline--make-xpm (face width height)
+  "Create an XPM bitmap via FACE, WIDTH and HEIGHT. Inspired by `powerline''s `pl/make-xpm'."
+  (propertize
+   " " 'display
+   (let ((data (make-list height (make-list width 1)))
+         (color (or (face-background face nil t) "None")))
+     (ignore-errors
+       (create-image
+        (concat
+         (format "/* XPM */\nstatic char * percent[] = {\n\"%i %i 2 1\",\n\". c %s\",\n\"  c %s\","
+                 (length (car data))
+                 (length data)
+                 color
+                 color)
+         (apply #'concat
+                (cl-loop with idx = 0
+                         with len = (length data)
+                         for dl in data
+                         do (cl-incf idx)
+                         collect
+                         (concat "\""
+                                 (cl-loop for d in dl
+                                          if (= d 0) collect (string-to-char " ")
+                                          else collect (string-to-char "."))
+                                 (if (eq idx len) "\"};" "\",\n")))))
+        'xpm t :ascent 'center)))))
+
+(defun +modeline-buffer-file-name ()
+  "Propertized variable `buffer-file-name' based on `+modeline-buffer-file-name-style'."
+  (let ((buffer-file-name (or buffer-file-name ""))
+        (buffer-file-truename (or buffer-file-truename "")))
+    (propertize
+     (pcase +modeline-buffer-file-name-style
+       (`truncate-upto-project (+modeline--buffer-file-name 'shrink))
+       (`truncate-upto-root (+modeline--buffer-file-name-truncate))
+       (`truncate-all (+modeline--buffer-file-name-truncate t))
+       (`relative-to-project (+modeline--buffer-file-name-relative))
+       (`relative-from-project (+modeline--buffer-file-name-relative 'include-project))
+       (`file-name (propertize (file-name-nondirectory buffer-file-name)
+                               'face
+                               (let ((face (or (and (buffer-modified-p)
+                                                    '+modeline-buffer-modified)
+                                               (and (+modeline--active)
+                                                    '+modeline-buffer-file))))
+                                 (when face `(:inherit ,face))))))
+     'help-echo buffer-file-truename)))
+
+(defun +modeline--buffer-file-name-truncate (&optional truncate-tail)
+  "Propertized variable `buffer-file-name' that truncates every dir along path.
+
+If TRUNCATE-TAIL is t also truncate the parent directory of the file."
+  (let ((dirs (shrink-path-prompt (file-name-directory buffer-file-truename)))
+        (active (+modeline--active)))
+    (if (null dirs)
+        (propertize "%b" 'face (if active '+modeline-buffer-file))
+      (let ((modified-faces (if (buffer-modified-p) '+modeline-buffer-modified)))
+        (let ((dirname (car dirs))
+              (basename (cdr dirs))
+              (dir-faces (or modified-faces (if active '+modeline-project-root-dir)))
+              (file-faces (or modified-faces (if active '+modeline-buffer-file))))
+          (concat (propertize (concat dirname
+                                      (if truncate-tail (substring basename 0 1) basename)
+                                      "/")
+                              'face (if dir-faces `(:inherit ,dir-faces)))
+                  (propertize (file-name-nondirectory buffer-file-name)
+                              'face (if file-faces `(:inherit ,file-faces)))))))))
+
+(defun +modeline--buffer-file-name-relative (&optional include-project)
+  "Propertized variable `buffer-file-name' showing directories relative to INCLUDE-PROJECT root only."
+  (let ((root (+modeline-project-root))
+        (active (+modeline--active)))
+    (if (null root)
+        (propertize "%b" 'face (if active '+modeline-buffer-file))
+      (let* ((modified-faces (if (buffer-modified-p) '+modeline-buffer-modified))
+             (true-filename (file-truename buffer-file-name))
+             (relative-dirs (file-relative-name (file-name-directory true-filename)
+                                                (if include-project (concat root "../") root)))
+             (relative-faces (or modified-faces (if active '+modeline-buffer-path)))
+             (file-faces (or modified-faces (if active '+modeline-buffer-file))))
+        (if (equal "./" relative-dirs) (setq relative-dirs ""))
+        (concat (propertize relative-dirs 'face (if relative-faces `(:inherit ,relative-faces)))
+                (propertize (file-name-nondirectory true-filename)
+                            'face (if file-faces `(:inherit ,file-faces))))))))
+
+(defun +modeline--buffer-file-name (truncate-project-root-parent)
+  "Propertized variable `buffer-file-name'.
+
+If TRUNCATE-PROJECT-ROOT-PARENT is t space will be saved by truncating it down
+fish-shell style.
+
+Example:
+  ~/Projects/FOSS/emacs/lisp/comint.el => ~/P/F/emacs/lisp/comint.el"
+  (let* ((project-root (+modeline-project-root))
+         (file-name-split (shrink-path-file-mixed project-root
+                                                  (file-name-directory buffer-file-name)
+                                                  buffer-file-name))
+         (active (+modeline--active)))
+    (if (null file-name-split)
+        (propertize "%b" 'face (if active '+modeline-buffer-file))
+      (pcase-let ((`(,root-path-parent ,project ,relative-path ,filename) file-name-split))
+        (let ((modified-faces (if (buffer-modified-p) '+modeline-buffer-modified)))
+          (let ((sp-faces       (or modified-faces (if active 'font-lock-comment-face)))
+                (project-faces  (or modified-faces (if active 'font-lock-string-face)))
+                (relative-faces (or modified-faces (if active '+modeline-buffer-path)))
+                (file-faces     (or modified-faces (if active '+modeline-buffer-file))))
+            (let ((sp-props       `(,@(if sp-faces       `(:inherit ,sp-faces))      ,@(if active '(:weight bold))))
+                  (project-props  `(,@(if project-faces  `(:inherit ,project-faces)) ,@(if active '(:weight bold))))
+                  (relative-props `(,@(if relative-faces `(:inherit ,relative-faces))))
+                  (file-props     `(,@(if file-faces     `(:inherit ,file-faces)))))
+              (concat (propertize (if truncate-project-root-parent
+                                      root-path-parent
+                                    (abbreviate-file-name project-root))
+                                  'face sp-props)
+                      (propertize (concat project "/") 'face project-props)
+                      (if relative-path (propertize relative-path 'face relative-props))
+                      (propertize filename 'face file-props)))))))))
+
+
+;;
+;; buffer information
+;;
+
+(+modeline-def-segment buffer-default-directory
+  "Displays `default-directory'. This is for special buffers like the scratch
+buffer where knowing the current project directory is important."
+  (let ((face (if (+modeline--active) '+modeline-buffer-path)))
+    (concat (if (display-graphic-p) " ")
+            (+modeline-maybe-icon-octicon
+             "file-directory"
+             :face face
+             :v-adjust -0.05
+             :height 1.25)
+            (propertize (concat " " (abbreviate-file-name default-directory))
+                        'face face))))
+
+;;
+(+modeline-def-segment buffer-info
+  "Combined information about the current buffer, including the current working
+directory, the file name, and its state (modified, read-only or non-existent)."
+  (concat (cond (buffer-read-only
+                 (concat (+modeline-maybe-icon-octicon
+                          "lock"
+                          :face '+modeline-warning
+                          :v-adjust -0.05)
+                         " "))
+                ((buffer-modified-p)
+                 (concat (+modeline-maybe-icon-faicon
+                          "floppy-o"
+                          :face '+modeline-buffer-modified
+                          :v-adjust -0.0575)
+                         " "))
+                ((and buffer-file-name
+                      (not (file-exists-p buffer-file-name)))
+                 (concat (+modeline-maybe-icon-octicon
+                          "circle-slash"
+                          :face '+modeline-urgent
+                          :v-adjust -0.05)
+                         " "))
+                ((buffer-narrowed-p)
+                 (concat (+modeline-maybe-icon-octicon
+                          "fold"
+                          :face '+modeline-warning
+                          :v-adjust -0.05)
+                         " ")))
+          (if buffer-file-name
+              (+modeline-buffer-file-name)
+            "%b")))
+
+(+modeline-def-segment buffer-info-simple
+  "Display only the current buffer's name, but with fontification."
+  (propertize
+   "%b"
+   'face (cond ((and buffer-file-name (buffer-modified-p))
+                '+modeline-buffer-modified)
+               ((+modeline--active) '+modeline-buffer-file))))
+
+;;
+(+modeline-def-segment buffer-encoding
+  "Displays the encoding and eol style of the buffer the same way Atom does."
+  (concat (pcase (coding-system-eol-type buffer-file-coding-system)
+            (0 "LF  ")
+            (1 "CRLF  ")
+            (2 "CR  "))
+          (let ((sys (coding-system-plist buffer-file-coding-system)))
+            (cond ((memq (plist-get sys :category) '(coding-category-undecided coding-category-utf-8))
+                   "UTF-8")
+                  (t (upcase (symbol-name (plist-get sys :name))))))
+          "  "))
+
+
+;;
+;; major-mode
+;;
+
+(+modeline-def-segment major-mode
+  "The major mode, including environment and text-scale info."
+  (propertize (concat (format-mode-line mode-name)
+                      (and (boundp 'text-scale-mode-amount)
+                           (/= text-scale-mode-amount 0)
+                           (format (if (> text-scale-mode-amount 0) " (%+d)" " (%-d)") text-scale-mode-amount)))
+              'face (and (+modeline--active) '+modeline-buffer-major-mode)))
+
+
+;;
+;; process
+;;
+
+(+modeline-def-segment process
+  "The process info."
+  mode-line-process)
+
+;;
+;; vcs
+;;
+
+(defvar-local +modeline--vcs nil)
+(defun +modeline--update-vcs ()
+  "Update vsc state in mode-line."
+  (setq +modeline--vcs
+        (when (and vc-mode buffer-file-name)
+          (let* ((backend (vc-backend buffer-file-name))
+                 (state   (vc-state buffer-file-name backend)))
+            (let ((face    'mode-line-inactive)
+                  (active  (+modeline--active))
+                  (all-the-icons-default-adjust -0.1))
+              (concat (if (display-graphic-p) "  ")
+                      (cond ((memq state '(edited added))
+                             (if active (setq face '+modeline-info))
+                             (+modeline-maybe-icon-octicon
+                              "git-compare"
+                              :face face
+                              :v-adjust -0.05))
+                            ((eq state 'needs-merge)
+                             (if active (setq face '+modeline-info))
+                             (+modeline-maybe-icon-octicon "git-merge" :face face))
+                            ((eq state 'needs-update)
+                             (if active (setq face '+modeline-warning))
+                             (+modeline-maybe-icon-octicon "arrow-down" :face face))
+                            ((memq state '(removed conflict unregistered))
+                             (if active (setq face '+modeline-urgent))
+                             (+modeline-maybe-icon-octicon "alert" :face face))
+                            (t
+                             (if active (setq face '+modeline-info))
+                             (+modeline-maybe-icon-octicon
+                              "git-branch"
+                              :face face
+                              :v-adjust -0.05)))
+                      " "
+                      (propertize (substring vc-mode (+ (if (eq backend 'Hg) 2 3) 2))
+                                  'face (if active face))
+                      " "))))))
+(add-hook 'after-revert-hook #'+modeline--update-vcs)
+(add-hook 'after-save-hook #'+modeline--update-vcs)
+(add-hook 'find-file-hook #'+modeline--update-vcs t)
+
+(+modeline-def-segment vcs
+  "Displays the current branch, colored based on its state."
+  (if (+modeline--active)
+      +modeline--vcs
+    ""))
+
+
+;;
+;; selection-info
+;;
+
+(defsubst +modeline-column (pos)
+  "Get the column of the position `POS'."
+  (save-excursion (goto-char pos) (current-column)))
+
+(defvar-local modeline-enable-word-count t
+  "If non-nil, a word count will be added to the selection-info modeline segment.")
+
+(+modeline-def-segment selection-info
+  "Information about the current selection, such as how many characters and
+lines are selected, or the NxM dimensions of a block selection."
+  (when (and mark-active (+modeline--active))
+    (let ((beg (region-beginning)) (end (region-end)))
+      (propertize (let ((lines (count-lines beg (min end (point-max)))))
+                    (concat (cond ((bound-and-true-p rectangle-mark-mode)
+                                   (let ((cols (abs (- (+modeline-column end)
+                                                       (+modeline-column beg)))))
+                                     (format "%dx%dB" lines cols)))
+                                  ((> lines 1)
+                                   (format "%dC %dL" (- end beg) lines))
+                                  ((format "%dC" (- end beg))))
+                            (when modeline-enable-word-count (format " %dW" (count-words beg end)))))
+                  'face '+modeline-highlight))))
+
+
+;;
+;; matches
+;;
+
+(defun +modeline--macro-recording ()
+  "Display current macro being recorded."
+  (when (and (+modeline--active) (or defining-kbd-macro executing-kbd-macro))
+    (let ((sep (propertize " " 'face '+modeline-panel)))
+      (concat sep (propertize "Macro" 'face '+modeline-panel)
+              sep (+modeline-maybe-icon-octicon "triangle-right" :face '+modeline-panel :v-adjust -0.05)
+              sep))))
+
+(defsubst +modeline--multiple-cursors ()
+  "Show the number of multiple cursors."
+  (when (bound-and-true-p multiple-cursors-mode)
+    (propertize
+     (concat (car mc/mode-line) (eval (cadadr mc/mode-line)) " ")
+     'face (if (+modeline--active) '+modeline-panel))))
+
+(+modeline-def-segment matches
+  "Displays:
+- The currently recording macro
+- Number of multiple cursors"
+  (let ((meta (concat (+modeline--macro-recording) (+modeline--multiple-cursors))))
+    (or (and (not (equal meta "")) meta)
+        (if buffer-file-name " %I "))))
+
+
+;;
+;; media-info
+;;
+
+(+modeline-def-segment media-info
+  "Metadata regarding the current file, such as dimensions for images."
+  (cond ((eq major-mode 'image-mode)
+         (cl-destructuring-bind (width . height) (image-size (image-get-display-property) :pixels)
+           (format "  %dx%d  " width height)))))
+
+
+;;
+;; bar
+;;
+
+(defvar +modeline--bar-active nil)
+(defvar +modeline--bar-inactive nil)
+(+modeline-def-segment bar
+  "The bar regulates the height of the mode-line in GUI Emacs.
+  Returns \"\" to not break --no-window-system."
+  (if (display-graphic-p)
+      (if (+modeline--active)
+          +modeline--bar-active
+        +modeline--bar-inactive)
+    ""))
+
+;;
+;; global
+;;
+
+(+modeline-def-segment global
+  "For the time string and whatever uses global-mode-string."
+  (if (< 0 (length global-mode-string)) '(" " global-mode-string "  ") ""))
+
+
+;;
+;; position
+;;
+
+(defvar-local +modeline-column-zero-based
+  (or (bound-and-true-p column-number-indicator-zero-based) t)
+  "When non-nil, mode line displays column numbers zero-based.
+See `column-number-indicator-zero-based'.")
+
+(defvar-local +modeline-percent-position
+  (or (bound-and-true-p mode-line-percent-position) '(-3 "%p"))
+  "Specification of \"percentage offset\" of window through buffer.
+See `mode-line-percent-position'.")
+
+(setq-default mode-line-position
+              '((line-number-mode
+                 (column-number-mode
+                  (+modeline-column-zero-based " %l:%c" " %l:%C")
+                  " %l")
+                 (column-number-mode (+modeline-column-zero-based " :%c" " :%C")))
+                (if +modeline-percent-position (" " +modeline-percent-position))
+                (:eval (when (or line-number-mode column-number-mode +modeline-percent-position) " "))))
+
+(+modeline-def-segment buffer-position
+  "The buffer position information."
+  '(" " mode-line-position))
+
+;;
+;; Mode lines
+;;
+
+(+modeline-def-modeline 'main
+                        '(bar matches " " buffer-info buffer-position " " selection-info)
+                        '(global buffer-encoding major-mode process vcs))
+
+(+modeline-def-modeline 'minimal
+                        '(bar matches " " buffer-info)
+                        '(media-info major-mode))
+
+(+modeline-def-modeline 'special
+                        '(bar matches " " buffer-info-simple buffer-position " " selection-info)
+                        '(global buffer-encoding major-mode process))
+
+(+modeline-def-modeline 'project
+                        '(bar buffer-default-directory)
+                        '(global major-mode))
+
+(+modeline-def-modeline 'media
+                        '(bar " %b  ")
+                        '(global media-info major-mode))
+
+;;;###autoload
+(defun +modeline-init ()
+  "Initialize mode-line."
+  (setq +modeline--bar-active   (+modeline--make-xpm '+modeline-bar          +modeline-bar-width +modeline-height)
+        +modeline--bar-inactive (+modeline--make-xpm '+modeline-inactive-bar +modeline-bar-width +modeline-height))
+  (unless after-init-time
+    (dolist (bname '("*scratch*" "*Messages*")) ;; Setup already created buffers
+      (with-current-buffer bname (+modeline-set-modeline 'main)))))
+
+;;;###autoload
+(defun +modeline-set-special-modeline ()
+  "Set sepcial mode-line."
+  (+modeline-set-modeline 'special))
+
+;;;###autoload
+(defun +modeline-set-media-modeline ()
+  "Set media mode-line."
+  (+modeline-set-modeline 'media))
+
+;;;###autoload
+(defun +modeline-set-project-modeline ()
+  "Set project mode-line."
+  (+modeline-set-modeline 'project))
+
+;;
+;; Bootstrap
+;;
+
+(+modeline-set-modeline 'main t)
+
+(add-hook 'image-mode-hook #'+modeline-set-media-modeline)
+(add-hook 'org-src-mode-hook #'+modeline-set-special-modeline)
+
+;; Ensure modeline is inactive when Emacs is unfocused (and active otherwise)
+(defvar +modeline-remap-face-cookie nil)
+(defun +modeline-focus ()
+  "Focus mode-line."
+  (when +modeline-remap-face-cookie
+    (require 'face-remap)
+    (face-remap-remove-relative +modeline-remap-face-cookie)))
+(defun +modeline-unfocus ()
+  "Unfocus mode-line."
+  (setq +modeline-remap-face-cookie (face-remap-add-relative 'mode-line 'mode-line-inactive)))
+
+(add-hook 'focus-in-hook #'+modeline-focus)
+(add-hook 'focus-out-hook #'+modeline-unfocus)
 #+END_SRC
 
 *** Appearance setup
@@ -1009,7 +1724,7 @@ Disable fringes in the minibuffer window.
     (load-theme 'doom-one t)
     (nox/change-font)
 
-    (doom-modeline-init)
+    (+modeline-init)
 
     (when (and (= (count-windows) 1)
                (> (window-width) 100))
@@ -3559,9 +4274,10 @@ _k_ill    _S_tart        _t_break     _i_n (_I_: inst)
 **** Time
 #+BEGIN_SRC emacs-lisp
 (use-package time
-  :config
+  :init
   (setq! display-time-24hr-format t
-         display-time-load-average-threshold 1.5))
+         display-time-default-load-average nil)
+  (display-time-mode))
 #+END_SRC
 
 *** Tramp
