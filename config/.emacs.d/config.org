@@ -2711,18 +2711,15 @@ some heuristics to guess the result."
        (+agenda-inbox nil ((org-agenda-files (list org-default-notes-file))))
        (+agenda-tasks nil ((org-agenda-files (list nox-org-agenda-file)))))))
 
-   org-agenda-skip-deadline-prewarning-if-scheduled 'pre-scheduled
-   org-agenda-tags-todo-honor-ignore-options t
-   org-agenda-todo-ignore-scheduled 'all
-   org-agenda-todo-ignore-deadlines 'far
-   org-agenda-skip-scheduled-if-done t
    org-agenda-skip-deadline-if-done t
+   org-agenda-skip-scheduled-if-done t
+   org-agenda-skip-timestamp-if-done t
+   org-agenda-skip-deadline-prewarning-if-scheduled 'pre-scheduled
    org-agenda-skip-scheduled-if-deadline-is-shown t
+   org-agenda-block-separator ""
    org-agenda-clockreport-parameter-plist `(:link t :maxlevel 6 :fileskip0 t :compact t :narrow 100)
    org-agenda-columns-add-appointments-to-effort-sum t
    org-agenda-dim-blocked-tasks nil
-   org-agenda-todo-list-sublevels nil
-   org-agenda-block-separator ""
    org-agenda-time-grid '((daily today require-timed) nil "......" "----------------"))
 
   (add-hook 'org-agenda-mode-hook 'nox|org-offer-all-agenda-tags)
@@ -2735,18 +2732,25 @@ some heuristics to guess the result."
        (or (not todo-type) (eq todo-type 'todo))
        (< (org-duration-to-minutes effort-text) 20)))
 
-(cl-defstruct +agenda-entry todo priority text tags planned low-effort marker project-status children)
+(cl-defstruct +agenda-entry
+  todo priority text tags planned low-effort marker is-tickler project-status children)
 
 (defun +agenda-entry (headline &optional tags)
   (let ((todo-type (org-element-property :todo-type headline))
-        (effort (org-element-property :EFFORT headline)))
+        (effort (org-element-property :EFFORT headline))
+        (tags (or tags (org-element-property :tags headline))))
     (make-+agenda-entry
      :todo (org-element-property :todo-keyword headline)
      :priority (org-element-property :priority headline)
      :text (org-element-property :raw-value headline)
-     :tags (or tags (org-element-property :tags headline))
+     :tags tags
      :low-effort (+agenda-is-low-effort effort todo-type)
-     :marker (org-agenda-new-marker (org-element-property :begin headline)))))
+     :marker (org-agenda-new-marker (org-element-property :begin headline))
+     :is-tickler (member "TICKLER" tags))))
+
+(defsubst +agenda-is-entry-planned (entry)
+  (or (eq (+agenda-entry-project-status entry) 'planned)
+      (+agenda-entry-planned entry)))
 #+END_SRC
 
 **** Renderer
@@ -2833,7 +2837,7 @@ some heuristics to guess the result."
       (cond
        ((eq (+agenda-entry-project-status entry) 'stuck)
         (org-add-props (+agenda-entry-text entry) nil 'face 'org-priority 'nox-face 'org-priority))
-       ((or (+agenda-entry-planned entry) (eq (+agenda-entry-project-status entry) 'planned))
+       ((+agenda-is-entry-planned entry)
         (org-add-props (+agenda-entry-text entry) nil 'face 'org-date     'nox-face 'org-date)))
 
       (let ((org-todo-keyword-faces (if (+agenda-entry-project-status entry)
@@ -2962,14 +2966,12 @@ some heuristics to guess the result."
                                                   (org-get-wdays deadline-ts)))))
          (scheduled-past-or-now (and has-scheduling (not scheduled-future)))
          (contents-begin (org-element-property :contents-begin headline))
-         (tickler (member "TICKLER" (org-element-property :tags headline)))
          entry project-status return)
 
     (when (or +agenda-show-private (not (member "PRIVATE" (org-element-property :tags headline))))
-      (setq entry
-            (+agenda-entry headline (cl-remove-duplicates
-                                     (append (org-element-property :tags headline) +agenda-parent-tags)
-                                     :test 'string=)))
+      (setq entry (+agenda-entry headline (cl-remove-duplicates
+                                           (append (org-element-property :tags headline) +agenda-parent-tags)
+                                           :test 'string=)))
       (if (not todo-type)
           ;; NOTE(nox): No todo keyword
           (let* ((timestamp (or scheduled-ts deadline-ts))
@@ -2994,7 +2996,7 @@ some heuristics to guess the result."
                 (push entry +agenda-archivable-tasks)
 
               ;; NOTE(nox): Just process the children of this headline without todo keyword
-              (unless tickler (setq return (+agenda-process-children headline)))))
+              (setq return (+agenda-process-children headline))))
 
         ;; NOTE(nox): Has todo keyword
         (+agenda-set-parent-minimum-status 'stuck)
@@ -3004,66 +3006,59 @@ some heuristics to guess the result."
             (when (or (not closed-ts) (< (org-time-stamp-to-now closed-ts) -60))
               (push entry +agenda-archivable-tasks))
 
-          (unless tickler
-            (cond
-             ;; NOTE(nox): Planned
-             ((and (not (string= todo "NEXT")) scheduled-future)
-              (setf (+agenda-entry-planned entry) t)
-              (if (= +agenda-level 0)
-                  (push entry +agenda-planned-tasks)
-                (+agenda-set-parent-minimum-status 'planned)
-                (setq return entry)))
+          (cond
+           ;; NOTE(nox): Planned
+           ((and (not (string= todo "NEXT")) scheduled-future)
+            (setf (+agenda-entry-planned entry) t)
+            (if (= +agenda-level 0)
+                (unless (+agenda-entry-is-tickler entry) (push entry +agenda-planned-tasks))
+              (+agenda-set-parent-minimum-status 'planned)
+              (setq return entry)))
 
-             ;; NOTE(nox): Hold
-             ((or (string= todo "HOLD") (string= todo "WAITING"))
-              (push entry +agenda-hold-tasks))
+           ;; NOTE(nox): Hold
+           ((or (string= todo "HOLD") (string= todo "WAITING"))
+            (push entry +agenda-hold-tasks))
 
-             (t
-              ;; NOTE(nox): Process children
-              (let* ((+agenda-project-status nil)
-                     (children (+agenda-flatten-list (+agenda-process-children headline t)))
-                     tail prev)
-                (setq project-status +agenda-project-status)
+           (t
+            ;; NOTE(nox): Process children
+            (let* ((+agenda-project-status nil)
+                   (children (+agenda-flatten-list (+agenda-process-children headline t)))
+                   tail prev)
+              (setq project-status +agenda-project-status)
 
-                ;; NOTE(nox): When this project is not planned, we need to remove its planned tasks and
-                ;; insert them in the planned list. A stuck project doesn't have any planned children so,
-                ;; for this check, not planned ≡ next.
-                (when (and (eq project-status 'next) (not +agenda-weekly-review))
-                  (setq tail children)
-                  (while tail
-                    (if (or (+agenda-entry-planned (car tail))
-                            (eq (+agenda-entry-project-status (car tail)) 'planned))
-                        (progn
-                          (push (car tail) +agenda-planned-tasks)
-                          (if prev
-                              (setcdr prev (cdr tail))
-                            (setq children (cdr tail))))
-                      (setq prev tail))
-                    (setq tail (cdr tail))))
+              ;; NOTE(nox): When this project is next, we need to remove its planned tasks and insert
+              ;; them in the planned list.
+              (when (and (eq project-status 'next) (not +agenda-weekly-review))
+                (setq tail children)
+                (while tail
+                  (cond ((+agenda-is-entry-planned (car tail))
+                         (push (car tail) +agenda-planned-tasks)
+                         (if prev (setcdr prev (cdr tail)) (setq children (cdr tail))))
 
-                (setf (+agenda-entry-project-status entry) project-status
-                      (+agenda-entry-children entry) children))
+                        (t (setq prev tail)))
+                  (setq tail (cdr tail))))
 
-              ;; NOTE(nox): Update parent project status
-              (unless (or (= +agenda-level 0) (eq +agenda-project-status 'next))
-                (if project-status
-                    (when (memq project-status '(next planned)) (setq +agenda-project-status project-status))
-                  (when (or (string= todo "NEXT") scheduled-past-or-now)
-                    (setq +agenda-project-status 'next))))
+              (setf (+agenda-entry-project-status entry) project-status
+                    (+agenda-entry-children entry) children))
 
+            ;; NOTE(nox): Update parent project status
+            (unless (or (= +agenda-level 0) (eq +agenda-project-status 'next))
               (if project-status
-                  (if (and (= +agenda-level 0) (eq project-status 'planned) (not +agenda-weekly-review))
-                      (push entry +agenda-planned-tasks)
-                    (setq return entry))
+                  (when (memq project-status '(next planned)) (setq +agenda-project-status project-status))
+                (when (or (string= todo "NEXT") scheduled-past-or-now)
+                  (setq +agenda-project-status 'next))))
 
-                (if (= +agenda-level 0)
-                    (unless (+agenda-filter-priorities entry)
-                      (when (or (not has-scheduling) (and (string= todo "NEXT")
-                                                          scheduled-future))
-                        (push entry +agenda-isolated-tasks)))
+            (if project-status
+                (if (and (= +agenda-level 0) (eq project-status 'planned) (not +agenda-weekly-review))
+                    (unless (+agenda-entry-is-tickler entry) (push entry +agenda-planned-tasks))
+                  (setq return entry))
 
-                  (when (or +agenda-weekly-review (string= todo "NEXT") scheduled-past-or-now)
-                    (setq return entry)))))))))
+              (if (= +agenda-level 0)
+                  (unless (or (+agenda-filter-priorities entry) scheduled-past-or-now)
+                    (push entry +agenda-isolated-tasks))
+
+                (when (or +agenda-weekly-review (string= todo "NEXT") scheduled-past-or-now)
+                  (setq return entry))))))))
       return)))
 
 (defun +agenda-tasks (&optional _)
