@@ -2575,12 +2575,12 @@ fundamental-mode) for performance sake."
 (use-package ob-octave
   :config
   ;; NOTE(nox): Remove whitespace from beginning when printing output
-  (defun nox*org-babel-octave-trim-output (orig-func session body result-type &optional matlabp)
+  (defun +babel-octave*trim-output (orig-func session body result-type &optional matlabp)
     (let ((result (funcall orig-func session body result-type matlabp)))
       (if (eq result-type 'output)
           (string-trim-left result)
         result)))
-  (advice-add 'org-babel-octave-evaluate-session :around 'nox*org-babel-octave-evaluate-session))
+  (advice-add 'org-babel-octave-evaluate-session :around #'+babel-octave*trim-output))
 #+END_SRC
 
 ***** Sessions
