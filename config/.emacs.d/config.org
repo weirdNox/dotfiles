@@ -937,9 +937,10 @@ Disable fringes in the minibuffer window.
 #+BEGIN_SRC emacs-lisp
 (setq!
  mode-line-buffer-identification
- `((:eval (let ((root (projectile-project-root)))
-            (and root `("[" ,(file-name-nondirectory (directory-file-name root)) "]  "))))
-   ,(propertize "%b" 'face 'mode-line-buffer-id))
+ `((:eval (let ((root (projectile-project-root))
+                (inherit-faces (if (buffer-modified-p) '(error bold) '(mode-line-buffer-id bold))))
+            (concat (and root (concat "[" (file-name-nondirectory (directory-file-name root)) "]  "))
+                    (propertize "%b" 'face inherit-faces)))))
  mode-line-modes '("" mode-name mode-line-process " ")
  mode-line-position
  '((line-number-mode (column-number-mode (column-number-indicator-zero-based " %l:%c" " %l:%C") " %l")
