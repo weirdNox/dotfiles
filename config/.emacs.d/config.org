@@ -1010,27 +1010,6 @@ Needed for ivy fuzzy matching.
                                  (t . ivy--regex-fuzzy))))
 #+END_SRC
 
-**** Ivy rich
-#+BEGIN_SRC emacs-lisp
-(use-package ivy-rich :ensure
-  :after (ivy counsel) :demand
-  :config
-  (setq! ivy-rich-path-style 'abbrev)
-
-  (plist-put ivy-rich--display-transformers-list 'ivy-switch-buffer
-             '(:columns
-               ((ivy-rich-candidate (:width 40))
-                (ivy-rich-switch-buffer-size (:width 7))
-                (ivy-rich-switch-buffer-indicators (:width 4 :face error :align right))
-                (ivy-rich-switch-buffer-major-mode (:width 12 :face warning))
-                (ivy-rich-switch-buffer-path
-                 (:width (lambda (x)
-                           (ivy-rich-switch-buffer-shorten-path x (ivy-rich-minibuffer-width 0.3))))))
-               :predicate
-               (lambda (cand) (get-buffer cand))))
-  (ivy-rich-mode))
-#+END_SRC
-
 *** Counsel
 #+BEGIN_SRC emacs-lisp
 (use-package counsel :ensure
