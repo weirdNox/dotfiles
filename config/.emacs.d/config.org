@@ -938,7 +938,8 @@ Disable fringes in the minibuffer window.
 (setq!
  mode-line-buffer-identification
  `((:eval (let ((root (projectile-project-root))
-                (inherit-faces (if (buffer-modified-p) '(error bold) '(mode-line-buffer-id bold))))
+                (inherit-faces (if (and buffer-file-name (buffer-modified-p))
+                                   '(error bold) 'mode-line-buffer-id)))
             (concat (and root (concat "[" (file-name-nondirectory (directory-file-name root)) "]  "))
                     (propertize "%b" 'face inherit-faces)))))
  mode-line-modes '("" mode-name mode-line-process " ")
