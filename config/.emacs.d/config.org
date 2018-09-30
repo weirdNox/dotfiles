@@ -697,17 +697,16 @@ with functions that require it."
 (setq! x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)
        select-enable-clipboard t)
 
-(cond (IS-MAC (setq mac-command-modifier 'meta
-                    mac-option-modifier  'alt
-                    mac-redisplay-dont-reset-vscroll t
-                    mac-mouse-wheel-smooth-scroll nil
-                    ns-use-native-fullscreen nil
-                    ns-pop-up-frames nil))
+(cond (IS-MAC (setq! mac-command-modifier 'meta
+                     mac-option-modifier  'alt
+                     mac-redisplay-dont-reset-vscroll t
+                     mac-mouse-wheel-smooth-scroll nil
+                     ns-use-native-fullscreen nil
+                     ns-pop-up-frames nil))
 
-      (IS-LINUX (setq x-gtk-use-system-tooltips nil
-                      x-underline-at-descent-line t))
+      (IS-LINUX (setq! x-underline-at-descent-line t))
 
-      (IS-WINDOWS (setq w32-get-true-file-attributes nil)))
+      (IS-WINDOWS (setq! w32-get-true-file-attributes nil)))
 #+END_SRC
 
 ** UI
@@ -728,7 +727,8 @@ with functions that require it."
        window-divider-default-places t
        window-divider-default-bottom-width 1
        window-divider-default-right-width 1
-       frame-title-format '("%b - Emacs"))
+       frame-title-format '("%b - Emacs")
+       tooltip-hide-delay 3600)
 
 (fset 'yes-or-no-p 'y-or-n-p)
 (minibuffer-depth-indicate-mode)
@@ -3104,10 +3104,13 @@ and append it."
                             (:eval (number-to-string (pdf-view-current-page)))
                             "/"
                             (:eval (number-to-string (pdf-cache-number-of-pages)))
-                            "]"))))
+                            "]")))))
 
+(use-package pdf-annot :config (setq! pdf-annot-tweak-tooltips nil))
+(use-package pdf-cache :config (setq! pdf-cache-image-limit 200))
+(use-package pdf-view
+  :config
   (setq! pdf-view-display-size 'fit-page
-         pdf-cache-image-limit 200
          pdf-view-use-imagemagick t))
 #+END_SRC
 
