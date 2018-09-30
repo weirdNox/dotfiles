@@ -834,7 +834,7 @@ ARGS are the same as in `custom-set-faces'."
     (setq nox-font-faces-changed nil)
 
     (cond ((string= font-name "PragmataPro")
-           (nox-font-set-faces `(org-table ((t (:family ,(format "PragmataPro Mono-%d" font-size))))))))))
+           (nox-font-set-faces `(org-table ((t . (:family ,(format "PragmataPro Mono-%d" font-size))))))))))
 #+END_SRC
 
 *** Theme
@@ -894,11 +894,12 @@ ARGS are the same as in `custom-set-faces'."
     (setq! doom-treemacs-enable-variable-pitch nil))
 
   (nox-add-customize-theme-hook "^doom-"
-    (nox-theme-set-faces '(outline-1 ((t (:height 1.0))))
-                         '(outline-2 ((t (:height 1.0))))
-                         '(outline-3 ((t (:height 1.0))))
-                         '(org-special-keyword ((t (:inherit shadow))))
-                         '(git-commit-overlong-summary ((t (:inherit shadow)))))))
+    (nox-theme-set-faces
+     '(outline-1 ((t . (:height 1.0))))
+     '(outline-2 ((t . (:height 1.0))))
+     '(outline-3 ((t . (:height 1.0))))
+     '(git-commit-overlong-summary ((t . (:inherit shadow))))
+     `(org-special-keyword ((t . (:foreground ,(face-attribute 'shadow :foreground))))))))
 #+END_SRC
 
 **** Extra programming keywords
