@@ -2697,32 +2697,31 @@ When optional argument is non-nil, refresh cached heading."
 **** List of scripts
 #+BEGIN_SRC emacs-lisp
 (defconst +compile-sh-names
-  (if (eq system-type 'windows-nt) '("build-nox.bat" "build.bat") '("build-nox.sh" "build.sh")))
+  (let ((extension (if (eq system-type 'windows-nt) ".bat" ".sh")))
+    (mapcar (lambda (str) (concat str extension)) '("build-nox" "build"))))
 (defconst +compile-makefile-names '("makefile" "Makefile"))
 (defconst +compile-script-names (append +compile-sh-names +compile-makefile-names))
 #+END_SRC
 
 **** Compilation command
 #+BEGIN_SRC emacs-lisp
-(cl-defstruct +compile-info type path last-time last-args should-delete-window)
+(cl-defstruct +compile-info type path (last-time '(0 0 0 0)) args should-delete-window)
 (defvar-local +compile-info nil)
 (defvar +compile-info-table (make-hash-table :test 'equal))
 (defvar +compile-buffer-name) ;; NOTE(nox): Let-bound
 
-(defun +compile-get-buffer-name (&rest _)
-  (or +compile-buffer-name "*Compile*"))
+(defsubst +compile-get-buffer-name (&rest _) (or +compile-buffer-name "*Compile*"))
 
 (defun +compile-info (script-name path)
-  (let* ((default-directory (file-name-directory path)))
-    (make-+compile-info :type (if (member script-name +compile-makefile-names) 'make 'sh)
-                        :path path
-                        :last-time '(0 0 0 0))))
+  (make-+compile-info :type (if (member script-name +compile-sh-names) 'sh 'make)
+                      :path path))
 
 (defun +compile (arg)
   (interactive "P")
   ;; NOTE(nox): When running in a compilation buffer, use the script that created it.
-  (let ((chosen-cons (when +compile-info (cons (+compile-info-path +compile-info) +compile-info)))
+  (let ((chosen-cons (and +compile-info (cons (+compile-info-path +compile-info) +compile-info)))
         (calling-file-name (or (buffer-file-name) ""))
+        (set-default (equal arg '(16)))
         cons-list)
 
     ;; NOTE(nox): Find script files in parent folders
@@ -2730,11 +2729,10 @@ When optional argument is non-nil, refresh cached heading."
       (let ((start-directory default-directory)
             found-script-directory path info script-cons)
         (while (setq found-script-directory (locate-dominating-file start-directory script-name))
-          (setq
-           start-directory (file-name-directory (directory-file-name found-script-directory))
-           path (expand-file-name script-name found-script-directory)
-           info (or (gethash path +compile-info-table) (+compile-info script-name path))
-           script-cons (cons path info))
+          (setq start-directory (file-name-directory (directory-file-name found-script-directory))
+                path (expand-file-name script-name found-script-directory)
+                info (or (gethash path +compile-info-table) (+compile-info script-name path))
+                script-cons (cons path info))
 
           (push script-cons cons-list)
 
@@ -2745,57 +2743,52 @@ When optional argument is non-nil, refresh cached heading."
             (setq chosen-cons script-cons)))))
     (setq cons-list (nreverse cons-list))
 
-    (if (not cons-list)
-        (error "No build script found")
+    (unless cons-list (error "No build script found"))
 
-      (let* ((info
-              (if (and arg (> (length cons-list) 1))
-                  (cdr (assoc (completing-read "Which build script? " cons-list nil t nil nil (car chosen-cons))
-                              cons-list))
-                (cdr chosen-cons)))
-             +compile-buffer-name buffer command command-args)
+    (let* ((info (if (and set-default (> (length cons-list) 1))
+                     (cdr (assoc (completing-read "Which build script? " cons-list nil t nil nil (car chosen-cons))
+                                 cons-list))
+                   (cdr chosen-cons)))
+           +compile-buffer-name buffer command command-args)
 
-        (cond
-         ((projectile-project-p)
-          (projectile-save-project-buffers)
-          (setq +compile-buffer-name
-                (format "*[%s] - Compile %s*"
-                        (projectile-project-name)
-                        (file-name-nondirectory (+compile-info-path info)))))
-         (t
-          (save-some-buffers t)
-          (setq +compile-buffer-name (format "*Compile %s*" (+compile-info-path info)))))
+      (cond
+       ((projectile-project-p)
+        (setq +compile-buffer-name
+              (format "*[%s] - Compile %s*"
+                      (projectile-project-name)
+                      (file-name-nondirectory (+compile-info-path info)))))
+       (t
+        (setq +compile-buffer-name (format "*Compile %s*" (+compile-info-path info)))))
 
-        (setq buffer (get-buffer-create +compile-buffer-name))
+      (setq buffer (get-buffer-create +compile-buffer-name))
 
-        (if (= (length (window-list)) 1)
-            (setf (+compile-info-should-delete-window info) t)
-          (unless (get-buffer-window buffer) (setf (+compile-info-should-delete-window info) nil)))
+      (if (= (length (window-list)) 1)
+          (setf (+compile-info-should-delete-window info) t)
+        (unless (get-buffer-window buffer) (setf (+compile-info-should-delete-window info) nil)))
 
-        (cond ((eq (+compile-info-type info) 'make)
-               (setq command "make"
-                     command-args (or (+compile-info-last-args info) "-k")))
-              (t
-               (setq command (shell-quote-argument (concat "./"
-                                                           (file-name-nondirectory (+compile-info-path info))))
-                     command-args (or (+compile-info-last-args info) "%f"))))
+      (cond ((eq (+compile-info-type info) 'make)
+             (setq command "make"
+                   command-args (or (+compile-info-args info) "-k")))
+            (t
+             (setq command (shell-quote-argument (concat "./" (file-name-nondirectory (+compile-info-path info))))
+                   command-args (or (+compile-info-args info) "%f"))))
 
 
-        (when arg (setq command-args (read-string "Arguments: " command-args)))
+      (when arg (setq command-args (read-string "Arguments: " command-args)))
 
-        (setf (+compile-info-last-args info) command-args)
-        (setq command-args (replace-regexp-in-string (regexp-quote "%f")
-                                                     (shell-quote-argument calling-file-name)
-                                                     command-args))
+      (when (or (not (+compile-info-args info)) set-default) (setf (+compile-info-args info) command-args))
 
-        (setf (+compile-info-last-time info) (current-time))
+      (setq command-args (replace-regexp-in-string (regexp-quote "%f") (shell-quote-argument calling-file-name)
+                                                   command-args))
 
-        (with-current-buffer buffer
-          (cd (file-name-directory (+compile-info-path info)))
-          (compilation-start (concat command " " command-args) nil #'+compile-get-buffer-name)
-          (setq-local +compile-info info))
+      (setf (+compile-info-last-time info) (current-time))
 
-        (puthash (+compile-info-path info) info +compile-info-table)))))
+      (with-current-buffer buffer
+        (cd (file-name-directory (+compile-info-path info)))
+        (compilation-start (concat command " " command-args) nil #'+compile-get-buffer-name)
+        (setq-local +compile-info info))
+
+      (puthash (+compile-info-path info) info +compile-info-table))))
 #+END_SRC
 
 **** Bury the compilation buffer
