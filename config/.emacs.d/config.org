@@ -1075,7 +1075,8 @@ Needed for ivy fuzzy matching.
 (setq! vc-follow-symlinks t
        save-interprogram-paste-before-kill t
        enable-recursive-minibuffers t
-       mouse-yank-at-point t)
+       mouse-yank-at-point t
+       prettify-symbols-unprettify-at-point 'right-edge)
 
 #+END_SRC
 
@@ -1523,7 +1524,10 @@ fundamental-mode) for performance sake."
   :config
   (setq! TeX-auto-save t
          TeX-parse-self t
-         TeX-view-program-selection '((output-pdf "PDF Tools"))))
+         TeX-PDF-mode t
+         TeX-view-program-selection '((output-pdf "PDF Tools")))
+  (TeX-source-correlate-mode)
+  (add-hook  'TeX-after-compilation-finished-functions #'TeX-revert-document-buffer))
 #+END_SRC
 
 *** Octave
