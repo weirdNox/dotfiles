@@ -2683,8 +2683,7 @@ When optional argument is non-nil, refresh cached heading."
     ("c" +compile "Recompile")
     ("q" nil "Quit"))
 
-  (setq! compilation-ask-about-save nil
-         compilation-always-kill t
+  (setq! compilation-always-kill t
          compilation-scroll-output 'first-error
          compilation-context-lines 2
          compilation-environment '("TERM=xterm"))
@@ -2755,11 +2754,13 @@ When optional argument is non-nil, refresh cached heading."
 
       (cond
        ((projectile-project-p)
+        (projectile-save-project-buffers)
         (setq +compile-buffer-name
               (format "*[%s] - Compile %s*"
                       (projectile-project-name)
                       (file-name-nondirectory (+compile-info-path info)))))
        (t
+        (save-some-buffers t)
         (setq +compile-buffer-name (format "*Compile %s*" (+compile-info-path info)))))
 
       (setq buffer (get-buffer-create +compile-buffer-name))
