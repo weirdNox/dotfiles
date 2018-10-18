@@ -1540,6 +1540,15 @@ fundamental-mode) for performance sake."
          inferior-octave-prompt "^octave\\(octave\\|[ >]\\)*"))
 #+END_SRC
 
+*** MIPS
+#+BEGIN_SRC emacs-lisp
+(use-package mips-mode
+  :config
+  (setq! mips-operator-column    (* tab-width 2)
+         mips-operands-column (+ (* tab-width 2) mips-operator-column)
+         mips-comments-column 40))
+#+END_SRC
+
 *** Web
 #+BEGIN_SRC emacs-lisp
 (use-package web-mode :ensure
