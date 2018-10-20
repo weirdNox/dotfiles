@@ -1530,7 +1530,7 @@ fundamental-mode) for performance sake."
   (add-hook  'TeX-after-compilation-finished-functions #'TeX-revert-document-buffer))
 #+END_SRC
 
-*** Octave
+*** MATLAB & Octave
 #+BEGIN_SRC emacs-lisp
 (use-package octave
   :mode (("\\.m\\'" . octave-mode))
@@ -1538,6 +1538,10 @@ fundamental-mode) for performance sake."
   (setq! inferior-octave-startup-args '("-i" "--line-editing")
          inferior-octave-prompt-read-only t
          inferior-octave-prompt "^octave\\(octave\\|[ >]\\)*"))
+
+(use-package matlab :ensure matlab-mode
+  :config
+  (setq! matlab-shell-command-switches '("-nodesktop" "-nosplash")))
 #+END_SRC
 
 *** MIPS
@@ -1805,27 +1809,42 @@ fundamental-mode) for performance sake."
 
 (org-babel-do-load-languages
  'org-babel-load-languages
- '((gnuplot . t)
-   (octave . t)
-   (python . t)
-   (latex . t)
-   (shell . t)
-   (calc . t)))
+ '((calc    . t)
+   (gnuplot . t)
+   (latex   . t)
+   (matlab  . t)
+   (octave  . t)
+   (python  . t)
+   (shell   . t)))
 
 (add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images)
+
+(setq! org-babel-default-header-args:matlab '((:session . "*MATLAB*")))
 #+END_SRC
 
-***** Octave
+***** MATLAB & Octave
 #+BEGIN_SRC emacs-lisp
 (use-package ob-octave
   :config
-  ;; NOTE(nox): Remove whitespace from beginning when printing output
-  (defun +babel-octave*trim-output (orig-func session body result-type &optional matlabp)
-    (let ((result (funcall orig-func session body result-type matlabp)))
-      (if (eq result-type 'output)
-          (string-trim-left result)
-        result)))
-  (advice-add 'org-babel-octave-evaluate-session :around #'+babel-octave*trim-output))
+  (setq! org-babel-octave-wrapper-method
+         "%s
+if ischar(ans) || isstring(ans), fid = fopen('%s', 'w'); fprintf(fid, '%%s\\n', ans); fclose(fid);
+else, dlmwrite('%s', ans, '\\t')
+end")
+
+  (defun +babel-octave*evaluate-session (orig-func session body result-type &optional matlabp)
+    (cl-letf* (((symbol-function #'org-babel-strip-quotes) 'identity)
+               ((symbol-function #'org-trim)
+                (lambda (string)
+                  (cond
+                   (matlabp
+                    (setq string (string-trim-right (replace-regexp-in-string "\\`[^\n]*\n*" "" string)
+                                                    "\n"))
+                    (if (string-empty-p string) "" string))
+                   (t string)))))
+      (funcall orig-func session body result-type matlabp)))
+
+  (advice-add 'org-babel-octave-evaluate-session :around #'+babel-octave*evaluate-session))
 #+END_SRC
 
 ***** Sessions
