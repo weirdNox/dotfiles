@@ -2751,7 +2751,8 @@ When optional argument is non-nil, refresh cached heading."
   (let ((chosen-cons (and +compile-info (cons (+compile-info-path +compile-info) +compile-info)))
         (calling-file-name (or (buffer-file-name) ""))
         (set-default (equal arg '(16)))
-        cons-list)
+        (num-windows-before (length (window-list)))
+        existing-window cons-list)
 
     ;; NOTE(nox): Find script files in parent folders
     (dolist (script-name +compile-script-names)
@@ -2791,11 +2792,8 @@ When optional argument is non-nil, refresh cached heading."
         (save-some-buffers t)
         (setq +compile-buffer-name (format "*Compile %s*" (+compile-info-path info)))))
 
-      (setq buffer (get-buffer-create +compile-buffer-name))
-
-      (if (= (length (window-list)) 1)
-          (setf (+compile-info-should-delete-window info) t)
-        (unless (get-buffer-window buffer) (setf (+compile-info-should-delete-window info) nil)))
+      (setq buffer (get-buffer-create +compile-buffer-name)
+            existing-window (get-buffer-window buffer))
 
       (cond ((eq (+compile-info-type info) 'make)
              (setq command "make"
@@ -2818,6 +2816,10 @@ When optional argument is non-nil, refresh cached heading."
         (cd (file-name-directory (+compile-info-path info)))
         (compilation-start (concat command " " command-args) nil #'+compile-get-buffer-name)
         (setq-local +compile-info info))
+
+      (if (= (length (window-list)) num-windows-before)
+          (unless existing-window (setf (+compile-info-should-delete-window info) nil))
+        (setf (+compile-info-should-delete-window info) t))
 
       (puthash (+compile-info-path info) info +compile-info-table))))
 #+END_SRC
