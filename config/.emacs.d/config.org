@@ -727,7 +727,7 @@ with functions that require it."
        window-divider-default-places t
        window-divider-default-bottom-width 1
        window-divider-default-right-width 1
-       frame-title-format '("%b - Emacs")
+       frame-title-format '("Emacs - %b")
        tooltip-hide-delay 3600)
 
 (fset 'yes-or-no-p 'y-or-n-p)
