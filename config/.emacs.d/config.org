@@ -444,10 +444,6 @@ called. The buffer to be switched to is current when these hooks run.")
          ("melpa" . "https://melpa.org/packages/")
          ("org"   . "https://orgmode.org/elpa/")))
 
-(unless (bound-and-true-p gnutls-verify-error)
-  (dolist (archive package-archives)
-    (setcdr archive (replace-regexp-in-string "^https://" "http://" (cdr archive) t nil))))
-
 (package-initialize)
 #+END_SRC
 
@@ -658,15 +654,6 @@ symbols.
        kept-new-versions 10
        kept-old-versions 2
        version-control t)
-#+END_SRC
-
-*** Security
-#+BEGIN_SRC emacs-lisp
-(setq! gnutls-verify-error (not (getenv "INSECURE"))
-       tls-checktrust gnutls-verify-error
-       tls-program (list "gnutls-cli --x509cafile %t -p %p %h"
-                         "gnutls-cli -p %p %h"
-                         "openssl s_client -connect %h:%p -no_ssl2 -no_ssl3 -ign_eof"))
 #+END_SRC
 
 *** Set indirect buffer name
