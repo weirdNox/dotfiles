@@ -3159,6 +3159,16 @@ and append it."
   (setq! eshell-directory-name (concat nox-cache-dir "eshell/")))
 #+END_SRC
 
+*** GDB
+#+BEGIN_SRC emacs-lisp
+(use-package gdb-mi :quelpa (gdb-mi :fetcher git
+                                    :url "https://github.com/weirdNox/emacs-gdb.git"
+                                    :files ("*.el" "*.c" "*.h" "Makefile"))
+  :init
+  (fmakunbound 'gdb)
+  (fmakunbound 'gdb-enable-debug))
+#+END_SRC
+
 *** Git
 #+BEGIN_SRC emacs-lisp
 (use-package magit :ensure
