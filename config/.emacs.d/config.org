@@ -1972,7 +1972,8 @@ some heuristics to guess the result."
    org-agenda-clockreport-parameter-plist `(:link t :maxlevel 6 :fileskip0 t :compact t :narrow 100)
    org-agenda-columns-add-appointments-to-effort-sum t
    org-agenda-dim-blocked-tasks nil
-   org-agenda-time-grid '((daily today require-timed) nil "......" "----------------"))
+   org-agenda-time-grid '((daily today require-timed) nil "......" "----------------")
+   org-agenda-sorting-strategy '((agenda habit-down time-up timestamp-up priority-down category-keep)))
 
   (add-hook 'org-agenda-mode-hook 'nox|org-offer-all-agenda-tags)
 #+END_SRC
