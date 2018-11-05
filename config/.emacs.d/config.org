@@ -3178,7 +3178,8 @@ and append it."
 (use-package magit :ensure
   :when (executable-find "git")
   :config
-  (setq! magit-diff-refine-hunk 'all)
+  (setq! magit-diff-refine-hunk 'all
+         magit-bury-buffer-function 'magit-mode-quit-window)
   (magit-define-popup-switch 'magit-merge-popup
     ?h "Allow unrelated histories" "--allow-unrelated-histories"))
 #+END_SRC
