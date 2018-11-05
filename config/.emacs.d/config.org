@@ -2794,7 +2794,10 @@ When optional argument is non-nil, refresh cached heading."
 
       (when (or (not (+compile-info-args info)) set-default) (setf (+compile-info-args info) command-args))
 
-      (setq command-args (replace-regexp-in-string (regexp-quote "%f") (shell-quote-argument calling-file-name)
+      (setq command-args (replace-regexp-in-string (regexp-quote "%f")
+                                                   (shell-quote-argument
+                                                    (or (file-remote-p calling-file-name 'localname)
+                                                        calling-file-name))
                                                    command-args))
 
       (setf (+compile-info-last-time info) (current-time))
