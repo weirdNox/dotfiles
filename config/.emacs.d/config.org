@@ -1967,7 +1967,7 @@ some heuristics to guess the result."
    org-agenda-skip-scheduled-if-done t
    org-agenda-skip-timestamp-if-done t
    org-agenda-skip-deadline-prewarning-if-scheduled 'pre-scheduled
-   org-agenda-skip-scheduled-if-deadline-is-shown t
+   org-agenda-skip-scheduled-if-deadline-is-shown 'not-today
    org-agenda-block-separator ""
    org-agenda-clockreport-parameter-plist `(:link t :maxlevel 6 :fileskip0 t :compact t :narrow 100)
    org-agenda-columns-add-appointments-to-effort-sum t
