@@ -1954,11 +1954,21 @@ some heuristics to guess the result."
     "P" #'+agenda/toggle-private
     "W" #'+agenda/toggle-weekly-review)
 
+  (defun +agenda|skip-deadline-prewarning-if-deadline-is-visible ()
+    (and (boundp 'deadline-items)
+         (let ((deadline (org-agenda--timestamp-to-absolute (match-string 1)))
+               (date-abs (calendar-absolute-from-gregorian date))
+               (span (or (car (last org-agenda-overriding-arguments)) org-agenda-span)))
+           (and (> deadline date-abs)
+                (< deadline (+ today (org-agenda-span-to-ndays span date-abs)))))
+         (or (outline-next-heading) (point-max))))
+
   (setq!
    org-agenda-custom-commands
    '(("n" "Agenda"
       ((agenda "" ((org-agenda-span 3)
-                   (org-agenda-prefix-format " %(+agenda-schedule-get-prefix)%?-12t% s")))
+                   (org-agenda-prefix-format " %(+agenda-schedule-get-prefix)%?-12t% s")
+                   (org-agenda-skip-function #'+agenda|skip-deadline-prewarning-if-deadline-is-visible)))
        (+agenda-inbox nil ((org-agenda-files (list org-default-notes-file))))
        (+agenda-tasks nil ((org-agenda-files (list nox-org-agenda-file)))))))
 
