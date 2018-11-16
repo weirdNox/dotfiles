@@ -511,15 +511,13 @@ symbols.
   :init
   (setq! quelpa-dir (concat nox-packages-dir "quelpa-cache/")
          quelpa-verbose nox-debug-mode
-     quelpa-melpa-recipe-stores nil
-     quelpa-checkout-melpa-p nil
-     quelpa-update-melpa-p nil
-     quelpa-self-upgrade-p nil))
+         quelpa-melpa-recipe-stores nil
+         quelpa-checkout-melpa-p nil
+         quelpa-update-melpa-p nil
+         quelpa-self-upgrade-p nil))
 
-(use-package quelpa-use-package :ensure)
-
-(require 'quelpa)
-(require 'quelpa-use-package)
+(use-package quelpa-use-package :ensure
+  :demand)
 #+END_SRC
 
 **** Async package byte compilation
