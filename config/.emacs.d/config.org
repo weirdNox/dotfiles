@@ -952,7 +952,13 @@ Disable fringes in the minibuffer window.
 #+BEGIN_SRC emacs-lisp
 (use-package ivy :ensure
   :demand
-  :general ("C-x b" 'ivy-switch-buffer)
+  :general
+  ("C-x b"  'ivy-switch-buffer)
+  (:keymaps 'ivy-minibuffer-map
+            "RET" 'ivy-alt-done
+            "C-j" 'ivy-done)
+  (:keymaps 'ivy-minibuffer-map "C-r" 'counsel-minibuffer-history)
+
   :config
   (setq! ivy-count-format "(%d/%d) "
          ivy-extra-directories nil
@@ -1000,12 +1006,6 @@ Needed for ivy fuzzy matching.
 #+BEGIN_SRC emacs-lisp
 (use-package counsel :ensure
   :demand
-  :general
-  (:keymaps 'ivy-minibuffer-map
-            "<return>" 'ivy-alt-done
-            "C-j" 'ivy-done)
-  (:keymaps 'ivy-minibuffer-map "C-r" 'counsel-minibuffer-history)
-
   :config
   (defun counsel-find-file-as-root (x)
     "Find file X with root privileges."
@@ -3295,8 +3295,10 @@ and append it."
   "<backtab>" #'indent-for-tab-command
   "<C-tab>" #'indent-region
   "M-o" #'other-window
-  "M-O" (lambda! (other-window -1))
   "C-x C-c" #'nox/exit-emacs)
+
+(when (display-graphic-p)
+  (general-def "M-O" (lambda! (other-window -1))))
 
 (nox-leader
   :infix "f"
