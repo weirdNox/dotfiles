@@ -2028,7 +2028,7 @@ some heuristics to guess the result."
 (defun +agenda-format-entry (prefix entry)
   (let ((props (list 'nox-custom-agenda t
                      'mouse-face 'highlight
-                     'undone-face nil
+                     'undone-face 'default
                      'done-face 'org-agenda-done
                      'org-marker (+agenda-entry-marker entry)
                      'org-hd-marker (+agenda-entry-marker entry)
