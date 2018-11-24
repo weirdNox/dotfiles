@@ -1,0 +1,75 @@
+comment_char %
+escape_char /
+
+LC_IDENTIFICATION
+title      "Custom locale"
+source     ""
+address    ""
+contact    ""
+email      ""
+tel        ""
+fax        ""
+language   ""
+territory  ""
+revision   ""
+date       ""
+
+category "i18n:2012";LC_IDENTIFICATION
+category "i18n:2012";LC_CTYPE
+category "i18n:2012";LC_COLLATE
+category "i18n:2012";LC_TIME
+category "i18n:2012";LC_NUMERIC
+category "i18n:2012";LC_MONETARY
+category "i18n:2012";LC_MESSAGES
+category "i18n:2012";LC_PAPER
+category "i18n:2012";LC_NAME
+category "i18n:2012";LC_ADDRESS
+category "i18n:2012";LC_TELEPHONE
+category "i18n:2012";LC_MEASUREMENT
+END LC_IDENTIFICATION
+
+LC_TIME
+copy "en_DK"
+END LC_TIME
+
+LC_NUMERIC
+decimal_point   "."
+thousands_sep   ""
+grouping        0;0
+END LC_NUMERIC
+
+LC_COLLATE
+copy "POSIX"
+END LC_COLLATE
+
+LC_CTYPE
+copy "pt_PT"
+END LC_CTYPE
+
+LC_MESSAGES
+copy "en_US"
+END LC_MESSAGES
+
+LC_MONETARY
+copy "pt_PT"
+END LC_MONETARY
+
+LC_PAPER
+copy "pt_PT"
+END LC_PAPER
+
+LC_TELEPHONE
+copy "pt_PT"
+END LC_TELEPHONE
+
+LC_MEASUREMENT
+copy "pt_PT"
+END LC_MEASUREMENT
+
+LC_NAME
+copy "pt_PT"
+END LC_NAME
+
+LC_ADDRESS
+copy "pt_PT"
+END LC_ADDRESS
