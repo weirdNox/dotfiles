@@ -1855,34 +1855,46 @@ end")
 
 (defun +babel/restart-session-to-point (&optional arg)
   "Restart session up to the src-block in the current point.
-Goes to beginning of buffer and executes each code block with
-`org-babel-execute-src-block' that has the same language and
-session as the current block. ARG has same meaning as in
+Goes to beginning of (narrowed) buffer and executes each code block with `org-babel-execute-src-block'
+that has the same language and session as the current block. ARG has same meaning as in
 `org-babel-execute-src-block'."
   (interactive "P")
   (org-babel-when-in-src-block
-   (let ((search-bound (point-marker))
-         (info (+babel-get-src-info))
-         break)
-     (org-with-wide-buffer
-      (goto-char (point-min))
-      (while (and (not break) (re-search-forward org-babel-src-block-regexp nil t))
-        (goto-char (match-beginning 0))
-        (if (> (point) search-bound)
-            (setq break t)
-          (when (equal info (+babel-get-src-info)) (org-babel-execute-src-block arg)))
-        (forward-line))))))
+   (save-excursion
+     (let ((search-bound (point-marker))
+           (info (+babel-get-src-info))
+           break)
+       (goto-char (point-min))
+       (while (and (not break) (re-search-forward org-babel-src-block-regexp nil t))
+         (goto-char (match-beginning 0))
+         (if (> (point) search-bound)
+             (setq break t)
+           (when (equal info (+babel-get-src-info)) (org-babel-execute-src-block arg)))
+         (forward-line))))))
+
+(defun +babel/execute-region (&optional arg)
+  "Execute all code blocks inside region. ARG has same meaning as in `org-babel-execute-src-block'."
+  (interactive "P")
+  (when (region-active-p)
+    (save-excursion
+      (let ((search-bound (region-end)) break)
+        (goto-char (region-beginning))
+        (while (and (not break) (re-search-forward org-babel-src-block-regexp nil t))
+          (goto-char (match-beginning 0))
+          (if (> (point) search-bound)
+              (setq break t)
+            (org-babel-execute-src-block arg))
+          (forward-line))))))
 
 (defun +babel/remove-session-results ()
-  "Remove results from every code block of the selected session, in buffer."
+  "Remove results from every code block of the selected session, in (narrowed) buffer."
   (interactive)
   (org-babel-when-in-src-block
    (let ((info (+babel-get-src-info)))
-     (org-with-wide-buffer
-      (goto-char (point-min))
-      (while (re-search-forward org-babel-src-block-regexp nil t)
-        (when (equal info (+babel-get-src-info))
-          (org-babel-remove-result)))))))
+     (goto-char (point-min))
+     (while (re-search-forward org-babel-src-block-regexp nil t)
+       (when (equal info (+babel-get-src-info))
+         (org-babel-remove-result))))))
 #+END_SRC
 
 **** Fix blank line insertion in lists
