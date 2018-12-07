@@ -869,7 +869,8 @@ ARGS are the same as in `custom-set-faces'."
 (use-package doom-themes :ensure
   :config
   (setq! doom-one-brighter-comments t
-         doom-one-comment-bg nil)
+         doom-one-comment-bg nil
+         doom-peacock-brighter-modeline t)
 
   (use-package doom-themes-org :after org :demand)
 
@@ -883,7 +884,6 @@ ARGS are the same as in `custom-set-faces'."
      '(outline-1 ((t . (:height 1.0))))
      '(outline-2 ((t . (:height 1.0))))
      '(outline-3 ((t . (:height 1.0))))
-     '(git-commit-overlong-summary ((t . (:inherit shadow))))
      `(org-special-keyword ((t . (:foreground ,(face-attribute 'shadow :foreground))))))))
 #+END_SRC
 
@@ -937,7 +937,7 @@ Disable fringes in the minibuffer window.
 #+BEGIN_SRC emacs-lisp
 (defun nox-setup-appearance (frame)
   (with-selected-frame frame
-    (load-theme 'doom-one t)
+    (load-theme 'doom-peacock t)
     (nox/change-font)
     (when (> (window-width) 100) (split-window-right))
     (setq! system-time-locale "C")))
