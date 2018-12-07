@@ -124,6 +124,10 @@ Also create the directories if they don't exist.
     (save-restriction
       (widen)
       (buffer-substring-no-properties (point-min) (point-max)))))
+
+(defun +color-name-lighter-than (a b)
+  (> (nth 2 (apply #'color-rgb-to-hsl (color-name-to-rgb a)))
+     (nth 2 (apply #'color-rgb-to-hsl (color-name-to-rgb b)))))
 #+END_SRC
 
 **** Hooks
@@ -1681,6 +1685,22 @@ fundamental-mode) for performance sake."
  org-treat-S-cursor-todo-selection-as-state-change nil
  org-columns-default-format "%80ITEM(Task) %10Effort(Effort){:} %10CLOCKSUM"
  org-global-properties '(("Effort_ALL" . "0:15 0:30 0:45 1:00 1:30 2:00 3:00 4:00 5:00 7:00")))
+
+(defconst +org-keywords-normal-faces
+  '(("TODO"      . (:inherit org-todo :weight normal))
+    ("NEXT"      . (:inherit org-todo :weight normal))
+    ("HOLD"      . (:inherit org-todo :weight normal))
+    ("WAITING"   . (:inherit org-todo :weight normal))
+    ("DONE"      . (:inherit org-done :weight normal))
+    ("CANCELLED" . (:inherit org-done :weight normal))))
+
+(defconst +org-keywords-bold-faces
+  '(("TODO"      . (:inherit org-todo :weight bold))
+    ("NEXT"      . (:inherit org-todo :weight bold))
+    ("HOLD"      . (:inherit org-todo :weight bold))
+    ("WAITING"   . (:inherit org-todo :weight bold))
+    ("DONE"      . (:inherit org-done :weight bold))
+    ("CANCELLED" . (:inherit org-done :weight bold))))
 #+END_SRC
 
 **** Refiling
@@ -2031,19 +2051,17 @@ some heuristics to guess the result."
 
 **** Renderer
 #+BEGIN_SRC emacs-lisp
-(defconst +agenda-projects-not-task-faces '(("NEXT" . (:inherit org-todo :weight normal))
-                                            ("TODO" . (:inherit org-todo :weight normal))))
-
-(defconst +agenda-projects-task-faces '(("NEXT" . (:inherit org-todo :weight bold))
-                                        ("TODO" . (:inherit org-todo :weight bold))))
+(defvar +agenda-structure-face nil)
+(defvar +agenda-entry-face nil)
 
 (defun +agenda-filter-tags (tag) (unless (string-match org-agenda-hide-tags-regexp tag) tag))
 
 (defun +agenda-format-entry (prefix entry)
   (let ((props (list 'nox-custom-agenda t
-                     'mouse-face 'highlight
-                     'undone-face 'default
+                     'face (or +agenda-entry-face 'default)
+                     'undone-face (or +agenda-entry-face 'default)
                      'done-face 'org-agenda-done
+                     'mouse-face 'highlight
                      'org-marker (+agenda-entry-marker entry)
                      'org-hd-marker (+agenda-entry-marker entry)
                      'todo-state (+agenda-entry-todo entry)
@@ -2123,9 +2141,8 @@ some heuristics to guess the result."
         (org-add-props (+agenda-entry-text entry) nil 'face 'org-date     'nox-face 'org-date)))
 
       (let ((org-todo-keyword-faces (if (+agenda-entry-project-status entry)
-                                        +agenda-projects-not-task-faces
-                                      +agenda-projects-task-faces))
-
+                                        +org-keywords-normal-faces
+                                      +org-keywords-bold-faces))
             (prefix (+agenda-project-get-prefix (not (+agenda-entry-project-status entry))
                                                 parent-continuations
                                                 (+agenda-entry-low-effort entry))))
@@ -2154,7 +2171,7 @@ some heuristics to guess the result."
   (when data
     (let ((begin (point)))
       (+agenda-separator)
-      (insert (org-add-props title nil 'face 'org-agenda-structure) "\n")
+      (insert (org-add-props title nil 'face (or +agenda-structure-face 'org-agenda-structure)) "\n")
       (funcall (or printer #'+agenda-simple-printer) data)
       (add-text-properties begin (point-max) `(org-agenda-type tags)))))
 #+END_SRC
@@ -2380,9 +2397,13 @@ some heuristics to guess the result."
         (+agenda-render-block +agenda-projects                    "Projetos" #'+agenda-project-printer)
         (+agenda-render-block (nreverse +agenda-isolated-tasks)   "Tarefas isoladas")
         (+agenda-render-block (nreverse +agenda-low-priority)     "Baixa prioridade")
-        (+agenda-render-block (nreverse +agenda-archivable-tasks) "Tarefas a arquivar")
-        (+agenda-render-block (nreverse +agenda-planned-tasks)    "Tarefas planeadas")
-        (+agenda-render-block (nreverse +agenda-hold-tasks)       "Tarefas em espera")))))
+
+        (let ((+agenda-structure-face '(:inherit shadow :weight bold))
+              (+agenda-entry-face 'shadow)
+              (org-todo-keyword-faces +org-keywords-normal-faces))
+          (+agenda-render-block (nreverse +agenda-archivable-tasks) "Tarefas a arquivar")
+          (+agenda-render-block (nreverse +agenda-planned-tasks)    "Tarefas planeadas")
+          (+agenda-render-block (nreverse +agenda-hold-tasks)       "Tarefas em espera"))))))
 #+END_SRC
 
 **** Private information
