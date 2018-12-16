@@ -693,7 +693,8 @@ with functions that require it."
                      ns-use-native-fullscreen nil
                      ns-pop-up-frames nil))
 
-      (IS-LINUX (setq! x-underline-at-descent-line t))
+      (IS-LINUX (setq! x-underline-at-descent-line t
+                       x-frame-normalize-before-maximize t))
 
       (IS-WINDOWS (setq! w32-get-true-file-attributes nil)))
 #+END_SRC
