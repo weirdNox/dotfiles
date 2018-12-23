@@ -1841,16 +1841,22 @@ else, dlmwrite('%s', ans, '\\t')
 end")
 
   (defun +babel-octave*evaluate-session (orig-func session body result-type &optional matlabp)
-    (cl-letf* (((symbol-function #'org-babel-strip-quotes) 'identity)
-               ((symbol-function #'org-trim)
-                (lambda (string)
-                  (cond
-                   (matlabp
-                    (setq string (string-trim-right (replace-regexp-in-string "\\`[^\n]*\n*" "" string)
-                                                    "\n"))
-                    (if (string-empty-p string) "" string))
-                   (t string)))))
-      (funcall orig-func session body result-type matlabp)))
+    (let ((body-to-remove body))
+      (cl-letf* (((symbol-function #'org-babel-strip-quotes) 'identity)
+                 ((symbol-function #'org-trim)
+                  (lambda (string)
+                    (cond
+                     (matlabp
+                      (let ((N (compare-strings string nil nil body-to-remove nil nil)))
+                        (if (eq N t)
+                            ""
+                          (setq N (1- (abs N))
+                                body-to-remove (substring body-to-remove N)
+                                string (string-trim-right (string-trim-left (substring string N) "[\n]+")
+                                        "\n"))
+                          (if (string-empty-p string) "" string))))
+                     (t string)))))
+        (funcall orig-func session body result-type matlabp))))
 
   (advice-add 'org-babel-octave-evaluate-session :around #'+babel-octave*evaluate-session))
 #+END_SRC
