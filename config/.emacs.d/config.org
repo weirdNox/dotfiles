@@ -2071,33 +2071,35 @@ some heuristics to guess the result."
 (defun +agenda-filter-tags (tag) (unless (string-match org-agenda-hide-tags-regexp tag) tag))
 
 (defun +agenda-format-entry (prefix entry)
-  (let ((props (list 'nox-custom-agenda t
-                     'face (or +agenda-entry-face 'default)
-                     'undone-face (or +agenda-entry-face 'default)
-                     'done-face 'org-agenda-done
-                     'mouse-face 'highlight
-                     'org-marker (+agenda-entry-marker entry)
-                     'org-hd-marker (+agenda-entry-marker entry)
-                     'todo-state (+agenda-entry-todo entry)
-                     'org-todo-regexp org-todo-regexp
-                     'org-not-done-regexp org-not-done-regexp
-                     'org-complex-heading-regexp org-complex-heading-regexp
-                     'org-highest-priority org-highest-priority
-                     'org-lowest-priority org-lowest-priority
-                     'tags (mapcar 'org-downcase-keep-props (+agenda-entry-tags entry))
-                     'format `(nil ,prefix)))
-        (text
-         (concat prefix
-                 (when (+agenda-entry-todo entry) (concat (+agenda-entry-todo entry) " "))
-                 (when (+agenda-entry-priority entry)
-                   (string ?\[ ?# (+agenda-entry-priority entry) ?\] ? ))
-                 (+agenda-entry-text entry)
-                 (when (+agenda-entry-tags entry)
-                   (concat " :"
-                           (mapconcat #'identity
-                                      (delq nil (mapcar #'+agenda-filter-tags (+agenda-entry-tags entry)))
-                                      ":")
-                           ":")))))
+  (let* ((entry-text (+agenda-entry-text entry))
+         (wanted-face (get-text-property 0 'face entry-text))
+         (props (list 'nox-custom-agenda t
+                      'face (or +agenda-entry-face wanted-face 'default)
+                      'undone-face (or +agenda-entry-face wanted-face 'default)
+                      'done-face 'org-agenda-done
+                      'mouse-face 'highlight
+                      'org-marker (+agenda-entry-marker entry)
+                      'org-hd-marker (+agenda-entry-marker entry)
+                      'todo-state (+agenda-entry-todo entry)
+                      'org-todo-regexp org-todo-regexp
+                      'org-not-done-regexp org-not-done-regexp
+                      'org-complex-heading-regexp org-complex-heading-regexp
+                      'org-highest-priority org-highest-priority
+                      'org-lowest-priority org-lowest-priority
+                      'tags (mapcar 'org-downcase-keep-props (+agenda-entry-tags entry))
+                      'format `(nil ,prefix)))
+         (text
+          (concat prefix
+                  (when (+agenda-entry-todo entry) (concat (+agenda-entry-todo entry) " "))
+                  (when (+agenda-entry-priority entry)
+                    (string ?\[ ?# (+agenda-entry-priority entry) ?\] ? ))
+                  entry-text
+                  (when (+agenda-entry-tags entry)
+                    (concat " :"
+                            (mapconcat #'identity
+                                       (delq nil (mapcar #'+agenda-filter-tags (+agenda-entry-tags entry)))
+                                       ":")
+                            ":")))))
 
     (add-text-properties (length prefix) (length text) '(org-heading t) text)
     (setq text (concat (org-add-props text props) "\n"))
