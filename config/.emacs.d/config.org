@@ -1797,8 +1797,7 @@ fundamental-mode) for performance sake."
 \\addtolength{\\textheight}{-\\footskip}
 \\addtolength{\\textheight}{-3cm}
 \\setlength{\\topmargin}{1.5cm}
-\\addtolength{\\topmargin}{-2.54cm}
-\\tikzset{every picture/.style={color=fg}}")
+\\addtolength{\\topmargin}{-2.54cm}")
 
 (add-hook! org-mode #'turn-on-org-cdlatex)
 (general-def :keymaps 'org-cdlatex-mode-map "^" 'org-self-insert-command "_" 'org-self-insert-command)
