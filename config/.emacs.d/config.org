@@ -1736,6 +1736,52 @@ fundamental-mode) for performance sake."
        org-log-into-drawer t)
 #+END_SRC
 
+**** Exporting
+#+BEGIN_SRC emacs-lisp
+(defun +org-export-merge-sections (data _backend info)
+  (org-element-map data 'headline
+    (lambda (hl)
+      (let ((sections
+             (cl-loop
+              for el in (org-element-map (org-element-contents hl)
+                            '(headline section) #'identity info)
+              until (eq (org-element-type el) 'headline)
+              collect el)))
+        (when (and sections
+                   (> (length sections) 1))
+          (apply #'org-element-adopt-elements
+                 (car sections)
+                 (cl-mapcan (lambda (s) (org-element-contents s))
+                            (cdr sections)))
+          (mapc #'org-element-extract-element (cdr sections)))))
+    info))
+
+(defun +org-export-ignore-headlines-routine (object)
+  (let* ((promote-children (member "ignore" (org-element-property :tags object)))
+         (ignore (or (member "ignore_nested" (org-element-property :tags object)) promote-children)))
+    (when ignore
+      (mapc (lambda (el)
+              (when promote-children
+                (org-element-map el 'headline
+                  (lambda (el)
+                    (when (equal 'headline (org-element-type el))
+                      (org-element-put-property el :level (1- (org-element-property :level el)))))))
+              (org-element-insert-before el object))
+            (org-element-contents object))
+      (org-element-extract-element object))))
+
+(defun +org-export-ignore-headlines (data backend info)
+  "Remove headlines tagged \"ignore\" retaining contents and promoting children.
+Each headline tagged \"ignore\" will be removed retaining its
+contents and promoting any children headlines to the level of the
+parent."
+  (org-element-map data 'headline #'+org-export-ignore-headlines-routine info nil)
+  (+org-export-merge-sections data backend info)
+  data)
+
+(add-hook 'org-export-filter-parse-tree-functions #'+org-export-ignore-headlines)
+#+END_SRC
+
 **** Latex
 #+BEGIN_SRC emacs-lisp
 (defun +org-compile-latex (source)
