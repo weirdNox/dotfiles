@@ -3433,10 +3433,8 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
   "<backtab>" #'indent-for-tab-command
   "<C-tab>" #'indent-region
   "M-o" #'other-window
+  "M-O" (lambda! (other-window -1))
   "C-x C-c" #'nox/exit-emacs)
-
-(when (display-graphic-p)
-  (general-def "M-O" (lambda! (other-window -1))))
 
 (nox-leader
   :infix "f"
