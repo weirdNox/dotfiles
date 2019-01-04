@@ -739,9 +739,10 @@ with functions that require it."
 (window-divider-mode)
 #+END_SRC
 
-**** Faster (?) JIT font locking
+**** Faster (?) font locking
 #+BEGIN_SRC emacs-lisp
-(setq! jit-lock-defer-time 0
+(setq! font-lock-maximum-decoration 2
+       jit-lock-defer-time 0
        jit-lock-stealth-time 2.5
        jit-lock-contextually t
        jit-lock-context-time 2)
