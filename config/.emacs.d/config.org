@@ -763,7 +763,7 @@ with functions that require it."
   :config
   (setq show-paren-delay 0
         show-paren-highlight-openparen t
-        show-paren-when-point-inside-paren t)
+        show-paren-when-point-inside-paren nil)
   (show-paren-mode))
 #+END_SRC
 
