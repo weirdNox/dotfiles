@@ -739,12 +739,12 @@ with functions that require it."
 (window-divider-mode)
 #+END_SRC
 
-**** Better (?) JIT font locking
+**** Faster (?) JIT font locking
 #+BEGIN_SRC emacs-lisp
-(setq! jit-lock-defer-time nil
-       jit-lock-stealth-nice 0.1
-       jit-lock-stealth-time 0.2
-       jit-lock-stealth-verbose nil)
+(setq! jit-lock-defer-time 0
+       jit-lock-stealth-time 2.5
+       jit-lock-contextually t
+       jit-lock-context-time 2)
 #+END_SRC
 
 **** Highlight line
