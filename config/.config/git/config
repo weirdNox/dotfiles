@@ -4,8 +4,11 @@
 [rebase]
 	autosquash = true
 
-[include]
-    path = ~/.gitconfig_local
-
 [log]
 	date = iso
+
+[credential]
+	helper = cache
+
+[include]
+    path = ~/.gitconfig_local
