@@ -1795,7 +1795,7 @@ parent."
 (setq!
  org-latex-pdf-process #'+org-compile-latex
  org-preview-latex-default-process 'dvisvgm
- org-latex-packages-alist nil
+ org-latex-packages-alist '(("" "mathtools" t))
  org-latex-preview-ltxpng-directory (concat nox-cache-dir "org-latex/")
  org-format-latex-options '(:foreground default :background default :scale 1.7 :html-foreground "Black"
                             :html-background "Transparent" :html-scale 1.0
