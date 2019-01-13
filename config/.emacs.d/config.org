@@ -3173,9 +3173,22 @@ When optional argument is non-nil, refresh cached heading."
   :mode ("\\.pdf\\'" . pdf-view-mode)
   :commands (org-pdfview-open org-pdfview-store-link org-pdfview-complete-link)
   :general
-  (:keymaps 'pdf-view-mode-map "C-s" 'isearch-forward)
+  (:keymaps 'pdf-view-mode-map
+            "C-s" 'isearch-forward
+            "C-b" '+pdf-view-scroll-page-left
+            "C-f" '+pdf-view-scroll-page-right
+            "<M-mouse-4>" 'image-backward-hscroll
+            "<M-mouse-5>" 'image-forward-hscroll)
   :config
   (unless noninteractive (pdf-tools-install))
+
+  (defun +pdf-view-scroll-page-left ()
+    (interactive)
+    (image-backward-hscroll (window-width)))
+
+  (defun +pdf-view-scroll-page-right ()
+    (interactive)
+    (image-forward-hscroll (window-width)))
 
   ;; Adapted from https://github.com/markus1189/org-pdfview
   (defun org-pdfview-open (link)
