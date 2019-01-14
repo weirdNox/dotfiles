@@ -1618,7 +1618,7 @@ fundamental-mode) for performance sake."
 **** Appearance
 #+BEGIN_SRC emacs-lisp
 (setq! org-startup-indented t
-       org-startup-with-inline-images t
+       org-startup-with-inline-images nil
        org-startup-with-latex-preview t
        org-pretty-entities t
        org-image-actual-width '(700)
@@ -1877,8 +1877,6 @@ parent."
    (octave  . t)
    (python  . t)
    (shell   . t)))
-
-(add-hook 'org-babel-after-execute-hook 'org-redisplay-inline-images)
 
 (setq! org-babel-default-header-args:matlab '((:session . "*MATLAB*")))
 #+END_SRC
