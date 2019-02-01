@@ -1785,15 +1785,7 @@ parent."
 
 **** Latex
 #+BEGIN_SRC emacs-lisp
-(defun +org-compile-latex (source)
-  (shell-command (concat "latexmk "
-                         (cond ((string= org-latex-compiler "xelatex") "-xelatex ")
-                               ((string= org-latex-compiler "lualatex") "-lualatex ")
-                               (t "-pdf "))
-                         source)))
-
 (setq!
- org-latex-pdf-process #'+org-compile-latex
  org-preview-latex-default-process 'dvisvgm
  org-latex-packages-alist '(("" "mathtools" t))
  org-latex-preview-ltxpng-directory (concat nox-cache-dir "org-latex/")
