@@ -3357,7 +3357,7 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
   :config
   (setq! calendar-holidays
          '((holiday-fixed  1  1    "New Year's Day")
-           (holiday-easter-etc -47 "Carnival")
+           ;; (holiday-easter-etc -47 "Carnival")
            (holiday-easter-etc  -2 "Good Friday")
            (holiday-easter-etc   0 "Easter")
            (holiday-fixed  4 25    "Freedom Day")
