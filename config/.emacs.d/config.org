@@ -2000,6 +2000,13 @@ some heuristics to guess the result."
          (t 0))))))
 #+END_SRC
 
+**** Don't consider angular brackets as parentheses
+#+begin_src emacs-lisp
+(add-hook! org-mode
+  (modify-syntax-entry ?< "_" org-mode-syntax-table)
+  (modify-syntax-entry ?> "_" org-mode-syntax-table))
+#+end_src
+
 **** PDF Tools support
 #+BEGIN_SRC emacs-lisp
 (org-link-set-parameters
