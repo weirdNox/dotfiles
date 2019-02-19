@@ -1546,6 +1546,16 @@ fundamental-mode) for performance sake."
          mips-comments-column 40))
 #+END_SRC
 
+*** SPICE
+#+begin_src emacs-lisp
+(use-package spice-mode :ensure
+  :mode (("\\.sp\\'"  . spice-mode)
+         ("\\.cir\\'" . spice-mode)
+         ("\\.cdl\\'" . spice-mode)
+         ("\\.chi\\'" . spice-mode)
+         ("\\.mod\\'" . spice-mode)))
+#+end_src
+
 *** Web
 #+BEGIN_SRC emacs-lisp
 (use-package web-mode :ensure
