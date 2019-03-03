@@ -962,8 +962,10 @@ Disable fringes in the minibuffer window.
   ("C-x b"  'ivy-switch-buffer)
   (:keymaps 'ivy-minibuffer-map
             "RET" 'ivy-alt-done
-            "C-j" 'ivy-done)
-  (:keymaps 'ivy-minibuffer-map "C-r" 'counsel-minibuffer-history)
+            "C-j" 'ivy-done
+            "C-r" 'counsel-minibuffer-history
+            "<C-return>" 'ivy-restrict-to-matches
+            "S-SPC" nil)
 
   :config
   (setq! ivy-count-format "(%d/%d) "
