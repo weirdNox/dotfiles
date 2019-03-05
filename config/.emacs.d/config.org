@@ -1532,7 +1532,10 @@ fundamental-mode) for performance sake."
   :config
   (setq! inferior-octave-startup-args '("-i" "--line-editing")
          inferior-octave-prompt-read-only t
-         inferior-octave-prompt "^octave\\(octave\\|[ >]\\)*"))
+         inferior-octave-prompt "^octave\\(octave\\|[ >]\\)*"
+         octave-comment-char ?%
+         octave-comment-start (char-to-string octave-comment-char)
+         octave-block-comment-start (concat (make-string 2 octave-comment-char) " ")))
 
 (use-package matlab :ensure matlab-mode
   :config
