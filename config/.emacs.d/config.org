@@ -872,6 +872,15 @@ ARGS are the same as in `custom-set-faces'."
 
 **** Theme
 #+BEGIN_SRC emacs-lisp
+(use-package darktooth-theme :ensure
+  :config
+  (nox-add-customize-theme-hook 'darktooth
+    (nox-theme-set-faces
+     '(shadow ((t . (:inherit font-lock-comment-face))))
+     `(org-block ((t . (:background ,(ignore-errors (color-darken-name (face-attribute 'default :background) 2))))))
+     '(org-agenda-structure ((t . (:inherit font-lock-doc-face))))
+     '(hl-line ((t . (:background "#32302F")))))))
+
 (use-package doom-themes :ensure
   :config
   (setq! doom-one-brighter-comments t
@@ -943,14 +952,14 @@ Disable fringes in the minibuffer window.
 #+BEGIN_SRC emacs-lisp
 (defun nox-setup-appearance (frame)
   (with-selected-frame frame
-    (load-theme 'doom-peacock t)
+    (load-theme 'darktooth t)
     (nox/change-font)
     (when (> (window-width) 100) (split-window-right))
     (setq! system-time-locale "C")))
 
 (if (daemonp)
     (add-transient-hook! 'after-make-frame-functions 'nox-setup-appearance)
-  (nox-setup-appearance (selected-frame)))
+  (add-transient-hook! 'emacs-startup-hook (nox-setup-appearance (selected-frame))))
 #+END_SRC
 
 ** Minibuffer completion
