@@ -1,0 +1,56 @@
+# Custom TTY keyboard map based on the US map
+
+keymaps 0-2,4-6,8-9,12
+alt_is_meta
+include "qwerty-layout"
+include "linux-with-alt-and-altgr"
+include "compose.latin1"
+include "euro1.map"
+strings as usual
+
+              keycode   1 = Escape
+              keycode   2 = one              exclam
+              keycode   3 = two              at               at               nul              nul
+              keycode   4 = three            numbersign
+              keycode   5 = four             dollar           dollar           Control_backslash
+              keycode   6 = five             percent
+              keycode   7 = six              asciicircum
+              keycode   8 = seven            ampersand        braceleft        Control_underscore
+              keycode   9 = eight            asterisk         bracketleft      Delete
+              keycode  10 = nine             parenleft        bracketright
+              keycode  11 = zero             parenright       braceright
+              keycode  12 = minus            underscore       backslash        Control_underscore Control_underscore
+              keycode  13 = equal            plus
+              keycode  14 = Delete
+              keycode  15 = Tab
+              keycode  26 = bracketleft      braceleft
+              keycode  27 = bracketright     braceright       asciitilde       Control_bracketright
+              keycode  28 = Return
+              keycode  29 = Control
+              keycode  39 = semicolon        colon
+              keycode  40 = apostrophe       quotedbl
+              keycode  41 = grave            asciitilde
+              keycode  42 = Shift
+              keycode  43 = backslash        bar
+              keycode  51 = comma            less
+              keycode  52 = period           greater
+              keycode  53 = slash            question
+              keycode  54 = Shift
+              keycode  56 = Alt
+              keycode  57 = space
+              keycode  58 = Control # CapsLock = control
+              keycode  86 = less             greater          bar
+              keycode  97 = Control
+          alt keycode  28 = Meta_Control_m
+          alt keycode  54 = Caps_Lock # Alt + RightShift = CapsLock
+        shift keycode  15 = Meta_Tab
+control       keycode   6 = Control_bracketright
+control       keycode   7 = Control_asciicircum
+control       keycode  26 = Escape
+control       keycode  40 = Control_g
+control       keycode  41 = nul
+control       keycode  43 = Control_backslash
+control       keycode  53 = Control_underscore
+control       keycode  57 = nul
+control       keycode   4 = Escape
+control shift keycode  53 = Delete

@@ -1,4 +1,2 @@
-# This file should go to ~/.config/mimeapps.list
-
 [Default Applications]
 application/pdf=okularApplication_pdf.desktop
