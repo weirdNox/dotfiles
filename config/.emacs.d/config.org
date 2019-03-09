@@ -2033,7 +2033,13 @@ some heuristics to guess the result."
   (modify-syntax-entry ?> "_" org-mode-syntax-table))
 #+end_src
 
-**** PDF Tools support
+**** File associations
+#+begin_src emacs-lisp
+(setq! org-file-apps '((auto-mode . emacs))
+       org-file-apps-defaults-gnu '((remote . emacs) (system . default) (t . "xdg-open %s")))
+#+end_src
+
+***** PDF Tools support
 #+BEGIN_SRC emacs-lisp
 (org-link-set-parameters
  "pdfview"
