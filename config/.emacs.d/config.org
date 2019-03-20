@@ -1213,14 +1213,6 @@ Needed for ivy fuzzy matching.
   (setq! company-dabbrev-ignore-buffers #'nox-company-dabbrev-buffer-check))
 #+END_SRC
 
-**** Company box
-#+BEGIN_SRC emacs-lisp
-(use-package company-box :ensure
-  :ghook 'company-mode-hook
-  :config
-  (setq! company-box-enable-icon nil))
-#+END_SRC
-
 *** Navigation
 **** Avy
 #+BEGIN_SRC emacs-lisp
