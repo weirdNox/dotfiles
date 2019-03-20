@@ -2027,8 +2027,8 @@ some heuristics to guess the result."
 
 **** File associations
 #+begin_src emacs-lisp
-(setq! org-file-apps '((auto-mode . emacs))
-       org-file-apps-defaults-gnu '((remote . emacs) (system . default) (t . "xdg-open %s")))
+(setq! org-file-apps '(("pdf" . emacs))
+       org-file-apps-defaults-gnu '((remote . emacs) (system . "xdg-open %s") (t . system)))
 #+end_src
 
 ***** PDF Tools support
