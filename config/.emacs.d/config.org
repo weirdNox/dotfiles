@@ -2808,6 +2808,15 @@ When optional argument is non-nil, refresh cached heading."
 #+END_SRC
 
 ** Tools and utilities
+*** Calc
+#+begin_src emacs-lisp
+(use-package calc
+  :config
+  (setq! calc-group-digits t
+         calc-group-char " "
+         calc-float-format '(eng 15)))
+#+end_src
+
 *** Compilation
 **** General settings and bindings
 #+BEGIN_SRC emacs-lisp
