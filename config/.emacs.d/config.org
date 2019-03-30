@@ -2110,9 +2110,10 @@ some heuristics to guess the result."
        (< (org-duration-to-minutes effort-text) 20)))
 
 (cl-defstruct +agenda-entry
-  todo priority text tags planned low-effort marker is-tickler project-status children)
+  todo priority text tags planned low-effort marker is-tickler schedule-or-deadline-to-now
+  project-status children)
 
-(defun +agenda-entry (headline &optional tags)
+(defun +agenda-entry (headline &optional tags schedule-or-deadline)
   (let ((todo-type (org-element-property :todo-type headline))
         (effort (org-element-property :EFFORT headline))
         (tags (or tags (org-element-property :tags headline))))
@@ -2123,7 +2124,8 @@ some heuristics to guess the result."
      :tags tags
      :low-effort (+agenda-is-low-effort effort todo-type)
      :marker (org-agenda-new-marker (org-element-property :begin headline))
-     :is-tickler (member "TICKLER" tags))))
+     :is-tickler (member "TICKLER" tags)
+     :schedule-or-deadline-to-now (and schedule-or-deadline (org-time-stamp-to-now schedule-or-deadline)))))
 
 (defsubst +agenda-is-entry-planned (entry)
   (or (eq (+agenda-entry-project-status entry) 'planned)
@@ -2199,8 +2201,10 @@ some heuristics to guess the result."
 
 (defun +agenda-priority-sort (a b)
   (let ((pa (or (+agenda-entry-priority a) org-default-priority))
-        (pb (or (+agenda-entry-priority b) org-default-priority)))
-    (< pa pb)))
+        (ta (or (+agenda-entry-schedule-or-deadline-to-now a) 0))
+        (pb (or (+agenda-entry-priority b) org-default-priority))
+        (tb (or (+agenda-entry-schedule-or-deadline-to-now b) 0)))
+    (or(< pa pb) (and (= pa pb) (< ta tb)))))
 
 (defun +agenda-flatten-list (l)
   (cond ((not l) nil)
@@ -2337,27 +2341,26 @@ some heuristics to guess the result."
                (t (unless +agenda-project-status (setq +agenda-project-status 'stuck)))))))
 
 (defun +agenda-tasks-process-headline (headline)
-  (let* ((todo (org-element-property :todo-keyword headline))
-         (todo-type (org-element-property :todo-type headline))
-         (scheduled-ts (org-element-property :raw-value (org-element-property :scheduled headline)))
-         (deadline-ts  (org-element-property :raw-value (org-element-property :deadline headline)))
-         (closed-ts  (org-element-property :raw-value (org-element-property :closed headline)))
-         (has-scheduling (or scheduled-ts deadline-ts))
-         (scheduled-future (cond (scheduled-ts (> (org-time-stamp-to-now scheduled-ts) 0))
-                                 (deadline-ts  (> (org-time-stamp-to-now deadline-ts)
-                                                  (org-get-wdays deadline-ts)))))
-         (scheduled-past-or-now (and has-scheduling (not scheduled-future)))
-         (contents-begin (org-element-property :contents-begin headline))
-         entry project-status return)
+  (when (or +agenda-show-private (not (member "PRIVATE" (org-element-property :tags headline))))
+    (let* ((scheduled-ts (org-element-property :raw-value (org-element-property :scheduled headline)))
+           (deadline-ts  (org-element-property :raw-value (org-element-property :deadline headline)))
+           (closed-ts  (org-element-property :raw-value (org-element-property :closed headline)))
+           (has-scheduling (or scheduled-ts deadline-ts))
+           (scheduled-future (cond (scheduled-ts (> (org-time-stamp-to-now scheduled-ts) 0))
+                                   (deadline-ts  (> (org-time-stamp-to-now deadline-ts)
+                                                    (org-get-wdays deadline-ts)))))
+           (scheduled-past-or-now (and has-scheduling (not scheduled-future)))
+           (tags-list (cl-remove-duplicates (append (org-element-property :tags headline) +agenda-parent-tags)
+                                            :test 'string=))
+           (entry (+agenda-entry headline tags-list has-scheduling))
+           (todo (+agenda-entry-todo entry))
+           (todo-type (org-element-property :todo-type headline))
+           (contents-begin (org-element-property :contents-begin headline))
+           project-status return)
 
-    (when (or +agenda-show-private (not (member "PRIVATE" (org-element-property :tags headline))))
-      (setq entry (+agenda-entry headline (cl-remove-duplicates
-                                           (append (org-element-property :tags headline) +agenda-parent-tags)
-                                           :test 'string=)))
       (if (not todo-type)
           ;; NOTE(nox): No todo keyword
-          (let* ((timestamp (or scheduled-ts deadline-ts))
-                 (time-to-now (and timestamp (org-time-stamp-to-now timestamp)))
+          (let* ((time-to-now (+agenda-entry-schedule-or-deadline-to-now entry))
                  first-child search-bound temp-time)
 
             ;; NOTE(nox): Find the most recent active timestamp
