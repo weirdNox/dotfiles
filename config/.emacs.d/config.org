@@ -702,7 +702,7 @@ with functions that require it."
 ** UI
 *** Settings
 #+BEGIN_SRC emacs-lisp
-(setq! initial-frame-alist '((fullscreen . fullboth)
+(setq! initial-frame-alist '((fullscreen . maximized)
                              (fullscreen-restore . maximized))
        ring-bell-function #'ignore
        visible-bell nil
