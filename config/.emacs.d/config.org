@@ -782,8 +782,8 @@ with functions that require it."
 
 *** Font
 #+BEGIN_SRC emacs-lisp
-(defvar nox-fonts '(("Source Code Pro" . 10) ("PragmataPro" . 12) ("Iosevka" . 12)
-                    ("DejaVu Sans Mono" . 10) ("Inconsolata" . 13))
+(defvar nox-fonts '(("DejaVu Sans Mono" . 10) ("Source Code Pro" . 10) ("PragmataPro" . 12)
+                    ("Iosevka" . 12) ("Inconsolata" . 13))
   "List of fonts and sizes. The first one available will be used.")
 
 (defvar nox-font-faces-changed nil
