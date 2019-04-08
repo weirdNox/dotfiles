@@ -2148,6 +2148,26 @@ some heuristics to guess the result."
 
 (defun +agenda-filter-tags (tag) (unless (string-match org-agenda-hide-tags-regexp tag) tag))
 
+(defun +agenda-fontify-entry (string)
+  (with-temp-buffer
+    (insert string)
+    (goto-char (point-min))
+    (let ((cur -1)
+          (new (point)))
+      (while (not (= cur new))
+        (setq cur new)
+        (org-raise-scripts nil)
+        (setq new (point))))
+
+    (goto-char (point-min))
+    (let ((cur -1)
+          (new (point)))
+      (while (not (= cur new))
+        (setq cur new)
+        (org-fontify-entities nil)
+        (setq new (point))))
+    (buffer-string)))
+
 (defun +agenda-format-entry (prefix entry)
   (let* ((entry-text (+agenda-entry-text entry))
          (wanted-face (get-text-property 0 'face entry-text))
@@ -2171,7 +2191,7 @@ some heuristics to guess the result."
                   (when (+agenda-entry-todo entry) (concat (+agenda-entry-todo entry) " "))
                   (when (+agenda-entry-priority entry)
                     (string ?\[ ?# (+agenda-entry-priority entry) ?\] ? ))
-                  entry-text
+                  (+agenda-fontify-entry entry-text)
                   (when (+agenda-entry-tags entry)
                     (concat " :"
                             (mapconcat #'identity
