@@ -6,3 +6,5 @@ setxkbmap -option
 setxkbmap -layout us,pt,us -variant intl,,colemak -option ctrl:nocaps,shift:both_capslock,compose:rwin
 
 export _JAVA_OPTIONS='-Dawt.useSystemAAFontSettings=gasp -Dswing.aatext=true -Dswing.defaultlaf=com.sun.java.swing.plaf.gtk.GTKLookAndFeel'
+
+xrdb -merge "$HOME/.Xresources"

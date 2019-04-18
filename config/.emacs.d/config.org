@@ -782,7 +782,7 @@ with functions that require it."
 
 *** Font
 #+BEGIN_SRC emacs-lisp
-(defvar nox-fonts '(("DejaVu Sans Mono" . 10) ("Source Code Pro" . 10) ("PragmataPro" . 12)
+(defvar nox-fonts '(("PragmataPro" . 12) ("DejaVu Sans Mono" . 10) ("Source Code Pro" . 10)
                     ("Iosevka" . 12) ("Inconsolata" . 13))
   "List of fonts and sizes. The first one available will be used.")
 
@@ -816,9 +816,7 @@ ARGS are the same as in `custom-set-faces'."
       (setq font-name (caar available-fonts)
             font-size (cdar available-fonts)))
 
-    (setq font-setting (format "%s-%d" font-name font-size))
-    (set-frame-font font-setting nil t)
-    (add-to-list 'default-frame-alist (cons 'font font-setting))
+    (set-face-attribute 'default nil :font (format "%s-%d" font-name font-size))
 
     (dolist (args nox-font-faces-changed)
       (apply 'custom-theme-reset-faces 'user args))
