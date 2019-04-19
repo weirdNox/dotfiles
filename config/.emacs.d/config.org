@@ -3078,7 +3078,7 @@ When optional argument is non-nil, refresh cached heading."
                     :command
                     (append
                      (list "gs" "-dBATCH" "-dNOPAUSE" "-q" "-sDEVICE=pdfwrite"
-                           (concat "-sColorConversionStrategy=/" color-conv-strat)
+                           (concat "-dColorConversionStrategy=/" color-conv-strat)
                            (concat "-sOutputFile=" temp-output-name)
                            (concat "-dPDFSETTINGS=/" quality))
                      files))
