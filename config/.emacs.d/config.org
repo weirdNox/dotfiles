@@ -885,8 +885,6 @@ ARGS are the same as in `custom-set-faces'."
          doom-one-comment-bg nil
          doom-peacock-brighter-modeline t)
 
-  (use-package doom-themes-org :after org :demand)
-
   (use-package doom-themes-treemacs
     :after treemacs :demand
     :init
@@ -950,7 +948,7 @@ Disable fringes in the minibuffer window.
 #+BEGIN_SRC emacs-lisp
 (defun nox-setup-appearance (frame)
   (with-selected-frame frame
-    (load-theme 'darktooth t)
+    (load-theme 'doom-one t)
     (nox/change-font)
     (when (> (window-width) 100) (split-window-right))
     (setq! system-time-locale "C")))
@@ -1634,14 +1632,75 @@ fundamental-mode) for performance sake."
 **** Appearance
 #+BEGIN_SRC emacs-lisp
 (setq! org-startup-indented t
+       org-hide-leading-stars t
        org-startup-with-inline-images nil
        org-startup-with-latex-preview t
        org-pretty-entities t
        org-image-actual-width '(700)
-       org-fontify-quote-and-verse-blocks t)
+       org-fontify-done-headline t
+       org-fontify-whole-heading-line t
+       org-fontify-quote-and-verse-blocks t
+       org-agenda-deadline-faces '((1.001 . error)
+                                   (1.0 . org-warning)
+                                   (0.5 . org-upcoming-deadline)
+                                   (0.0 . org-upcoming-distant-deadline)))
 
 (add-hook! org-mode #'org-hide-block-all)
 #+END_SRC
+
+The next part was taken from DOOM themes
+#+begin_src emacs-lisp
+(defsubst +org-tag-face (n)
+  (let ((kwd (match-string n)))
+    (or (and (equal kwd "#") 'org-tag)
+        (and (equal kwd "@") 'org-formula))))
+
+(defun +org|custom-fontification ()
+  "Correct (and improve) org-mode's font-lock keywords.
+
+  1. Re-set `org-todo' & `org-headline-done' faces, to make them respect
+     (inherit) underlying faces.
+  2. Make statistic cookies respect (inherit) underlying faces.
+  3. Fontify item bullets (make them stand out)
+  4. Fontify item checkboxes (and when they're marked done), like TODOs that are
+     marked done.
+  5. Fontify dividers/separators (5+ dashes)
+  6. Fontify #hashtags and @at-tags"
+  (let ((org-todo (format org-heading-keyword-regexp-format
+                          org-todo-regexp))
+        (org-done (format org-heading-keyword-regexp-format
+                          (concat "\\(?:" (mapconcat #'regexp-quote org-done-keywords "\\|") "\\)"))))
+    (setq
+     org-font-lock-extra-keywords
+     (append (org-delete-all
+              (append `(("\\[\\([0-9]*%\\)\\]\\|\\[\\([0-9]*\\)/\\([0-9]*\\)\\]"
+                         (0 (org-get-checkbox-statistics-face) t))
+                        (,org-todo (2 (org-get-todo-face 2) t))
+                        (,org-done (2 'org-headline-done t)))
+                      (when (memq 'date org-activate-links)
+                        '((org-activate-dates (0 'org-date t)))))
+              org-font-lock-extra-keywords)
+             ;; respsect underlying faces!
+             `((,org-todo (2 (org-get-todo-face 2) prepend))
+               (,org-done (2 'org-headline-done prepend)))
+             (when (memq 'date org-activate-links)
+               '((org-activate-dates (0 'org-date prepend))))
+             ;; Make checkbox statistic cookies respect underlying faces
+             '(("\\[\\([0-9]*%\\)\\]\\|\\[\\([0-9]*\\)/\\([0-9]*\\)\\]"
+                (0 (org-get-checkbox-statistics-face) prepend))
+               ;; I like how org-mode fontifies checked TODOs and want this to extend to
+               ;; checked checkbox items:
+               ("^[ \t]*\\(?:[-+*]\\|[0-9]+[).]\\)[ \t]+\\(\\(?:\\[@\\(?:start:\\)?[0-9]+\\][ \t]*\\)?\\[\\(?:X\\|\\([0-9]+\\)/\\2\\)\\][^\n]*\n\\)"
+                1 'org-headline-done prepend)
+               ;; make plain list bullets stand out
+               ("^ *\\([-+]\\|[0-9]+[).]\\) " 1 'org-list-dt append)
+               ;; and separators/dividers
+               ("^ *\\(-----+\\)$" 1 'org-meta-line))
+             ;; custom #hashtags & @at-tags for another level of organization
+             '(("\\s-\\(\\([#@]\\)[^+ \n.,]+\\)" 1 (+org-tag-face 2) prepend))))))
+
+(add-hook! 'org-font-lock-set-keywords-hook #'+org|custom-fontification)
+#+end_src
 
 **** Behavior
 #+BEGIN_SRC emacs-lisp
