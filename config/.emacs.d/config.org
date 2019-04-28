@@ -1513,12 +1513,13 @@ fundamental-mode) for performance sake."
 (use-package tex :ensure auctex
   :config
   (setq! TeX-auto-save t
+         TeX-engine 'xetex
          TeX-parse-self t
-         TeX-PDF-mode t
          TeX-source-correlate-start-server t
          TeX-view-program-selection '((output-pdf "PDF Tools")))
 
-  (TeX-source-correlate-mode)
+  (TeX-global-PDF-mode 1)
+  (TeX-source-correlate-mode 1)
   (add-hook 'TeX-after-compilation-finished-functions #'TeX-revert-document-buffer))
 #+END_SRC
 
