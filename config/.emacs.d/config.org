@@ -325,6 +325,24 @@ compilation. This will no-op on features that have been disabled by the user."
           (kill-buffer))))))
 #+END_SRC
 
+**** Open file externally
+Taken from =counsel.el=
+#+begin_src emacs-lisp
+(defun nox/open-externally (file)
+  "Pass FILE to `xdg-open' or equivalent command via the shell."
+  (interactive "FFile: ")
+  (if (and (eq system-type 'windows-nt)
+           (fboundp 'w32-shell-execute))
+      (w32-shell-execute "open" file)
+    (call-process-shell-command (format "%s %s"
+                                        (cl-case system-type
+                                          (darwin "open")
+                                          (cygwin "cygstart")
+                                          (t "xdg-open"))
+                                        (shell-quote-argument file))
+                                nil 0)))
+#+end_src
+
 **** Exiting
 #+BEGIN_SRC emacs-lisp
 (defun nox/exit-emacs (arg)
@@ -3068,7 +3086,8 @@ When optional argument is non-nil, refresh cached heading."
   :config
   (after! dired+ ;; This overrides the keys, so only after loading
     (general-def :keymaps 'dired-mode-map
-      "e" #'nox/ediff-files))
+      "e" #'nox/ediff-files
+      "X" #'+dired/open-externally))
 
   (setq! dired-auto-revert-buffer t
          dired-dwim-target t
@@ -3090,6 +3109,14 @@ When optional argument is non-nil, refresh cached heading."
         (make-directory parent-directory t))))
   (push #'dired|create-non-existent-directory find-file-not-found-functions)
 #+END_SRC
+
+***** Open externally
+#+begin_src emacs-lisp
+(defun +dired/open-externally ()
+  (interactive)
+  (let ((file (dired-get-filename nil t)))
+    (when file (nox/open-externally file))))
+#+end_src
 
 ***** PDF compressor and merger
 #+BEGIN_SRC emacs-lisp
