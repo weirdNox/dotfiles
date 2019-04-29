@@ -909,11 +909,15 @@ ARGS are the same as in `custom-set-faces'."
     (setq! doom-treemacs-enable-variable-pitch nil))
 
   (nox-add-customize-theme-hook "^doom-"
-    (nox-theme-set-faces
-     '(outline-1 ((t . (:height 1.0))))
-     '(outline-2 ((t . (:height 1.0))))
-     '(outline-3 ((t . (:height 1.0))))
-     `(org-special-keyword ((t . (:foreground ,(face-attribute 'shadow :foreground))))))))
+    (after! outline
+      (set-face-attribute 'outline-1 nil :height 1.0)
+      (set-face-attribute 'outline-2 nil :height 1.0)
+      (set-face-attribute 'outline-3 nil :height 1.0))
+    (after! org
+      (set-face-attribute 'org-level-1 nil :height 1.0)
+      (set-face-attribute 'org-level-2 nil :height 1.0)
+      (set-face-attribute 'org-level-3 nil :height 1.0))
+    (nox-theme-set-faces `(org-special-keyword ((t . (:foreground ,(face-attribute 'shadow :foreground))))))))
 #+END_SRC
 
 **** Extra programming keywords
