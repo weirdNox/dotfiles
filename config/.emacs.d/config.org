@@ -652,8 +652,7 @@ symbols.
 #+BEGIN_SRC emacs-lisp
 (setq! abbrev-file-name               (concat nox-local-dir "abbrev.el")
        auto-save-file-name-transforms (list (list ".*" (concat nox-cache-dir "auto-save/") t))
-       auto-save-list-file-prefix     (concat nox-cache-dir "auto-save/.saves-")
-       auto-save-list-file-name       (concat nox-cache-dir "auto-save-list")
+       auto-save-list-file-prefix     (concat nox-cache-dir "auto-save/session-")
        backup-directory-alist         (list (cons "." (concat nox-cache-dir "backup/")))
        custom-file                    (concat nox-local-dir "custom.el")
        pcache-directory               (concat nox-cache-dir "pcache/")
