@@ -1804,9 +1804,15 @@ The next part was taken from DOOM themes
 
 **** Refiling
 #+BEGIN_SRC emacs-lisp
+(defun +org|refile-target-check ()
+  (if (org-entry-is-done-p)
+      (progn (org-end-of-subtree t t) nil)
+    t))
+
 (setq! org-refile-use-outline-path 'file
        org-outline-path-complete-in-steps nil
        org-refile-allow-creating-parent-nodes 'confirm
+       org-refile-target-verify-function #'+org|refile-target-check
        org-refile-targets `((nil . (:maxlevel . 9))
                             (,nox-org-agenda-file .  (:maxlevel . 9))
                             (,nox-org-tickler-file . (:maxlevel . 2))
