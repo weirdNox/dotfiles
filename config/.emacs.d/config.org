@@ -991,11 +991,13 @@ Disable fringes in the minibuffer window.
 
 ** Minibuffer completion
 *** Ivy
-#+BEGIN_SRC emacs-lisp
+**** Base configuration
+***** Settings
+#+begin_src emacs-lisp
 (use-package ivy :ensure
   :demand
   :general
-  ("C-x b"  'ivy-switch-buffer)
+  ("C-x b"  '+ivy/switch-buffer)
   (:keymaps 'ivy-minibuffer-map
             "RET" 'ivy-alt-done
             "C-j" 'ivy-done
@@ -1017,8 +1019,76 @@ Disable fringes in the minibuffer window.
          ivy-virtual-abbreviate 'full
          ivy-wrap t)
 
-  (ivy-mode))
-#+END_SRC
+  (ivy-mode)
+#+end_src
+
+***** Better buffer switcher
+#+begin_src emacs-lisp
+(defun +ivy--colorize-buffer-str (str buffer file-name)
+  (cond ((and (not (ignore-errors (file-remote-p file-name)))
+              (not (verify-visited-file-modtime buffer)))
+         (ivy-append-face str 'ivy-modified-outside-buffer))
+        ((buffer-modified-p buffer) (ivy-append-face str 'ivy-modified-buffer))
+        (t (ivy-append-face str 'ivy-org))))
+
+(defun +ivy--buffers-collection ()
+  (let (collection)
+    (dolist (buffer (buffer-list))
+      (let ((buffer-name (buffer-name buffer))
+            (file-name (buffer-file-name buffer))
+            str directory)
+        (setq str buffer-name)
+        (unless (eq (aref buffer-name 0) ? )
+          (if (setq directory (or (and file-name (file-name-directory file-name))
+                                  (buffer-local-value 'default-directory buffer)))
+              (progn
+                (when (and (not (buffer-base-buffer buffer))
+                           (setq uniquify (buffer-local-value 'uniquify-managed buffer)))
+                  (setq str (uniquify-item-base (car uniquify))))
+
+                (setq str (concat (ivy-append-face (abbreviate-file-name directory) 'shadow)
+                                  (+ivy--colorize-buffer-str str buffer file-name))))
+            (+ivy--colorize-buffer-str str buffer file-name))
+          (push (cons str buffer-name) collection))))
+
+    (nconc (nreverse collection) (and ivy-use-virtual-buffers (ivy--virtual-buffers)))))
+
+(defun +ivy--switch-buffer-action (selection)
+  (ivy--switch-buffer-action (if (consp selection) (cdr selection) selection)))
+
+(defun +ivy--switch-buffer-other-window-action (selection)
+  (ivy--switch-buffer-other-window-action (if (consp selection) (cdr selection) selection)))
+
+(defun +ivy--find-file-action (selection)
+  (ivy--find-file-action (if (consp selection) (cdr selection) selection)))
+
+(defun +ivy--kill-buffer-action (selection)
+  (ivy--kill-buffer-action (if (consp selection) (cdr selection) selection)))
+
+(defun +ivy--rename-buffer-action (selection)
+  (+ivy--rename-buffer-action (if (consp selection) (cdr selection) selection)))
+
+(defun +ivy/switch-buffer ()
+  "Switch to another buffer."
+  (interactive)
+  (setq this-command #'+ivy-switch-buffer)
+  (ivy-read "Switch to buffer: " (+ivy--buffers-collection)
+            :preselect (buffer-name (other-buffer (current-buffer)))
+            :action #'+ivy--switch-buffer-action
+            :matcher #'ivy--switch-buffer-matcher
+            :caller #'+ivy-switch-buffer))
+
+(ivy-set-actions '+ivy-switch-buffer
+                 '(("j" +ivy--switch-buffer-other-window-action "other window")
+                   ("f" +ivy--find-file-action "find file")
+                   ("k" +ivy--kill-buffer-action "kill")
+                   ("r" +ivy--rename-buffer-action "rename")))
+#+end_src
+
+***** End
+#+begin_src emacs-lisp
+) ;; use-package
+#+end_src
 
 **** Ivy hydra
 #+BEGIN_SRC emacs-lisp
