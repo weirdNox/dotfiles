@@ -675,22 +675,6 @@ symbols.
        version-control t)
 #+END_SRC
 
-*** Set indirect buffer name
-#+BEGIN_SRC emacs-lisp
-(defun nox*set-indirect-buffer-filename (orig-fn base-buffer name &optional clone)
-  "In indirect buffers, `buffer-file-name' is nil, which can cause problems
-with functions that require it."
-  (let ((file-name (buffer-file-name base-buffer))
-        (buffer (funcall orig-fn base-buffer name clone)))
-    (when (and file-name buffer)
-      (with-current-buffer buffer
-        (unless buffer-file-name
-          (setq buffer-file-name file-name
-                buffer-file-truename (file-truename file-name)))))
-    buffer))
-(advice-add #'make-indirect-buffer :around #'nox*set-indirect-buffer-filename)
-#+END_SRC
-
 *** Enable disabled commands
 #+BEGIN_SRC emacs-lisp
 (put 'downcase-region 'disabled nil)
@@ -1045,6 +1029,9 @@ Disable fringes in the minibuffer window.
                 (when (and (not (buffer-base-buffer buffer))
                            (setq uniquify (buffer-local-value 'uniquify-managed buffer)))
                   (setq str (uniquify-item-base (car uniquify))))
+
+                (when (eq (buffer-local-value 'major-mode buffer) 'dired-mode)
+                  (setq directory (file-name-directory (directory-file-name directory))))
 
                 (setq str (concat (ivy-append-face (abbreviate-file-name directory) 'shadow)
                                   (+ivy--colorize-buffer-str str buffer file-name))))
