@@ -1850,7 +1850,7 @@ The next part was taken from DOOM themes
                      (sequence "HOLD(h@/!)" "WAITING(w@/!)" "|" "CANCELLED(c@/!)"))
  org-treat-S-cursor-todo-selection-as-state-change nil
  org-columns-default-format "%80ITEM(Task) %10Effort(Effort){:} %10CLOCKSUM"
- org-global-properties '(("Effort_ALL" . "0:15 0:30 0:45 1:00 1:30 2:00 3:00 4:00 5:00 7:00")))
+ org-global-properties '(("Effort_ALL" . "0:05 0:10 0:15 0:30 0:45 1:00 1:30 2:00 3:00 4:00 5:00 7:00")))
 
 (defconst +org-keywords-normal-faces
   '(("TODO"      . (:inherit org-todo :weight normal))
@@ -2327,7 +2327,6 @@ some heuristics to guess the result."
   (let* ((entry-text (+agenda-entry-text entry))
          (wanted-face (get-text-property 0 'face entry-text))
          (props (list 'nox-custom-agenda t
-                      'face (or +agenda-entry-face wanted-face 'default)
                       'undone-face (or +agenda-entry-face wanted-face 'default)
                       'done-face 'org-agenda-done
                       'mouse-face 'highlight
@@ -2354,7 +2353,9 @@ some heuristics to guess the result."
                                        ":")
                             ":")))))
 
-    (add-text-properties (length prefix) (length text) '(org-heading t) text)
+    (add-text-properties (length prefix) (length text) (list 'org-heading t
+                                                             'face (or +agenda-entry-face wanted-face 'default))
+                         text)
     (setq text (concat (org-add-props text props) "\n"))
     (org-agenda-highlight-todo text)))
 
