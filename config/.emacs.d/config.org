@@ -1065,7 +1065,7 @@ Disable fringes in the minibuffer window.
   (interactive)
   (setq this-command #'+ivy-switch-buffer)
   (ivy-read "Switch to buffer: " (+ivy--buffers-collection)
-            :preselect (car (+ivy--get-buffer-display-and-name (other-buffer (current-buffer))))
+            :preselect (car (+ivy--get-buffer-display-and-name (other-buffer (current-buffer) t)))
             :action #'+ivy--switch-buffer-action
             :matcher #'ivy--switch-buffer-matcher
             :caller #'+ivy-switch-buffer))
