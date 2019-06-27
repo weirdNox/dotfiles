@@ -1015,28 +1015,33 @@ Disable fringes in the minibuffer window.
         ((buffer-modified-p buffer) (ivy-append-face str 'ivy-modified-buffer))
         (t (ivy-append-face str 'ivy-org))))
 
+(defun +ivy--get-buffer-display-and-name (buffer)
+  (let ((buffer-name (buffer-name buffer))
+        (file-name (buffer-file-name buffer))
+        str directory)
+    (setq str buffer-name)
+    (unless (eq (aref buffer-name 0) ? )
+      (if (setq directory (or (and file-name (file-name-directory file-name))
+                              (buffer-local-value 'default-directory buffer)))
+          (progn
+            (when (and (not (buffer-base-buffer buffer))
+                       (setq uniquify (buffer-local-value 'uniquify-managed buffer)))
+              (setq str (uniquify-item-base (car uniquify))))
+
+            (when (eq (buffer-local-value 'major-mode buffer) 'dired-mode)
+              (setq directory (file-name-directory (directory-file-name directory))))
+
+            (setq str (concat (ivy-append-face (abbreviate-file-name directory) 'shadow)
+                              (+ivy--colorize-buffer-str str buffer file-name))))
+        (+ivy--colorize-buffer-str str buffer file-name))
+      (cons str buffer-name))))
+
 (defun +ivy--buffers-collection ()
   (let (collection)
     (dolist (buffer (buffer-list))
-      (let ((buffer-name (buffer-name buffer))
-            (file-name (buffer-file-name buffer))
-            str directory)
-        (setq str buffer-name)
-        (unless (eq (aref buffer-name 0) ? )
-          (if (setq directory (or (and file-name (file-name-directory file-name))
-                                  (buffer-local-value 'default-directory buffer)))
-              (progn
-                (when (and (not (buffer-base-buffer buffer))
-                           (setq uniquify (buffer-local-value 'uniquify-managed buffer)))
-                  (setq str (uniquify-item-base (car uniquify))))
-
-                (when (eq (buffer-local-value 'major-mode buffer) 'dired-mode)
-                  (setq directory (file-name-directory (directory-file-name directory))))
-
-                (setq str (concat (ivy-append-face (abbreviate-file-name directory) 'shadow)
-                                  (+ivy--colorize-buffer-str str buffer file-name))))
-            (+ivy--colorize-buffer-str str buffer file-name))
-          (push (cons str buffer-name) collection))))
+      (let ((display-and-name (+ivy--get-buffer-display-and-name buffer)))
+        (when display-and-name
+          (push display-and-name collection))))
 
     (nconc (nreverse collection) (and ivy-use-virtual-buffers (ivy--virtual-buffers)))))
 
@@ -1060,7 +1065,7 @@ Disable fringes in the minibuffer window.
   (interactive)
   (setq this-command #'+ivy-switch-buffer)
   (ivy-read "Switch to buffer: " (+ivy--buffers-collection)
-            :preselect (buffer-name (other-buffer (current-buffer)))
+            :preselect (car (+ivy--get-buffer-display-and-name (other-buffer (current-buffer))))
             :action #'+ivy--switch-buffer-action
             :matcher #'ivy--switch-buffer-matcher
             :caller #'+ivy-switch-buffer))
