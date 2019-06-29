@@ -1064,11 +1064,15 @@ Disable fringes in the minibuffer window.
   "Switch to another buffer."
   (interactive)
   (setq this-command #'+ivy-switch-buffer)
-  (ivy-read "Switch to buffer: " (+ivy--buffers-collection)
-            :preselect (car (+ivy--get-buffer-display-and-name (other-buffer (current-buffer) t)))
-            :action #'+ivy--switch-buffer-action
-            :matcher #'ivy--switch-buffer-matcher
-            :caller #'+ivy-switch-buffer))
+  (let ((other-buffer (other-buffer (current-buffer) t)))
+    (when (get-buffer-window other-buffer 'selected-frame)
+      (setq other-buffer (other-buffer (current-buffer))))
+
+    (ivy-read "Switch to buffer: " (+ivy--buffers-collection)
+              :preselect (car (+ivy--get-buffer-display-and-name other-buffer))
+              :action #'+ivy--switch-buffer-action
+              :matcher #'ivy--switch-buffer-matcher
+              :caller #'+ivy-switch-buffer)))
 
 (ivy-set-actions '+ivy-switch-buffer
                  '(("j" +ivy--switch-buffer-other-window-action "other window")
@@ -2406,9 +2410,9 @@ some heuristics to guess the result."
 
   (let ((first t) entry)
     (while list
-      (setq entry (car list))
+      (setq entry (pop list))
       (if parent-continuations
-          (unless (cdr list) (setf (car parent-continuations) nil))
+          (unless list (setf (car parent-continuations) nil))
         (unless first (insert "\n")))
 
       (cond
@@ -2426,8 +2430,7 @@ some heuristics to guess the result."
         (insert (+agenda-format-entry prefix entry)))
 
       (+agenda-project-printer (+agenda-entry-children entry) (cons t parent-continuations))
-      (setq list (cdr list)
-            first nil))))
+      (setq first nil))))
 
 (defun +agenda-simple-printer (list)
   (setq list (sort list #'+agenda-priority-sort))
