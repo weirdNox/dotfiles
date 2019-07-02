@@ -1021,15 +1021,15 @@ Disable fringes in the minibuffer window.
         str directory)
     (setq str buffer-name)
     (unless (eq (aref buffer-name 0) ? )
-      (if (setq directory (or (and file-name (file-name-directory file-name))
-                              (buffer-local-value 'default-directory buffer)))
+      (if (setq directory (or (and file-name (file-name-directory (expand-file-name file-name)))
+                              (expand-file-name (buffer-local-value 'default-directory buffer))))
           (progn
             (when (and (not (buffer-base-buffer buffer))
                        (setq uniquify (buffer-local-value 'uniquify-managed buffer)))
               (setq str (uniquify-item-base (car uniquify))))
 
             (when (eq (buffer-local-value 'major-mode buffer) 'dired-mode)
-              (setq directory (file-name-directory (directory-file-name directory))))
+              (setq directory (or (file-name-directory (directory-file-name directory)) "")))
 
             (setq str (concat (ivy-append-face (abbreviate-file-name directory) 'shadow)
                               (+ivy--colorize-buffer-str str buffer file-name))))
