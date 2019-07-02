@@ -2947,46 +2947,6 @@ When optional argument is non-nil, refresh cached heading."
          org-noter-default-notes-file-names '("Notes.org" "Notas.org")))
 #+END_SRC
 
-*** Org Ref
-#+BEGIN_SRC emacs-lisp
-(use-package org-ref :ensure
-  :after bibtex
-  :demand
-  :config
-  (setq! org-ref-default-bibliography '("~/Documents/Bibliography/References.bib")
-         org-ref-bibliography-notes "~/Documents/Bibliography/Notes.org"
-         org-ref-pdf-directory "~/Documents/Bibliography/PDFs/"
-         reftex-default-bibliography org-ref-default-bibliography
-         bibtex-completion-bibliography (car org-ref-default-bibliography)
-         bibtex-completion-notes-path org-ref-bibliography-notes
-         bibtex-completion-library-path org-ref-pdf-directory
-
-         ;; NOTE(nox): Key generation
-         bibtex-autokey-names 2
-         bibtex-autokey-names-stretch 1
-         bibtex-autokey-name-separator "-"
-         bibtex-autokey-additional-names "-et_al"
-         bibtex-autokey-year-length 4
-         bibtex-autokey-year-title-separator "_")
-
-  (require 'org-ref-ivy))
-
-(use-package ivy-bibtex :ensure
-  :config
-  (setq! bibtex-completion-notes-template-one-file (format "* ${title} - ${year}
-:PROPERTIES:
-:Custom_ID: ${=key=}
-:NOTER_DOCUMENT: %s${=key=}.pdf
-:END:
-"
-                                                           org-ref-pdf-directory)
-         bibtex-completion-display-formats
-         '((t . "${=type=:7} | ${title:*} ${author:20} ${year:4} ${=has-pdf=:1}${=has-note=:1}  ${keywords:80}")))
-
-  (defun nox*disable-completion-notes-mode (&optional _) (widen))
-  (advice-add #'bibtex-completion-notes-mode :override #'nox*disable-completion-notes-mode))
-#+END_SRC
-
 *** Source blocks
 #+BEGIN_SRC emacs-lisp
 (use-package org-src
@@ -2998,6 +2958,161 @@ When optional argument is non-nil, refresh cached heading."
 #+END_SRC
 
 ** Tools and utilities
+*** BibTeX
+#+BEGIN_SRC emacs-lisp
+(use-package bibtex
+  :init
+  (defvar +bibtex-bibliography '("~/Documents/Bibliography/References.bib"))
+  (defvar +bibtex-pdf-dir        "~/Documents/Bibliography/PDFs/")
+  (defvar +bibtex-notes          "~/Documents/Bibliography/Notes.org")
+
+  :config
+  (setq! bibtex-entry-format t
+         bibtex-align-at-equal-sign t
+         bibtex-clean-entry-hook '(+bibtex-replace-key))
+
+  (defun +bibtex-assoc-pdf (&optional prefix)
+    "Prompt for a PDF to associate with entry at point.
+If an associated PDF already exists in `+bibtex-pdf-dir':
+- When called interactively, it will ask if you want to replace it.
+- Else, it will return without doing anything (useful for batch functions)
+The PDF file will be moved to `+bibtex-pdf-dir' by default.
+Optional PREFIX argument toggles between `rename-file' and `copy-file'."
+    (interactive "P")
+    (save-excursion
+      (bibtex-beginning-of-entry)
+      (let* ((bibtex-expand-strings t)
+             (entry (bibtex-parse-entry t))
+             (key (cdr (assoc "=key=" entry)))
+             (target-pdf (expand-file-name (concat key ".pdf") +bibtex-pdf-dir))
+             (target-exists (file-exists-p target-pdf))
+             (file-move-func (if prefix #'copy-file #'rename-file)))
+        (when (or (not target-exists)
+                  (and (called-interactively-p 'any)
+                       (y-or-n-p
+                        (format "A file named %s already exists. Do you want to replace it anyway? "
+                                target-pdf))))
+          (when target-exists
+            (message "Moving old %s to trash..." (concat key ".pdf"))
+            (move-file-to-trash target-pdf))
+
+          (funcall file-move-func
+                   (read-file-name (format "Select file associated with entry %s: " key)
+                                   (dired-dwim-target-directory))
+                   target-pdf)
+
+          (message "Created file %s" target-pdf)))))
+
+  (defun +bibtex-assoc-pdf-global (&optional prefix)
+    "Associate PDFs with all the entries that don't already have one.
+If you don't want to associate a specific entry with any PDF, you
+may quit with \\[keyboard-quit] and it will continue to the next
+one.
+See `+bibtex-assoc-pdf' for more information about associating with PDFs."
+    (interactive "P")
+    (save-excursion
+      (goto-char (point-min))
+      (bibtex-map-entries (lambda (key begin end)
+                            (let ((inhibit-quit t))
+                              (cl-letf (((symbol-function 'message) (lambda (&rest _))))
+                                (with-local-quit (+bibtex-assoc-pdf prefix))
+                                (setq quit-flag nil)))))))
+
+  ;; NOTE(nox): Key generation
+  (setq! bibtex-autokey-names 2
+         bibtex-autokey-names-stretch 1
+         bibtex-autokey-name-case-convert #'capitalize
+         bibtex-autokey-name-separator nil
+         bibtex-autokey-additional-names "EtAl"
+         bibtex-autokey-name-year-separator "-"
+         bibtex-autokey-year-length 4
+         bibtex-autokey-year-title-separator "-"
+         bibtex-autokey-titleword-case-convert-function #'capitalize
+         bibtex-autokey-titlewords 5
+         bibtex-autokey-titleword-length 5
+         bibtex-autokey-titleword-ignore '("[Aa]n?" "[Oo][fn]" "[Tt]he" ".*[^[:upper:][:lower:]0-9].*")
+         bibtex-autokey-titleword-separator nil)
+
+  (defun +bibtex-replace-key ()
+    "Replace the key in the entry."
+    (let ((new-key (bibtex-generate-autokey))
+          old-key duplicate-pos)
+      (bibtex-beginning-of-entry)
+
+      (re-search-forward bibtex-entry-maybe-empty-head)
+      (setq old-key (match-string bibtex-key-in-head))
+
+      (unless (string= new-key old-key)
+        (when old-key
+          (delete-region (match-beginning bibtex-key-in-head)
+                         (match-end       bibtex-key-in-head)))
+
+        (save-restriction
+          (widen)
+          (while (save-excursion (setq duplicate-pos (bibtex-search-entry new-key)))
+            (save-excursion
+              (goto-char duplicate-pos)
+              (bibtex-copy-entry-as-kill)
+              (switch-to-buffer-other-window "*duplicate entry*")
+              (bibtex-yank))
+            (setq new-key (bibtex-read-key "Duplicate Key found, edit: " new-key))))
+
+        (insert new-key)
+        (kill-new new-key)
+
+        (let* ((old-pdf (and old-key (expand-file-name (concat old-key ".pdf") +bibtex-pdf-dir)))
+               (old-exists (and old-pdf (file-exists-p old-pdf)))
+               (new-pdf (expand-file-name (concat new-key ".pdf") +bibtex-pdf-dir))
+               (new-exists (file-exists-p new-pdf)))
+          (when new-exists
+            (if old-exists
+                (rename-file new-pdf (make-temp-file new-pdf) 'replace)
+              (when (y-or-n-p "A PDF exists with that key. Do you want to remove it? ")
+                (move-file-to-trash new-pdf))))
+
+          (when old-exists (rename-file old-pdf new-pdf)))))))
+
+(use-package reftex
+  :config
+  (setq! reftex-default-bibliography +bibtex-bibliography))
+
+(use-package ivy-bibtex :ensure
+  :config
+  (setq! bibtex-completion-bibliography +bibtex-bibliography
+         bibtex-completion-library-path +bibtex-pdf-dir
+         bibtex-completion-notes-path   +bibtex-notes
+
+         bibtex-completion-notes-template-one-file (format "* ${title} - ${year}
+:PROPERTIES:
+:Custom_ID: ${=key=}
+:NOTER_DOCUMENT: %s${=key=}.pdf
+:END:
+"
+                                                           +bibtex-pdf-dir)
+         bibtex-completion-display-formats
+         '((t . "${=type=:7} | ${title:*} ${author:20} ${year:4} ${=has-pdf=:1}${=has-note=:1}  ${keywords:80}")))
+
+  (defun nox*disable-completion-notes-mode (&optional _) (widen))
+  (advice-add #'bibtex-completion-notes-mode :override #'nox*disable-completion-notes-mode))
+
+(use-package biblio :ensure
+  :demand
+  :after biblio-core
+  :config
+  (defun +biblio-cleanup-bibtex (_)
+    (save-excursion (when (search-forward "@data{" nil t) (replace-match "@misc{")))
+    (ignore-errors
+      (condition-case _
+          (progn
+            (bibtex-set-dialect 'biblatex t)
+            (bibtex-clean-entry))
+        (error
+         (bibtex-set-dialect 'BibTeX t)
+         (bibtex-clean-entry)))))
+
+  (setq! biblio-cleanup-bibtex-function #'+biblio-cleanup-bibtex))
+#+END_SRC
+
 *** Calc
 #+begin_src emacs-lisp
 (use-package calc
