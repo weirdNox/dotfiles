@@ -3084,7 +3084,11 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 "
                                                            +bibtex-pdf-dir)
          bibtex-completion-display-formats
-         '((t . "${=type=:7} | ${title:*} ${author:20} ${year:4} ${=has-pdf=:1}${=has-note=:1}  ${keywords:80}")))
+         '((t . "${author:36} | ${title:*} ${year:4} ${=type=:7} ${=has-pdf=:1}${=has-note=:1}"))
+         bibtex-completion-pdf-symbol  ""
+         bibtex-completion-notes-symbol "")
+
+  (add-to-list 'ivy-re-builders-alist '(ivy-bibtex . ivy--regex-ignore-order))
 
   (defun nox*disable-completion-notes-mode (&optional _) (widen))
   (advice-add #'bibtex-completion-notes-mode :override #'nox*disable-completion-notes-mode))
