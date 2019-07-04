@@ -995,13 +995,14 @@ Disable fringes in the minibuffer window.
          ivy-fixed-height-minibuffer t
          ivy-format-function #'ivy-format-function-line
          ivy-height 15
-         ivy-initial-inputs-alist nil
          ivy-magic-slash-non-match-action nil
          ivy-on-del-error-function nil
          ivy-use-selectable-prompt t
          ivy-use-virtual-buffers t
          ivy-virtual-abbreviate 'full
          ivy-wrap t)
+
+  (setq! ivy-re-builders-alist '((t . ivy--regex-plus)))
 
   (ivy-mode)
 #+end_src
@@ -1096,20 +1097,13 @@ Disable fringes in the minibuffer window.
             "M-o" #'ivy-dispatching-done-hydra))
 #+END_SRC
 
-**** Fuzzy matching
-Needed for ivy fuzzy matching.
+**** flx
+Used for sorting items.
 
 #+BEGIN_SRC emacs-lisp
 (use-package flx :ensure
   :after ivy
-  :demand
-  :config
-  (setq! ivy-re-builders-alist '((counsel-ag . ivy--regex-plus)
-                                 (counsel-rg . ivy--regex-plus)
-                                 (counsel-pt . ivy--regex-plus)
-                                 (counsel-grep . ivy--regex-plus)
-                                 (swiper . ivy--regex-plus)
-                                 (t . ivy--regex-fuzzy))))
+  :demand)
 #+END_SRC
 
 *** Counsel
