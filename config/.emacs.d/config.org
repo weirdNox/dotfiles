@@ -2992,7 +2992,8 @@ Optional PREFIX argument toggles between `rename-file' and `copy-file'."
 
           (funcall file-move-func
                    (read-file-name (format "Select file associated with entry %s: " key)
-                                   (dired-dwim-target-directory))
+                                   (and (fboundp #'dired-dwim-target-directory)
+                                        (dired-dwim-target-directory)))
                    target-pdf)
 
           (message "Created file %s" target-pdf)))))
