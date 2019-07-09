@@ -995,6 +995,7 @@ Disable fringes in the minibuffer window.
          ivy-fixed-height-minibuffer t
          ivy-format-function #'ivy-format-function-line
          ivy-height 15
+         ivy-initial-inputs-alist nil
          ivy-magic-slash-non-match-action nil
          ivy-on-del-error-function nil
          ivy-use-selectable-prompt t
