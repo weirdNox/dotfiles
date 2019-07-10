@@ -3759,6 +3759,13 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
   (display-time-mode))
 #+END_SRC
 
+*** SageMath
+#+begin_src emacs-lisp
+(use-package sage-shell-mode :ensure
+  :init
+  (sage-shell:define-alias))
+#+end_src
+
 *** Tramp
 #+BEGIN_SRC emacs-lisp
 (use-package tramp
