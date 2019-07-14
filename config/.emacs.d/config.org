@@ -3086,7 +3086,7 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 "
                                                            +bibtex-pdf-dir)
          bibtex-completion-display-formats
-         '((t . "${author:36} | ${title:*} ${year:4} ${=type=:7} ${=has-pdf=:1}${=has-note=:1}"))
+         '((t . "${author:36} │ ${title:*} ${year:4} ${=type=:7} ${=has-pdf=:1}${=has-note=:1}"))
          bibtex-completion-pdf-symbol  ""
          bibtex-completion-notes-symbol "")
 
