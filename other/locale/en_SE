@@ -1,6 +1,8 @@
 comment_char %
 escape_char /
 
+% Location: /usr/share/i18n/locales/en_SE
+
 LC_IDENTIFICATION
 title      "Custom locale"
 source     ""

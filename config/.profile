@@ -3,7 +3,7 @@
 
 export PATH="$HOME/.local/bin:$PATH"
 
-export EDITOR="editor"
+export EDITOR="$HOME/.local/bin/editor"
 export VISUAL="$EDITOR"
 export ALTERNATE_EDITOR=""
 

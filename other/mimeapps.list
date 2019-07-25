@@ -1,7 +1,24 @@
 # -*- mode: conf-unix; -*-
+# Location: ~/.config/mimeapps.list
+
 [Default Applications]
-# PDFs
+# Documents
 application/pdf=okularApplication_pdf.desktop
+
+# Microsoft Office
+application/msword=libreoffice-writer.desktop
+application/vnd.ms-word=libreoffice-writer.desktop
+application/vnd.openxmlformats-officedocument.wordprocessingml.document=libreoffice-writer.desktop
+application/vnd.openxmlformats-officedocument.wordprocessingml.template=libreoffice-writer.desktop
+application/vnd.ms-word.document.macroEnabled.12=libreoffice-writer.desktop
+application/vnd.ms-word.template.macroEnabled.12=libreoffice-writer.desktop
+application/excel=libreoffice-calc.desktop
+application/msexcel=libreoffice-calc.desktop
+application/vnd.ms-excel.sheet.binary.macroEnabled.12=libreoffice-calc.desktop
+application/vnd.ms-excel.sheet.macroEnabled.12=libreoffice-calc.desktop
+application/vnd.ms-excel.template.macroEnabled.12=libreoffice-calc.desktop
+application/vnd.openxmlformats-officedocument.spreadsheetml.sheet=libreoffice-calc.desktop
+application/vnd.openxmlformats-officedocument.spreadsheetml.template=libreoffice-calc.desktop
 
 # Browser
 text/html=firefox.desktop
