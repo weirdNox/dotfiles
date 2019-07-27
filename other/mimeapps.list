@@ -4,6 +4,8 @@
 [Default Applications]
 # Documents
 application/pdf=okularApplication_pdf.desktop
+image/vnd.djvu=okularApplication_djvu.desktop
+image/vnd.djvu+multipage=okularApplication_djvu.desktop
 
 # Microsoft Office
 application/msword=libreoffice-writer.desktop
