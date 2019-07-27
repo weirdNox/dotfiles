@@ -1067,7 +1067,7 @@ Disable fringes in the minibuffer window.
   (interactive)
   (setq this-command #'+ivy-switch-buffer)
   (let ((other-buffer (other-buffer (current-buffer) t)))
-    (when (get-buffer-window other-buffer 'selected-frame)
+    (when (get-buffer-window other-buffer)
       (setq other-buffer (other-buffer (current-buffer))))
 
     (ivy-read "Switch to buffer: " (+ivy--buffers-collection)
