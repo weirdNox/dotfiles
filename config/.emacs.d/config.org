@@ -1199,7 +1199,8 @@ Used for sorting items.
        scroll-conservatively 101
        scroll-preserve-screen-position t
        mouse-wheel-scroll-amount '(1)
-       mouse-wheel-progressive-speed nil)
+       mouse-wheel-progressive-speed nil
+       recenter-positions '(top middle bottom))
 #+END_SRC
 
 **** Limits
@@ -1430,7 +1431,6 @@ Adapted from =imenu-anywhere= and =counsel-imenu=.
 #+BEGIN_SRC emacs-lisp
 (add-hook!
   '(imenu-after-jump-hook
-    evil-jumps-post-jump-hook
     counsel-grep-post-action-hook
     dumb-jump-after-jump-hook)
   #'recenter)
