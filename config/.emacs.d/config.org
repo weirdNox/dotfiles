@@ -900,7 +900,11 @@ ARGS are the same as in `custom-set-faces'."
       (set-face-attribute 'org-level-1 nil :height 1.0)
       (set-face-attribute 'org-level-2 nil :height 1.0)
       (set-face-attribute 'org-level-3 nil :height 1.0))
-    (nox-theme-set-faces `(org-special-keyword ((t . (:foreground ,(face-attribute 'shadow :foreground))))))))
+    (set-face-attribute 'isearch        nil :background (face-attribute 'isearch :background nil t))
+    (set-face-attribute 'lazy-highlight nil :background (color-darken-name
+                                                         (face-attribute 'lazy-highlight :background) 15))
+    (nox-theme-set-faces
+     `(org-special-keyword ((t . (:foreground ,(face-attribute 'shadow :foreground))))))))
 
 (use-package gruvbox-theme :ensure
   :config
