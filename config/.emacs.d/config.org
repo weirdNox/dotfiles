@@ -2799,15 +2799,18 @@ after removing the face property. This serves to restore the custom face set in 
              (selection-info (cdr (assoc-string selection collection))))
         (cond
          (selection-info
-          (let ((old-frame (selected-frame))
-                (target-frame (or (and (not (frame-parameter nil 'org-capture-frame)) (selected-frame))
-                                  (and (not (equal (next-frame) (selected-frame))) (next-frame))
-                                  (make-frame '((fullscreen . maximized)))))
+          (let* ((old-frame (selected-frame))
+                (target-frame (cond ((not (frame-parameter old-frame 'org-capture-frame)) old-frame)
+                                    ((not (equal (next-frame) old-frame)) (next-frame))
+                                    ((make-frame '((fullscreen . maximized))))))
                 (org-show-context-detail 'tree))
             (with-selected-frame target-frame
+              (raise-frame target-frame)
+              (x-focus-frame target-frame)
               (find-file nox-org-tracker-file)
               (goto-char (org-element-property :begin selection-info))
               (org-show-context))
+
             (select-frame old-frame))
           "")
          (t
