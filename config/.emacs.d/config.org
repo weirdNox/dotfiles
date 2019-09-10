@@ -2356,6 +2356,7 @@ some heuristics to guess the result."
                       'org-lowest-priority org-lowest-priority
                       'tags (mapcar 'org-downcase-keep-props (+agenda-entry-tags entry))
                       'format `(nil ,prefix)))
+         (tags (delq nil (mapcar #'+agenda-filter-tags (+agenda-entry-tags entry))))
          (text
           (concat prefix
                   (when (+agenda-entry-todo-text entry) (concat (+agenda-entry-todo-text entry) " "))
@@ -2365,12 +2366,7 @@ some heuristics to guess the result."
                   (when (and (+agenda-entry-hidden-children entry)
                              (not (string-match-p "\\[[0-9]*\\(%\\|/[0-9]*\\)\\]" entry-text)))
                     " ")
-                  (when (+agenda-entry-tags entry)
-                    (concat " :"
-                            (mapconcat #'identity
-                                       (delq nil (mapcar #'+agenda-filter-tags (+agenda-entry-tags entry)))
-                                       ":")
-                            ":")))))
+                  (when tags (concat " :" (mapconcat #'identity tags ":") ":")))))
 
     (add-text-properties (length prefix) (length text) (list 'org-heading t
                                                              'face (or +agenda-entry-face wanted-face 'default))
@@ -2620,7 +2616,7 @@ some heuristics to guess the result."
                 (while tail
                   (let ((child (car tail)))
                     (cond ((+agenda-is-entry-planned child)
-                           (push child +agenda-planned-tasks)
+                           (unless (+agenda-entry-is-tickler child) (push child +agenda-planned-tasks))
                            (if prev (setcdr prev (cdr tail)) (setq children (cdr tail))))
 
                           ((if (+agenda-entry-project-status child)
