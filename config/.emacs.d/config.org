@@ -2282,12 +2282,14 @@ some heuristics to guess the result."
         (tags (or tags (org-element-property :tags headline)))
         (scheduled-ts (org-element-property :raw-value (org-element-property :scheduled headline)))
         (deadline-ts  (org-element-property :raw-value (org-element-property :deadline headline)))
-        ts ts-compare)
+        ts-rel ts-abs ts-compare)
 
-    (cond (scheduled-ts (setq ts (org-time-stamp-to-now scheduled-ts)
+    (cond (scheduled-ts (setq ts-abs (org-time-string-to-absolute scheduled-ts)
+                              ts-rel (org-time-stamp-to-now scheduled-ts)
                               ts-compare 0))
-          (deadline-ts  (setq ts (org-time-stamp-to-now deadline-ts)
-                              ts-compare (org-get-wdays deadline-ts))))
+          (deadline-ts (setq ts-abs (org-time-string-to-absolute deadline-ts)
+                             ts-rel (org-time-stamp-to-now deadline-ts)
+                             ts-compare (org-get-wdays deadline-ts))))
 
     (make-+agenda-entry
      :todo (org-element-property :todo-keyword headline)
@@ -2297,7 +2299,7 @@ some heuristics to guess the result."
      :low-effort (+agenda-is-low-effort effort todo-type)
      :marker (org-agenda-new-marker (org-element-property :begin headline))
      :is-tickler (member "TICKLER" tags)
-     :sched-info (and ts (cons ts (if (> ts ts-compare) 'planned 'past))))))
+     :sched-info (and ts-abs (cons ts-abs (if (> ts-rel ts-compare) 'planned 'past))))))
 
 (defsubst +agenda-is-entry-planned (entry)
   (or (eq (+agenda-entry-project-status entry) 'planned)
@@ -2394,8 +2396,8 @@ some heuristics to guess the result."
 
 (defun +agenda-priority-sort (a b)
   (let ((pa (or (+agenda-entry-priority a) org-default-priority))
-        (ta (or (car (+agenda-entry-sched-info a)) most-positive-fixnum))
         (pb (or (+agenda-entry-priority b) org-default-priority))
+        (ta (or (car (+agenda-entry-sched-info a)) most-positive-fixnum))
         (tb (and (eq (cdr (+agenda-entry-sched-info b)) 'past) (car (+agenda-entry-sched-info b)))))
     (or (< pa pb) (and (= pa pb) (if tb (< ta tb) (eq (cdr (+agenda-entry-sched-info a)) 'past))))))
 
@@ -2504,6 +2506,7 @@ some heuristics to guess the result."
 (defvar +agenda-archivable-tasks)
 (defvar +agenda-planned-tasks)
 (defvar +agenda-hold-tasks)
+(defvar +agenda-date-info)
 
 (defun +agenda-filter-priorities (entry)
   (let ((priority (+agenda-entry-priority entry)))
@@ -2546,7 +2549,8 @@ some heuristics to guess the result."
 
       (if (not todo-type)
           ;; NOTE(nox): No todo keyword
-          (let* ((time-to-now (car (+agenda-entry-sched-info entry)))
+          (let* ((time-to-now (and (car (+agenda-entry-sched-info entry))
+                                   (- (car (+agenda-entry-sched-info entry)) (org-today))))
                  first-child search-bound temp-time)
 
             ;; NOTE(nox): Find the most recent active timestamp
@@ -2582,7 +2586,10 @@ some heuristics to guess the result."
            ((and (not (string= todo "NEXT")) (eq (cdr (+agenda-entry-sched-info entry)) 'planned))
             (setf (+agenda-entry-planned entry) t)
             (if (= +agenda-level 0)
-                (unless (+agenda-entry-is-tickler entry) (push entry +agenda-planned-tasks))
+                (unless (or (+agenda-entry-is-tickler entry)
+                            (and (>= (car (+agenda-entry-sched-info entry)) (car +agenda-date-info))
+                                 (<  (car (+agenda-entry-sched-info entry)) (cdr +agenda-date-info))))
+                  (push entry +agenda-planned-tasks))
               (+agenda-set-parent-minimum-status 'planned)
               (setq return entry)))
 
@@ -2635,6 +2642,9 @@ some heuristics to guess the result."
 (defun +agenda-tasks (&optional _)
   (catch 'exit
     (let ((files (org-agenda-files nil 'ifmode))
+          (+agenda-date-info
+           (cons org-starting-day
+                 (+ org-starting-day (org-agenda-span-to-ndays org-agenda-current-span org-starting-day))))
           +agenda-projects +agenda-isolated-tasks +agenda-high-priority
           +agenda-low-priority +agenda-planned-tasks +agenda-hold-tasks
           +agenda-archivable-tasks
