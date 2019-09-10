@@ -2278,7 +2278,7 @@ some heuristics to guess the result."
 
 (cl-defstruct +agenda-entry
   todo todo-text priority text tags planned low-effort marker is-tickler sched-info
-  project-status children)
+  project-status children hidden-children)
 
 (defun +agenda-entry (headline &optional tags)
   (let ((todo-text (org-element-property :todo-keyword headline))
@@ -2362,6 +2362,9 @@ some heuristics to guess the result."
                   (when (+agenda-entry-priority entry)
                     (string ?\[ ?# (+agenda-entry-priority entry) ?\] ? ))
                   (+agenda-fontify-entry entry-text)
+                  (when (and (+agenda-entry-hidden-children entry)
+                             (not (string-match-p "\\[[0-9]*\\(%\\|/[0-9]*\\)\\]" entry-text)))
+                    " ")
                   (when (+agenda-entry-tags entry)
                     (concat " :"
                             (mapconcat #'identity
@@ -2624,6 +2627,7 @@ some heuristics to guess the result."
                                (and (eq (+agenda-entry-project-status child) 'stuck)
                                     (not (eq (+agenda-entry-todo child) 'next)))
                              (eq (+agenda-entry-todo child) 'todo))
+                           (setf (+agenda-entry-hidden-children entry) t)
                            (if prev (setcdr prev (cdr tail)) (setq children (cdr tail))))
 
                           (t (setq prev tail))))
