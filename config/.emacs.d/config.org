@@ -1875,6 +1875,10 @@ The next part was taken from DOOM themes
     ("WAITING"   . (:inherit org-todo :weight bold))
     ("DONE"      . (:inherit org-done :weight bold))
     ("CANCELLED" . (:inherit org-done :weight bold))))
+
+(defconst +agenda-todo-map-alist
+  '(("TODO" . todo) ("NEXT" . next) ("HOLD" . hold) ("WAITING" . waiting)
+    ("DONE" . done) ("CANCELLED" . cancelled)))
 #+END_SRC
 
 **** Refiling
@@ -2273,11 +2277,12 @@ some heuristics to guess the result."
        (< (org-duration-to-minutes effort-text) 20)))
 
 (cl-defstruct +agenda-entry
-  todo priority text tags planned low-effort marker is-tickler sched-info
+  todo todo-text priority text tags planned low-effort marker is-tickler sched-info
   project-status children)
 
 (defun +agenda-entry (headline &optional tags)
-  (let ((todo-type (org-element-property :todo-type headline))
+  (let ((todo-text (org-element-property :todo-keyword headline))
+        (todo-type (org-element-property :todo-type headline))
         (effort (org-element-property :EFFORT headline))
         (tags (or tags (org-element-property :tags headline)))
         (scheduled-ts (org-element-property :raw-value (org-element-property :scheduled headline)))
@@ -2292,7 +2297,8 @@ some heuristics to guess the result."
                              ts-compare (org-get-wdays deadline-ts))))
 
     (make-+agenda-entry
-     :todo (org-element-property :todo-keyword headline)
+     :todo (cdr (assoc-string todo-text +agenda-todo-map-alist))
+     :todo-text todo-text
      :priority (org-element-property :priority headline)
      :text (org-element-property :raw-value headline)
      :tags tags
@@ -2342,7 +2348,7 @@ some heuristics to guess the result."
                       'mouse-face 'highlight
                       'org-marker (+agenda-entry-marker entry)
                       'org-hd-marker (+agenda-entry-marker entry)
-                      'todo-state (+agenda-entry-todo entry)
+                      'todo-state (+agenda-entry-todo-text entry)
                       'org-todo-regexp org-todo-regexp
                       'org-not-done-regexp org-not-done-regexp
                       'org-complex-heading-regexp org-complex-heading-regexp
@@ -2352,7 +2358,7 @@ some heuristics to guess the result."
                       'format `(nil ,prefix)))
          (text
           (concat prefix
-                  (when (+agenda-entry-todo entry) (concat (+agenda-entry-todo entry) " "))
+                  (when (+agenda-entry-todo-text entry) (concat (+agenda-entry-todo-text entry) " "))
                   (when (+agenda-entry-priority entry)
                     (string ?\[ ?# (+agenda-entry-priority entry) ?\] ? ))
                   (+agenda-fontify-entry entry-text)
@@ -2583,7 +2589,7 @@ some heuristics to guess the result."
 
           (cond
            ;; NOTE(nox): Planned
-           ((and (not (string= todo "NEXT")) (eq (cdr (+agenda-entry-sched-info entry)) 'planned))
+           ((and (not (eq todo 'next)) (eq (cdr (+agenda-entry-sched-info entry)) 'planned))
             (setf (+agenda-entry-planned entry) t)
             (if (= +agenda-level 0)
                 (unless (or (+agenda-entry-is-tickler entry)
@@ -2594,7 +2600,7 @@ some heuristics to guess the result."
               (setq return entry)))
 
            ;; NOTE(nox): Hold
-           ((or (string= todo "HOLD") (string= todo "WAITING"))
+           ((or (eq todo 'hold) (eq todo 'waiting))
             (push entry +agenda-hold-tasks))
 
            (t
@@ -2604,16 +2610,23 @@ some heuristics to guess the result."
                    tail prev)
               (setq project-status +agenda-project-status)
 
-              ;; NOTE(nox): When this project is next, we need to remove its planned tasks and insert
-              ;; them in the planned list.
+              ;; NOTE(nox): When this project is next, we need to remove the cruft from the list
+              ;; (planned, stuck or todo children)
               (when (and (eq project-status 'next) (not +agenda-weekly-review))
                 (setq tail children)
                 (while tail
-                  (cond ((+agenda-is-entry-planned (car tail))
-                         (push (car tail) +agenda-planned-tasks)
-                         (if prev (setcdr prev (cdr tail)) (setq children (cdr tail))))
+                  (let ((child (car tail)))
+                    (cond ((+agenda-is-entry-planned child)
+                           (push child +agenda-planned-tasks)
+                           (if prev (setcdr prev (cdr tail)) (setq children (cdr tail))))
 
-                        (t (setq prev tail)))
+                          ((if (+agenda-entry-project-status child)
+                               (and (eq (+agenda-entry-project-status child) 'stuck)
+                                    (not (eq (+agenda-entry-todo child) 'next)))
+                             (eq (+agenda-entry-todo child) 'todo))
+                           (if prev (setcdr prev (cdr tail)) (setq children (cdr tail))))
+
+                          (t (setq prev tail))))
                   (setq tail (cdr tail))))
 
               (setf (+agenda-entry-project-status entry) project-status
@@ -2623,7 +2636,7 @@ some heuristics to guess the result."
             (unless (or (= +agenda-level 0) (eq +agenda-project-status 'next))
               (if project-status
                   (when (memq project-status '(next planned)) (setq +agenda-project-status project-status))
-                (when (or (string= todo "NEXT") scheduled-past-or-now)
+                (when (or (eq todo 'next) scheduled-past-or-now)
                   (setq +agenda-project-status 'next))))
 
             (if project-status
@@ -2634,9 +2647,7 @@ some heuristics to guess the result."
               (if (= +agenda-level 0)
                   (unless (or (+agenda-filter-priorities entry) scheduled-past-or-now)
                     (push entry +agenda-isolated-tasks))
-
-                (when (or +agenda-weekly-review (string= todo "NEXT") scheduled-past-or-now)
-                  (setq return entry))))))))
+                (setq return entry)))))))
       return)))
 
 (defun +agenda-tasks (&optional _)
