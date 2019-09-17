@@ -1135,7 +1135,7 @@ Used for sorting items.
           (find-alternate-file file-name)
         (find-file file-name))))
 
-  (setq! counsel-rg-base-command "rg -zS -M 120 --no-heading --line-number --color never %s ."
+  (setq! counsel-rg-base-command "rg -zS -M 150 --max-columns-preview --no-heading --line-number --color never %s ."
          counsel-ag-base-command "ag -zS --nocolor --nogroup %s"
          counsel-pt-base-command "pt -zS --nocolor --nogroup -e %s"
          counsel-grep-base-command
@@ -1337,10 +1337,11 @@ Used for sorting items.
     ("l" dumb-jump-quick-look "Quick look")
     ("b" dumb-jump-back "Back" :exit nil))
 
-  (setq dumb-jump-selector 'ivy
-        dumb-jump-default-project nox-emacs-dir
-        dumb-jump-aggressive nil
-        dumb-jump-use-visible-window nil))
+  (setq! dumb-jump-selector 'ivy
+         dumb-jump-prefer-searcher 'rg
+         dumb-jump-default-project nox-emacs-dir
+         dumb-jump-aggressive nil
+         dumb-jump-use-visible-window nil))
 #+END_SRC
 
 **** Imenu
