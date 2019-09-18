@@ -2610,25 +2610,42 @@ some heuristics to guess the result."
                    tail prev)
               (setq project-status +agenda-project-status)
 
-              ;; NOTE(nox): When this project is next, we need to remove the cruft from the list
-              ;; (planned, stuck or todo children)
-              (when (and (eq project-status 'next) (not +agenda-weekly-review))
-                (setq tail children)
-                (while tail
-                  (let ((child (car tail)))
-                    (cond ((+agenda-is-entry-planned child)
-                           (unless (+agenda-entry-is-tickler child) (push child +agenda-planned-tasks))
-                           (if prev (setcdr prev (cdr tail)) (setq children (cdr tail))))
+              (cond
+               ;; NOTE(nox): When this project is next, we need to remove the cruft from the list
+               ;; (planned, stuck or todo children)
+               ((eq project-status 'next)
+                (unless +agenda-weekly-review
+                  (setq tail children)
+                  (while tail
+                    (let ((child (car tail)))
+                      (cond ((+agenda-is-entry-planned child)
+                             (unless (+agenda-entry-is-tickler child) (push child +agenda-planned-tasks))
+                             (if prev (setcdr prev (cdr tail)) (setq children (cdr tail))))
 
-                          ((if (+agenda-entry-project-status child)
-                               (and (eq (+agenda-entry-project-status child) 'stuck)
-                                    (not (eq (+agenda-entry-todo child) 'next)))
-                             (eq (+agenda-entry-todo child) 'todo))
-                           (setf (+agenda-entry-hidden-children entry) t)
-                           (if prev (setcdr prev (cdr tail)) (setq children (cdr tail))))
+                            ((if (+agenda-entry-project-status child)
+                                 (and (eq (+agenda-entry-project-status child) 'stuck)
+                                      (not (eq (+agenda-entry-todo child) 'next)))
+                               (eq (+agenda-entry-todo child) 'todo))
+                             (setf (+agenda-entry-hidden-children entry) t)
+                             (if prev (setcdr prev (cdr tail)) (setq children (cdr tail))))
 
-                          (t (setq prev tail))))
-                  (setq tail (cdr tail))))
+                            (t (setq prev tail))))
+                    (setq tail (cdr tail)))))
+
+               ;; NOTE(nox): When this project is planned due to it only having planned and non-next
+               ;; tasks, we have to show that it is hiding some non-next tasks
+               ((eq project-status 'planned)
+                (catch 'break
+                  (dolist (child children)
+                    (when (and (not (+agenda-is-entry-planned child))
+                               (if (+agenda-entry-project-status child)
+                                   (and (eq (+agenda-entry-project-status child) 'stuck)
+                                        (not (eq (+agenda-entry-todo child) 'next)))
+                                 (eq (+agenda-entry-todo child) 'todo)))
+                      (if +agenda-weekly-review
+                          (setf (+agenda-entry-is-tickler entry) nil)
+                        (setf (+agenda-entry-hidden-children entry) t))
+                      (throw 'break t))))))
 
               (setf (+agenda-entry-project-status entry) project-status
                     (+agenda-entry-children entry) children))
@@ -2641,9 +2658,12 @@ some heuristics to guess the result."
                   (setq +agenda-project-status 'next))))
 
             (if project-status
-                (if (and (= +agenda-level 0) (eq project-status 'planned) (not +agenda-weekly-review))
-                    (unless (+agenda-entry-is-tickler entry) (push entry +agenda-planned-tasks))
-                  (setq return entry))
+                (if (and (+agenda-entry-is-tickler entry) (not (+agenda-entry-hidden-children entry)))
+                    (unless (eq project-status 'planned) (setq return entry))
+
+                  (if (and (eq project-status 'planned) (= +agenda-level 0) (not +agenda-weekly-review))
+                      (push entry +agenda-planned-tasks)
+                    (setq return entry)))
 
               (if (= +agenda-level 0)
                   (unless (or (+agenda-filter-priorities entry) scheduled-past-or-now)
