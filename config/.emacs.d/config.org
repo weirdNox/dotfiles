@@ -2988,7 +2988,7 @@ When optional argument is non-nil, refresh cached heading."
   :init
   (defvar +bibtex-bibliography '("~/Documents/Bibliography/References.bib"))
   (defvar +bibtex-pdf-dir        "~/Documents/Bibliography/PDFs/")
-  (defvar +bibtex-notes          "~/Documents/Bibliography/Notes.org")
+  (defvar +bibtex-notes          "~/Documents/Bibliography/notes/")
 
   :config
   (setq! bibtex-entry-format t
@@ -3103,11 +3103,15 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 
 (use-package ivy-bibtex :ensure
   :config
-  (setq! bibtex-completion-bibliography +bibtex-bibliography
-         bibtex-completion-library-path +bibtex-pdf-dir
-         bibtex-completion-notes-path   +bibtex-notes
+  (setq! bibtex-completion-bibliography    +bibtex-bibliography
+         bibtex-completion-library-path    +bibtex-pdf-dir
+         bibtex-completion-notes-path      +bibtex-notes
+         bibtex-completion-notes-extension ".org"
 
-         bibtex-completion-notes-template-one-file (format "* ${title} - ${year}
+         bibtex-completion-notes-template-multiple-files (format "#+TITLE: ${title} (${year})
+,#+AUTHOR: ${author-or-editor}
+
+,* Notes
 :PROPERTIES:
 :Custom_ID: ${=key=}
 :NOTER_DOCUMENT: %s${=key=}.pdf
