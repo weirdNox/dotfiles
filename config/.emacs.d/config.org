@@ -3577,8 +3577,6 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
             "<M-mouse-4>" 'image-backward-hscroll
             "<M-mouse-5>" 'image-forward-hscroll)
   :config
-  (unless noninteractive (pdf-tools-install))
-
   (defun +pdf-view-scroll-page-left ()
     (interactive)
     (image-backward-hscroll (window-width)))
