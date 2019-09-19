@@ -1850,6 +1850,42 @@ The next part was taken from DOOM themes
              (goto-char (car target))
              (org-todo "NEXT"))))))))
 (add-hook 'org-after-todo-state-change-hook #'nox|org-project-set-next-after-done)
+
+(defun nox|update-parent-todo ()
+  (org-with-wide-buffer
+   (when (and (org-up-heading-safe) (org-get-todo-state))
+     (let ((continue t) (restore-point (point)) (org-inhibit-logging t)
+           (inhibit-message t) best-keyword best-is-todo)
+       (outline-next-heading)
+       (while continue
+         (let ((keyword (org-get-todo-state)))
+           (if best-is-todo
+               (catch 'break
+                 (dolist (test org-not-done-keywords)
+                   (when (string= test best-keyword)
+                     (throw 'break t))
+                   (when (string= test keyword)
+                     (setq best-keyword keyword)
+                     (throw 'break t))))
+
+             (if (member keyword org-not-done-keywords)
+                 (setq best-keyword keyword
+                       best-is-todo t)
+
+               (catch 'break
+                 (dolist (test org-done-keywords)
+                   (when (string= test best-keyword)
+                     (throw 'break t))
+                   (when (string= test keyword)
+                     (setq best-keyword keyword)
+                     (throw 'break t)))))))
+
+         (setq continue (outline-get-next-sibling)))
+
+       (when best-keyword
+         (goto-char restore-point)
+         (org-todo best-keyword))))))
+(add-to-list 'safe-local-eval-forms '(setq-local org-after-todo-state-change-hook '(nox|update-parent-todo)))
 #+END_SRC
 
 **** Tasks and states
