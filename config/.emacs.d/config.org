@@ -2661,7 +2661,8 @@ some heuristics to guess the result."
                             ((if (+agenda-entry-project-status child)
                                  (and (eq (+agenda-entry-project-status child) 'stuck)
                                       (not (eq (+agenda-entry-todo child) 'next)))
-                               (eq (+agenda-entry-todo child) 'todo))
+                               (and (eq (+agenda-entry-todo child) 'todo)
+                                    (not (eq (cdr (+agenda-entry-sched-info child)) 'past))))
                              (setf (+agenda-entry-hidden-children entry) t)
                              (if prev (setcdr prev (cdr tail)) (setq children (cdr tail))))
 
