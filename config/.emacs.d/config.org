@@ -2698,9 +2698,11 @@ some heuristics to guess the result."
                 (if (and (+agenda-entry-is-tickler entry) (not (+agenda-entry-hidden-children entry)))
                     (unless (eq project-status 'planned) (setq return entry))
 
-                  (if (and (eq project-status 'planned) (= +agenda-level 0) (not +agenda-weekly-review))
-                      (push entry +agenda-planned-tasks)
-                    (setq return entry)))
+                  (if +agenda-weekly-review
+                      (setq return entry)
+                    (if (and (eq project-status 'planned) (= +agenda-level 0))
+                        (push entry +agenda-planned-tasks)
+                      (when (or (eq todo 'next) (not (eq project-status 'stuck))) (setq return entry)))))
 
               (if (= +agenda-level 0)
                   (unless (or (+agenda-filter-priorities entry) scheduled-past-or-now)
