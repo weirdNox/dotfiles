@@ -2007,7 +2007,7 @@ parent."
 (setq!
  org-latex-compiler "xelatex"
  org-latex-packages-alist '(("" "mathtools" t)
-                            ("" "siunitx" t)
+                            ("binary-units=true" "siunitx" t)
                             ("" "cancel" t))
  org-preview-latex-default-process 'dvisvgm
  org-latex-preview-ltxpng-directory (concat nox-cache-dir "org-latex/")
