@@ -1557,7 +1557,7 @@ fundamental-mode) for performance sake."
 (add-hook 'find-file-hook #'nox|check-large-file)
 #+END_SRC
 
-** Programming languages
+** Languages
 *** C/C++
 #+BEGIN_SRC emacs-lisp
 (use-package cc-mode
@@ -1656,6 +1656,13 @@ fundamental-mode) for performance sake."
          ("\\.mod\\'" . spice-mode))
   :config
   (set-face-attribute 'spice-title-face nil :background nil))
+#+end_src
+
+*** Verilog
+#+begin_src emacs-lisp
+(use-package verilog-mode
+  :config
+  (setq! verilog-indent-begin-after-if nil))
 #+end_src
 
 *** Web
