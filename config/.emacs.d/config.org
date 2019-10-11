@@ -2593,31 +2593,32 @@ some heuristics to guess the result."
            (closed-ts  (org-element-property :raw-value (org-element-property :closed headline)))
            (todo (+agenda-entry-todo entry))
            (todo-type (org-element-property :todo-type headline))
-           (contents-begin (org-element-property :contents-begin headline))
            project-status return)
 
       (if (not todo-type)
           ;; NOTE(nox): No todo keyword
           (let* ((time-to-now (and (car (+agenda-entry-sched-info entry))
                                    (- (car (+agenda-entry-sched-info entry)) (org-today))))
+                 (begin (org-element-property :begin headline))
                  first-child search-bound temp-time)
 
             ;; NOTE(nox): Find the most recent active timestamp
-            (when (and (not time-to-now) contents-begin)
+            (when (and (not time-to-now) begin)
               (setq first-child (org-element-map (org-element-contents headline) 'headline #'identity
                                                  nil t 'headline)
                     search-bound (or (and first-child (org-element-property :begin first-child))
                                      (org-element-property :end headline)))
-              (goto-char contents-begin)
+              (goto-char begin)
               (while (re-search-forward org-ts-regexp search-bound t)
                 (setq temp-time (org-time-stamp-to-now (match-string 1)))
                 (when (or (not time-to-now) (> temp-time time-to-now))
                   (setq time-to-now temp-time))))
 
-            (if (and time-to-now (< time-to-now -60))
-                ;; NOTE(nox): This headline without todo keyword has a timestamp that is
-                ;; more than two months old.
-                (push entry +agenda-archivable-tasks)
+            (if time-to-now
+                ;; NOTE(nox): This headline without todo keyword has a timestamp, so we'll prevent it
+                ;; from holding a project, this should only be used by appointments!
+                (when (and (= +agenda-level 0) (< time-to-now -60))
+                  (push entry +agenda-archivable-tasks))
 
               ;; NOTE(nox): Just process the children of this headline without todo keyword
               (setq return (+agenda-process-children headline))))
@@ -2627,7 +2628,8 @@ some heuristics to guess the result."
 
         (if (eq todo-type 'done)
             ;; NOTE(nox): Archive all tasks that have been done for longer than 2 months
-            (when (or (not closed-ts) (< (org-time-stamp-to-now closed-ts) -60))
+            (when (and (= +agenda-level 0)
+                       (or (not closed-ts) (< (org-time-stamp-to-now closed-ts) -60)))
               (push entry +agenda-archivable-tasks))
 
           (cond
