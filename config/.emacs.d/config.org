@@ -2279,7 +2279,7 @@ some heuristics to guess the result."
     "W" #'+agenda/toggle-weekly-review)
 
   (defun +agenda|skip-function ()
-    (and (or (and (not +agenda-show-private) (member "PRIVATE" (org-get-tags-at)))
+    (and (or (and (not +agenda-show-private) (member "PRIVATE" (save-match-data (org-get-tags))))
              (and (boundp 'deadline-items)
                   (let ((deadline (org-agenda--timestamp-to-absolute (match-string 1)))
                         (date-abs (calendar-absolute-from-gregorian date))
