@@ -1144,6 +1144,10 @@ Used for sorting items.
                (t "grep -i -E -n -e %s %s"))
          counsel-find-file-ignore-regexp "\\(?:^[#.]\\)\\|\\(?:[#~]$\\)")
 
+  (ivy-configure 'counsel-M-x :initial-input "")
+  (ivy-configure 'counsel-describe-function :initial-input "")
+  (ivy-configure 'counsel-describe-variable :initial-input "")
+
   (counsel-mode))
 #+END_SRC
 
