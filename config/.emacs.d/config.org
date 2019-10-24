@@ -1095,11 +1095,8 @@ Disable fringes in the minibuffer window.
 **** Ivy hydra
 #+BEGIN_SRC emacs-lisp
 (use-package ivy-hydra :ensure
-  :commands (ivy-dispatching-done-hydra hydra-ivy/body)
-  :general
-  (:keymaps 'ivy-minibuffer-map
-            "C-o" #'hydra-ivy/body
-            "M-o" #'ivy-dispatching-done-hydra))
+  :commands ivy-hydra-read-action
+  :init (setq! ivy-read-action-function #'ivy-hydra-read-action))
 #+END_SRC
 
 **** flx
