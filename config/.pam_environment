@@ -1,9 +1,21 @@
+HOME_LOCAL_DIR      DEFAULT=@{HOME}/.local
+
 XDG_CACHE_HOME      DEFAULT=@{HOME}/.cache
 
 XDG_CONFIG_DIRS     DEFAULT=/etc/xdg
 XDG_CONFIG_HOME     DEFAULT=@{HOME}/.config
 
-XDG_DATA_DIRS       DEFAULT=/usr/local/share/:/usr/share/
-XDG_DATA_HOME       DEFAULT=@{HOME}/.local/share
+XDG_BIN_HOME        DEFAULT=${HOME_LOCAL_DIR}/bin
+PATH                DEFAULT=${XDG_BIN_HOME}:${PATH}
 
-PATH                DEFAULT=@{HOME}/.local/bin:${PATH}
+XDG_DATA_DIRS       DEFAULT=/usr/local/share/:/usr/share/
+XDG_DATA_HOME       DEFAULT=${HOME_LOCAL_DIR}/share
+
+XDG_LIB_HOME        DEFAULT=${HOME_LOCAL_DIR}/lib
+
+EDITOR              DEFAULT=${XDG_BIN_HOME}/editor
+VISUAL              DEFAULT=${EDITOR}
+ALTERNATE_EDITOR    DEFAULT=
+
+DICPATH             DEFAULT=${XDG_DATA_HOME}/dicts
+MATLAB_LOG_DIR      DEFAULT=/tmp
