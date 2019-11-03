@@ -967,7 +967,7 @@ Disable fringes in the minibuffer window.
 #+BEGIN_SRC emacs-lisp
 (defun nox-setup-appearance (frame)
   (with-selected-frame frame
-    (load-theme 'doom-one t)
+    (load-theme 'doom-dracula t)
     (nox/change-font)
     (when (> (window-width) 100) (split-window-right))
     (setq! system-time-locale "C")))
