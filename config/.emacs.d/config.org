@@ -2823,7 +2823,8 @@ after removing the face property. This serves to restore the custom face set in 
 (use-package org-attach
   :config
   (setq! org-attach-directory "Recursos/attach/"
-         org-attach-method 'mv))
+         org-attach-method 'mv
+         org-attach-auto-tag nil))
 #+END_SRC
 
 *** Capture
