@@ -1663,8 +1663,10 @@ fundamental-mode) for performance sake."
 #+begin_src emacs-lisp
 (use-package verilog-mode
   :config
-  (setq! verilog-indent-begin-after-if nil
-         verilog-auto-newline nil))
+  (setq! verilog-auto-endcomments nil
+         verilog-auto-lineup nil
+         verilog-auto-newline nil
+         verilog-indent-begin-after-if nil))
 #+end_src
 
 *** Web
