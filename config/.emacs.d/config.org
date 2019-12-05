@@ -3057,7 +3057,7 @@ When optional argument is non-nil, refresh cached heading."
 #+END_SRC
 
 ** Tools and utilities
-*** BibTeX
+*** BibTeX & BibLaTeX
 #+BEGIN_SRC emacs-lisp
 (use-package bibtex
   :init
@@ -3066,7 +3066,8 @@ When optional argument is non-nil, refresh cached heading."
   (defvar +bibtex-notes          "~/Documents/Bibliography/notes/")
 
   :config
-  (setq! bibtex-entry-format t
+  (setq! bibtex-dialect 'BibTeX
+         bibtex-entry-format t
          bibtex-align-at-equal-sign t
          bibtex-clean-entry-hook '(+bibtex-replace-key))
 
