@@ -886,11 +886,6 @@ ARGS are the same as in `custom-set-faces'."
          doom-one-comment-bg nil
          doom-peacock-brighter-modeline t)
 
-  (use-package doom-themes-treemacs
-    :after treemacs :demand
-    :init
-    (setq! doom-treemacs-enable-variable-pitch nil))
-
   (nox-add-customize-theme-hook "^doom-"
     (after! outline
       (set-face-attribute 'outline-1 nil :height 1.0)
@@ -915,6 +910,12 @@ ARGS are the same as in `custom-set-faces'."
      '(org-verbatim ((t . (:inherit font-lock-doc-face))))
      `(org-block ((t . (:background ,(ignore-errors (color-darken-name (face-attribute 'default :background) 2))))))
      `(fringe ((t . (:foreground ,(ignore-errors (color-darken-name (face-attribute 'shadow :foreground) 10)))))))))
+
+(use-package color-theme-sanityinc-tomorrow :ensure
+  :config
+  (nox-add-customize-theme-hook "^sanityinc"
+    (nox-theme-set-faces
+     `(org-drawer ((t . (:foreground ,(face-attribute 'shadow :foreground))))))))
 #+END_SRC
 
 **** Extra programming keywords
@@ -967,7 +968,7 @@ Disable fringes in the minibuffer window.
 #+BEGIN_SRC emacs-lisp
 (defun nox-setup-appearance (frame)
   (with-selected-frame frame
-    (load-theme 'doom-dracula t)
+    (load-theme 'sanityinc-tomorrow-night t)
     (nox/change-font)
     (when (> (window-width) 100) (split-window-right))
     (setq! system-time-locale "C")))
@@ -3895,6 +3896,10 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
   (setq! treemacs-collapse-dirs (if (executable-find "python") 3 0)
          treemacs-follow-after-init t
          treemacs-persist-file (concat nox-cache-dir "treemacs-persist")))
+
+(use-package doom-themes-ext-treemacs
+  :after treemacs :demand
+  :init (setq! doom-themes-treemacs-enable-variable-pitch nil))
 #+END_SRC
 
 ** Keybindings
