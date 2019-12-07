@@ -2244,7 +2244,7 @@ some heuristics to guess the result."
 **** File associations
 #+begin_src emacs-lisp
 (setq! org-file-apps '(("pdf" . emacs))
-       org-file-apps-defaults-gnu '((remote . emacs) (system . "setsid -w xdg-open %s") (t . system)))
+       org-file-apps-gnu '((remote . emacs) (system . "setsid -w xdg-open %s") (t . system)))
 #+end_src
 
 ***** PDF Tools support
