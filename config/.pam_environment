@@ -6,7 +6,7 @@ XDG_CONFIG_DIRS     DEFAULT=/etc/xdg
 XDG_CONFIG_HOME     DEFAULT=@{HOME}/.config
 
 XDG_BIN_HOME        DEFAULT=${HOME_LOCAL_DIR}/bin
-PATH                DEFAULT=${XDG_BIN_HOME}:${PATH}
+PATH                DEFAULT=${XDG_BIN_HOME}:/usr/local/sbin:/usr/local/bin:/usr/bin
 
 XDG_DATA_DIRS       DEFAULT=/usr/local/share/:/usr/share/
 XDG_DATA_HOME       DEFAULT=${HOME_LOCAL_DIR}/share
