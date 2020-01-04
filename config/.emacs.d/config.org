@@ -2022,7 +2022,8 @@ parent."
  org-latex-compiler "xelatex"
  org-latex-packages-alist '(("" "mathtools" t)
                             ("binary-units=true" "siunitx" t)
-                            ("" "cancel" t))
+                            ("" "cancel" t)
+                            ("" "xcolor" t))
  org-preview-latex-default-process 'dvisvgm
  org-latex-preview-ltxpng-directory (concat nox-cache-dir "org-latex/")
  org-format-latex-options '(:foreground default :background default :scale 1.7 :html-foreground "Black"
