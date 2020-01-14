@@ -1601,6 +1601,11 @@ fundamental-mode) for performance sake."
                                      (substatement-open . 0))))))
 #+END_SRC
 
+*** GLSL
+#+begin_src emacs-lisp
+(use-package glsl-mode :ensure)
+#+end_src
+
 *** Go
 #+BEGIN_SRC emacs-lisp
 (use-package go-mode :ensure
