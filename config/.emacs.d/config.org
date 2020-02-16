@@ -2927,26 +2927,22 @@ after removing the face property. This serves to restore the custom face set in 
         (org-capture-put :prepend t))))
 
   (setq!
-   org-capture-templates '(("t" "task" entry (file "")
-                            "* NEXT %i%?" :clock-in t :clock-resume t)
-                           ("c" "calendar" entry (file "")
-                            "* %?\n%^t")
-                           ("b" "break" entry (file+olp nox-org-agenda-file "Interrupções")
-                            "* %?" :clock-in t :clock-resume t)
-                           ("j" "journal" entry (file+olp+datetree nox-org-journal-file)
-                            "* %?" :clock-in t :clock-resume t :time-prompt t)
-                           ("f" "tracking")
-                           ("ff" "movie" entry #'+capture-tracker-location
-                            #'+capture-tracker-template :track-type movie)
-                           ("fs" "series" entry #'+capture-tracker-location
-                            #'+capture-tracker-template :track-type series)
-                           ("fb" "book" entry #'+capture-tracker-location
-                            #'+capture-tracker-template :track-type book)
+   org-capture-templates '(("t" "task" entry (file "") "* NEXT %i%?")
+                           ("c" "calendar" entry (file "") "* %?\n%^t")
+                           ("b" "break" entry (file+olp nox-org-agenda-file "Interrupções") "* %?"
+                            :clock-in t :clock-resume t)
+                           ("j" "journal" entry (file+olp+datetree nox-org-journal-file) "* %?"
+                            :clock-in t :clock-resume t :time-prompt t)
+                           ("m" "tracking")
+                           ("mm" "movie" entry #'+capture-tracker-location #'+capture-tracker-template
+                            :track-type movie)
+                           ("ms" "series" entry #'+capture-tracker-location #'+capture-tracker-template
+                            :track-type series)
+                           ("mb" "book" entry #'+capture-tracker-location #'+capture-tracker-template
+                            :track-type book)
                            ("w" "web")
-                           ("wb" "bookmark" plain #'+capture-bookmark-location
-                            #'+capture-bookmark-template)
-                           ("wc" "capture" entry (file "")
-                            "* [[%:link][%^{Title|%:description}]]\n%?" :clock-in t :clock-resume t)))
+                           ("wb" "bookmark" plain #'+capture-bookmark-location #'+capture-bookmark-template)
+                           ("wc" "capture" entry (file "") "* [[%:link][%^{Title|%:description}]]\n%?")))
 
   (add-hook 'org-capture-mode-hook 'nox|org-offer-all-agenda-tags)
 
