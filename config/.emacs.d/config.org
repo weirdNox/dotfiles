@@ -3183,6 +3183,8 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
          bibtex-completion-library-path    +bibtex-pdf-dir
          bibtex-completion-notes-path      +bibtex-notes
          bibtex-completion-notes-extension ".org"
+         bibtex-completion-find-additional-pdfs t
+         bibtex-completion-additional-search-fields '("keywords")
 
          bibtex-completion-notes-template-multiple-files (format "#+TITLE: ${title} (${year})
 ,#+AUTHOR: ${author-or-editor}
