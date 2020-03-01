@@ -12,6 +12,6 @@ Xft.autohint: false
 Xft.embeddedbitmap: false
 
 ! Prevent unreadable UI/text
-*TkTheme:   clam
+*TkTheme: clam
 *background: #d9d9d9
 *foreground: #000C1A

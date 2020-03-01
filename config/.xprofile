@@ -1,9 +1,7 @@
 #!/usr/bin/env sh
 # This file is loaded at the beginning of the X user session.
-
-# In order to see the current layout, run `setxkbmap -query`
-setxkbmap -option
-setxkbmap -layout us,pt,us -variant intl,,colemak -option ctrl:nocaps,shift:both_capslock,compose:rwin
+killall input_daemon >/dev/null 2>&1
+input_daemon setxkbmap -layout us,pt -variant intl, -option ctrl:nocaps,shift:both_capslock,compose:rwin
 
 export _JAVA_OPTIONS='-Dawt.useSystemAAFontSettings=gasp -Dswing.aatext=true -Dswing.defaultlaf=com.sun.java.swing.plaf.gtk.GTKLookAndFeel'
 
