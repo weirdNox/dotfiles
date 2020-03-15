@@ -1,6 +1,8 @@
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <xcb/xcb.h>
@@ -50,8 +52,18 @@ static int getDeviceCount(xcb_connection_t *Conn) {
 }
 
 static void executeScript(char *ArgVals[]) {
-    if(fork() == 0) {
-        execvp(ArgVals[0], ArgVals);
+    switch(fork()) {
+        case -1: {
+            printError("Could not fork in order to execute the script\n");
+        } break;
+
+        case 0: {
+            if(execvp(ArgVals[0], ArgVals) < 0) {
+                errorAndDie("Failed to execute provided program (%s): %s\n", ArgVals[0], strerror(errno));
+            }
+        } break;
+
+        default: break;
     }
 }
 
@@ -63,7 +75,7 @@ static void setupDeviceMask(xcb_connection_t *Conn, xcb_screen_t *Screen) {
 
     Mask.Head.deviceid = XCB_INPUT_DEVICE_ALL;
 
-    Mask.Mask = XCB_INPUT_XI_EVENT_MASK_DEVICE_CHANGED;
+    Mask.Mask = XCB_INPUT_XI_EVENT_MASK_HIERARCHY;
     Mask.Head.mask_len = sizeof(Mask.Mask) / sizeof(uint32_t);
     xcb_input_xi_select_events(Conn, Screen->root, 1, &Mask.Head);
     xcb_flush(Conn);
@@ -107,6 +119,8 @@ int main(int ArgCount, char *ArgVals[]) {
 
     xcb_screen_t *Screen = xcb_setup_roots_iterator(xcb_get_setup(Conn)).data;
     setupDeviceMask(Conn, Screen);
+
+    executeScript(ArgVals+1);
 
     int LastDeviceCount = 0;
     for(xcb_generic_event_t *Event; (Event = xcb_wait_for_event(Conn));) {

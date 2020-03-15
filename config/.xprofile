@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # This file is loaded at the beginning of the X user session.
 killall input_daemon >/dev/null 2>&1
-input_daemon setxkbmap -layout us,pt -variant intl, -option ctrl:nocaps,shift:both_capslock,compose:rwin
+input_daemon ~/.local/lib/x11-input_setup.sh
 
 export _JAVA_OPTIONS='-Dawt.useSystemAAFontSettings=gasp -Dswing.aatext=true -Dswing.defaultlaf=com.sun.java.swing.plaf.gtk.GTKLookAndFeel'
 
