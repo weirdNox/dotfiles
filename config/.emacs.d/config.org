@@ -1664,7 +1664,8 @@ fundamental-mode) for performance sake."
          ("\\.cir\\'" . spice-mode)
          ("\\.cdl\\'" . spice-mode)
          ("\\.chi\\'" . spice-mode)
-         ("\\.mod\\'" . spice-mode))
+         ("\\.mod\\'" . spice-mode)
+         ("\\.scs\\'" . spice-mode))
   :config
   (set-face-attribute 'spice-title-face nil :background nil))
 #+end_src
