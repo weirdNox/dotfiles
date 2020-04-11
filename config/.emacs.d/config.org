@@ -3257,6 +3257,8 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
     (with-silent-modifications
       (ansi-color-apply-on-region compilation-filter-start (point))))
   (add-hook! 'compilation-filter-hook #'+compile|ansi-color-apply)
+
+  (put 'compilation-error-regexp-alist 'safe-local-variable 'listp)
 #+END_SRC
 
 **** List of scripts
@@ -3353,8 +3355,17 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 
       (with-current-buffer buffer
         (cd (file-name-directory (+compile-info-path info)))
-        (compilation-start (concat command " " command-args) nil #'+compile-get-buffer-name)
-        (setq-local +compile-info info))
+        (let* ((error-regexp-alist
+                (with-temp-buffer
+                  (insert-file-contents (+compile-info-path info))
+                  (hack-local-variables)
+                  compilation-error-regexp-alist))
+               (compilation-start-hook
+                (append compilation-start-hook
+                        (list (lambda (_)
+                                (setq-local compilation-error-regexp-alist error-regexp-alist))))))
+          (compilation-start (concat command " " command-args) nil #'+compile-get-buffer-name)
+          (setq-local +compile-info info)))
 
       (if (= (length (window-list)) num-windows-before)
           (unless existing-window (setf (+compile-info-should-delete-window info) nil))
