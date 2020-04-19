@@ -1643,9 +1643,13 @@ fundamental-mode) for performance sake."
          octave-comment-start (char-to-string octave-comment-char)
          octave-block-comment-start (concat (make-string 2 octave-comment-char) " ")))
 
-(use-package matlab :ensure matlab-mode
+(use-package matlab :ensure matlab-mode)
+(use-package matlab-shell
   :config
-  (setq! matlab-shell-command-switches '("-nodesktop" "-nosplash")))
+  (setq! matlab-shell-command-switches '("-nodesktop" "-nosplash")
+         matlab-shell-use-emacs-toolbox nil)
+
+  (defun matlab-shell-first-prompt-fcn ()))
 #+END_SRC
 
 *** MIPS
