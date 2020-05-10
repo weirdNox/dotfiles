@@ -1562,6 +1562,23 @@ fundamental-mode) for performance sake."
 #+END_SRC
 
 ** Languages
+*** Assembly
+#+begin_src emacs-lisp
+(use-package asm-mode
+  :config
+  (defun asm-calculate-indentation ()
+    (or
+     (and (looking-at "[@_[:word:]]+:") 0)
+     (and (looking-at "[.%]") 0)
+     (and (looking-at "\\s<\\s<\\s<") 0)
+     (and (looking-at "c?global\\|section\\|default\\|align\\|INIT_..X") 0)
+     4))
+
+  (add-hook! 'asm-mode-hook
+    (setq-local tab-always-indent t)
+    (local-unset-key (vector asm-comment-char))))
+#+end_src
+
 *** C/C++
 #+BEGIN_SRC emacs-lisp
 (use-package cc-mode
