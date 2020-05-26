@@ -3079,8 +3079,14 @@ When optional argument is non-nil, refresh cached heading."
 (use-package bibtex
   :init
   (defvar +bibtex-bibliography '("~/Documents/bibliography/references.bib"))
-  (defvar +bibtex-pdf-dir        "~/Documents/bibliography/pdfs/")
-  (defvar +bibtex-notes          "~/Documents/bibliography/notes/")
+
+  (defvar-local +bibtex-pdf-relative-dir "pdfs/")
+  (defsubst +bibtex-pdf-dir (bib-file-path)
+    (expand-file-name +bibtex-pdf-relative-dir (file-name-directory (or (car-safe bib-file-path) bib-file-path))))
+
+  (defvar-local +bibtex-notes-relative-dir "notes/")
+  (defsubst +bibtex-notes-dir (bib-file-path)
+    (expand-file-name +bibtex-notes-relative-dir (file-name-directory (or (car-safe bib-file-path) bib-file-path))))
 
   :config
   (setq! bibtex-dialect 'BibTeX
@@ -3090,10 +3096,10 @@ When optional argument is non-nil, refresh cached heading."
 
   (defun +bibtex-assoc-pdf (&optional prefix)
     "Prompt for a PDF to associate with entry at point.
-If an associated PDF already exists in `+bibtex-pdf-dir':
+If an associated PDF already exists in the corresponding PDFs folder:
 - When called interactively, it will ask if you want to replace it.
 - Else, it will return without doing anything (useful for batch functions)
-The PDF file will be moved to `+bibtex-pdf-dir' by default.
+The PDF file will be moved to the PDFs folder by default.
 Optional PREFIX argument toggles between `rename-file' and `copy-file'."
     (interactive "P")
     (save-excursion
@@ -3101,7 +3107,8 @@ Optional PREFIX argument toggles between `rename-file' and `copy-file'."
       (let* ((bibtex-expand-strings t)
              (entry (bibtex-parse-entry t))
              (key (cdr (assoc "=key=" entry)))
-             (target-pdf (expand-file-name (concat key ".pdf") +bibtex-pdf-dir))
+             (pdf-dir (+bibtex-pdf-dir buffer-file-name))
+             (target-pdf (expand-file-name (concat key ".pdf") pdf-dir))
              (target-exists (file-exists-p target-pdf))
              (file-move-func (if prefix #'copy-file #'rename-file)))
         (when (or (not target-exists)
@@ -3178,9 +3185,10 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
         (insert new-key)
         (kill-new new-key)
 
-        (let* ((old-pdf (and old-key (expand-file-name (concat old-key ".pdf") +bibtex-pdf-dir)))
+        (let* ((pdf-dir (+bibtex-pdf-dir buffer-file-name))
+               (old-pdf (and old-key (expand-file-name (concat old-key ".pdf") pdf-dir)))
                (old-exists (and old-pdf (file-exists-p old-pdf)))
-               (new-pdf (expand-file-name (concat new-key ".pdf") +bibtex-pdf-dir))
+               (new-pdf (expand-file-name (concat new-key ".pdf") pdf-dir))
                (new-exists (file-exists-p new-pdf)))
           (when new-exists
             (if old-exists
@@ -3196,9 +3204,16 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 
 (use-package ivy-bibtex :ensure
   :config
-  (setq! bibtex-completion-bibliography    +bibtex-bibliography
-         bibtex-completion-library-path    +bibtex-pdf-dir
-         bibtex-completion-notes-path      +bibtex-notes
+  (defun +bibtex*ivy-bibtex (orig-fun &optional arg local-lib)
+    (let* ((local-bib (bibtex-completion-find-local-bibliography))
+           (bibtex-completion-bibliography (or local-bib
+                                               bibtex-completion-bibliography))
+           (bibtex-completion-library-path (+bibtex-pdf-dir bibtex-completion-bibliography))
+           (bibtex-completion-notes-path (+bibtex-notes-dir bibtex-completion-bibliography)))
+      (funcall orig-fun arg local-bib)))
+  (advice-add #'ivy-bibtex :around #'+bibtex*ivy-bibtex)
+
+  (setq! bibtex-completion-bibliography +bibtex-bibliography
          bibtex-completion-notes-extension ".org"
          bibtex-completion-find-additional-pdfs t
          bibtex-completion-additional-search-fields '("keywords")
@@ -3212,7 +3227,7 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 :NOTER_DOCUMENT: %s${=key=}.pdf
 :END:
 "
-                                                           +bibtex-pdf-dir)
+                                                           (concat "../" +bibtex-pdf-relative-dir))
          bibtex-completion-display-formats
          '((t . "${author:36} │ ${title:*} ${year:4} ${=type=:7} ${=has-pdf=:1}${=has-note=:1}"))
          bibtex-completion-pdf-symbol  ""
@@ -3240,8 +3255,6 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 
   (setq! biblio-cleanup-bibtex-function #'+biblio-cleanup-bibtex))
 #+END_SRC
-
-#+RESULTS:
 
 *** Calc
 #+begin_src emacs-lisp
