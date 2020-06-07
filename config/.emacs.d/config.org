@@ -3323,7 +3323,7 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
   (interactive "P")
   ;; NOTE(nox): When running in a compilation buffer, use the script that created it.
   (let ((chosen-cons (and +compile-info (cons (+compile-info-path +compile-info) +compile-info)))
-        (calling-file-name (or (buffer-file-name) ""))
+        (calling-file-name (or (buffer-file-name) default-directory ""))
         (set-default (equal arg '(16)))
         (num-windows-before (length (window-list)))
         existing-window cons-list)
