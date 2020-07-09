@@ -3385,7 +3385,7 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
                                                    (shell-quote-argument
                                                     (or (file-remote-p calling-file-name 'localname)
                                                         calling-file-name))
-                                                   command-args))
+                                                   command-args nil t))
 
       (setf (+compile-info-last-time info) (current-time))
 
