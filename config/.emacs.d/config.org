@@ -580,7 +580,7 @@ symbols.
          projectile-dynamic-mode-line nil
          projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
          projectile-globally-ignored-files '(".DS_Store" "TAGS")
-         projectile-ignored-projects '("~" "/tmp")
+         projectile-ignored-projects '("~" "~/.emacs.d" "/tmp")
          projectile-indexing-method (if IS-WINDOWS 'native 'alien)
          projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
          projectile-other-file-alist (append projectile-other-file-alist
@@ -1721,7 +1721,7 @@ fundamental-mode) for performance sake."
    "C-c C-q" 'counsel-org-tag)
 
   :init
-  (setq! org-directory "~/Essential/org/")
+  (setq! org-directory "~/essential/agenda/")
 
   :config
   (setq! org-modules '(org-habit org-id org-protocol org-timer))
@@ -2018,7 +2018,10 @@ The next part was taken from DOOM themes
 
       (let ((file (substring location 0 (match-beginning 0)))
             (heading (substring location (match-end 0))))
-        (cons (if (org-string-nw-p file) (expand-file-name file) current-file) heading)))))
+        (cons (if (org-string-nw-p file) (expand-file-name file) current-file) heading))))
+
+  (advice-add #'org-archive-subtree :after (lambda (&rest _) (org-save-all-org-buffers)))
+  (advice-add #'org-archive-to-archive-sibling :after #'org-save-all-org-buffers))
 #+end_src
 
 **** Exporting
@@ -3078,7 +3081,7 @@ When optional argument is non-nil, refresh cached heading."
 #+BEGIN_SRC emacs-lisp
 (use-package bibtex
   :init
-  (defvar +bibtex-bibliography '("~/Documents/bibliography/references.bib"))
+  (defvar +bibtex-bibliography '("~/archive/literature/references.bib"))
 
   (defvar-local +bibtex-pdf-relative-dir "pdfs/")
   (defsubst +bibtex-pdf-dir (bib-file-path)
@@ -3638,23 +3641,6 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 
 (use-package dired+ :quelpa (dired+ :fetcher wiki)
   :after-call (dired-mode-hook))
-#+END_SRC
-
-*** Deft
-#+BEGIN_SRC emacs-lisp
-(use-package deft :ensure
-  :general (nox-leader "d" '(deft :wk "Deft"))
-  :config
-  (setq! deft-directory (concat org-directory "Logbook/")
-         deft-extensions '("org" "txt" "md" "markdown")
-         deft-default-extension (car deft-extensions)
-         deft-use-filename-as-title nil
-         deft-use-filter-string-for-filename t
-         deft-file-naming-rules '((noslash . "-")
-                                   (nospace . "-")
-                                   (case-fn . downcase))
-         deft-auto-save-interval 0
-         deft-org-mode-title-prefix t))
 #+END_SRC
 
 *** Document viewers

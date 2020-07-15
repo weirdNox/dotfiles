@@ -7,10 +7,6 @@ if [ -n "$BASH_VERSION" ]; then
     fi
 fi
 
-if systemctl -q is-active graphical.target && [[ ! $DISPLAY && $XDG_VTNR -eq 1 ]]; then
-    case "$TERM" in
-        i3|*)
-            exec startx /usr/bin/i3
-            ;;
-    esac
+if systemctl -q is-active graphical.target && [[ ! $DISPLAY && $XDG_VTNR -eq 1 && -f "$HOME/.xinitrc" ]]; then
+    exec startx
 fi
