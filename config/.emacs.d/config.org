@@ -580,7 +580,7 @@ symbols.
          projectile-dynamic-mode-line nil
          projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
          projectile-globally-ignored-files '(".DS_Store" "TAGS")
-         projectile-ignored-projects '("~" "~/.emacs.d" "/tmp")
+         projectile-ignored-projects '("~/.emacs.d/")
          projectile-indexing-method (if IS-WINDOWS 'native 'alien)
          projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
          projectile-other-file-alist (append projectile-other-file-alist
