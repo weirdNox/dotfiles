@@ -2948,7 +2948,7 @@ after removing the face property. This serves to restore the custom face set in 
 
   (setq!
    org-capture-templates '(("t" "task" entry (file "") "* NEXT %i%?")
-                           ("c" "calendar" entry (file "") "* %?\n%^t")
+                           ("c" "calendar" entry (file "") "* %^t %?")
                            ("b" "break" entry (file+olp nox-org-agenda-file "Interrupções") "* %?"
                             :clock-in t :clock-resume t)
                            ("j" "journal" entry (file+olp+datetree nox-org-journal-file) "* %?"
