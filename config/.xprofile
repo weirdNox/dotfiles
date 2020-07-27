@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # This file is loaded at the beginning of the X user session.
-killall input_daemon >/dev/null 2>&1
-input_daemon ~/.local/lib/x11-input_setup.sh
+killall x11_input_daemon >/dev/null 2>&1
+x11_input_daemon ~/.local/lib/x11_input_setup.sh
 
 export _JAVA_OPTIONS='-Dawt.useSystemAAFontSettings=gasp -Dswing.aatext=true -Dswing.defaultlaf=com.sun.java.swing.plaf.gtk.GTKLookAndFeel'
 

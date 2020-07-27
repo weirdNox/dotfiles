@@ -9,7 +9,7 @@
 #include <xcb/xinput.h>
 
 static void printError_(const char *Format, va_list Args) {
-    fprintf(stderr, "[input_daemon] ");
+    fprintf(stderr, "[x11_input_daemon] ");
     vfprintf(stderr, Format, Args);
 }
 
