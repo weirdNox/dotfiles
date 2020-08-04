@@ -1858,7 +1858,8 @@ The next part was taken from DOOM themes
 
 (defun nox|org-summary-todo (_n-done n-not-done)
   "Update todo keyword after changing the statistics cookie, when needed."
-  (let ((keyword (org-get-todo-state)))
+  (let ((keyword (org-get-todo-state))
+        org-todo-log-states org-log-done)
     (if (= n-not-done 0)
         (when (not (member keyword org-done-keywords)) (org-todo (car org-done-keywords)))
       (when (member keyword org-done-keywords) (org-todo (car org-not-done-keywords))))))
