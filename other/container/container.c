@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/capability.h>
+#include <sys/mman.h>
 #include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
@@ -41,6 +42,9 @@ typedef s32 b32;
 typedef uintptr_t umm;
 typedef  intptr_t smm;
 
+#define stringify_(X) #X
+#define stringify(X) stringify_(X)
+
 #define arrayCount(Arr) (sizeof(Arr)/sizeof(*(Arr)))
 
 #define kibiBytes(X) (         (X) * 1024LL)
@@ -56,7 +60,10 @@ typedef  intptr_t smm;
 #define BaseRootFolder "/base"
 #define BindRootFolder "/bind"
 
+#define MountPointMaximumLength 255
+
 global_variable char *BaseTTY;
+global_variable int ProcFD;
 
 
 typedef struct {
@@ -91,8 +98,8 @@ internal inline u8 *advance(buffer *Buffer, umm Size)
     }
     else
     {
-        Buffer->Data += Buffer->Size;
-        Buffer->Size  = 0;
+        fprintf(stderr, "Buffer doesn't have %lu bytes available, only %lu\n", Size, Buffer->Size);
+        exit(EXIT_FAILURE);
     }
 
     return(Result);
@@ -142,7 +149,7 @@ internal inline b8 writeAll(int File, string String)
 		}
         else if(errno != EINTR && errno != EAGAIN)
         {
-            printf("Error writing to file: %s\n", strerror(errno));
+            fprintf(stderr, "Error writing to file: %s\n", strerror(errno));
 			Result = false;
             break;
         }
@@ -356,22 +363,175 @@ internal inline u64 getExtraMountFlags(bind_option Options)
     return Result;
 }
 
-internal inline int bindMount_(string PivotedBase, string PivotedBind, bind_option Options)
+internal inline void bindRemount(string Point, bind_option Options)
 {
-    int Result;
-
-    if((Result = mount((char *)PivotedBase.Data, (char *)PivotedBind.Data, 0, MS_SILENT|MS_BIND|MS_REC, 0)) == 0)
+    struct statvfs FileSystemInfo;
+    if(statvfs((char *)Point.Data, &FileSystemInfo) < 0)
     {
-        struct statvfs FileSystemInfo;
-        statvfs((char *)PivotedBind.Data, &FileSystemInfo);
-        u64 CurrentFlags = FileSystemInfo.f_flag;
-
-        u64 NewFlags = MS_SILENT | MS_BIND | MS_REMOUNT | getExtraMountFlags(Options);
-
-        Result = mount(0, (char *)PivotedBind.Data, 0, CurrentFlags | NewFlags, 0);
+        fprintf(stderr, "Could not stat filesystem at %s: %s\n", Point.Data, strerror(errno));
+        exit(EXIT_FAILURE);
     }
 
-    return Result;
+    u64 Flags = FileSystemInfo.f_flag | MS_SILENT | MS_BIND | MS_REMOUNT | getExtraMountFlags(Options);
+
+    if(mount(0, (char *)Point.Data, 0, Flags, 0) < 0)
+    {
+        fprintf(stderr, "Could not remount %s: %s\n", Point.Data, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+}
+
+internal void bindMountRaw(string PivotedBase, string PivotedBind, bind_option Options)
+{
+    struct stat Stat;
+    if(stat((char *)PivotedBase.Data, &Stat) < 0)
+    {
+        fprintf(stderr, "Could not stat %s: %s\n", PivotedBase.Data, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    b8 BindingDirectory = S_ISDIR(Stat.st_mode);
+
+    if(BindingDirectory)
+    {
+        makeDirectory(PivotedBind, 0755);
+    }
+    else {
+        createFile(PivotedBind, 0666);
+    }
+
+    if(mount((char *)PivotedBase.Data, (char *)PivotedBind.Data, 0, MS_SILENT|MS_BIND|MS_REC, 0) < 0)
+    {
+        fprintf(stderr, "Could not mount %s to %s: %s\n", PivotedBase.Data, PivotedBind.Data, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    bindRemount(PivotedBind, Options);
+
+    if(BindingDirectory)
+    {
+        // NOTE(nox): Need to remount recursively, in order to apply settings...
+
+        while(PivotedBind.Data[PivotedBind.Size-1] == '/')
+        {
+            --PivotedBind.Size;
+            PivotedBind.Data[PivotedBind.Size] = 0;
+        }
+
+        int MountInfo = openat(ProcFD, "self/mountinfo", O_RDONLY | O_CLOEXEC);
+        if(MountInfo < 0)
+        {
+            fprintf(stderr, "Couldn't open /proc/self/mountinfo\n");
+            exit(EXIT_FAILURE);
+        }
+
+        enum {
+            MaxFileSize = mebiBytes(20),
+            MaxRemountCount = 1000,
+            RemountStringArraySize = MaxRemountCount*sizeof(string),
+            RemountStringDataSize = MaxRemountCount*MountPointMaximumLength,
+            BlockSize = MaxFileSize + RemountStringArraySize + RemountStringDataSize,
+        };
+        u8 *BlockData = mmap(0, BlockSize, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|MAP_NORESERVE, -1, 0);
+        assert(BlockData);
+        buffer Block = {
+            .Size = BlockSize,
+            .Data = BlockData,
+        };
+
+        buffer FileBuffer = {
+            .Size = MaxFileSize-1,
+            .Data = advance(&Block, MaxFileSize),
+        };
+        string FileStr = FileBuffer;
+
+        for(;;) {
+            ssize_t SizeRead;
+            do {
+                SizeRead = read(MountInfo, FileBuffer.Data, FileBuffer.Size);
+            } while(SizeRead < 0 && errno == EINTR);
+
+            if(SizeRead < 0)
+            {
+                fprintf(stderr, "Could not read mountinfo: %s\n", strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+            else if(SizeRead == 0)
+            {
+                break;
+            }
+
+            advance(&FileBuffer, SizeRead);
+        }
+
+        FileStr.Size = FileBuffer.Data - FileStr.Data;
+        close(MountInfo);
+
+        umm RemountCount = (umm)-1;
+        string *ToRemount = (string *)advance(&Block, RemountStringArraySize);
+        buffer RestorePoint = Block;
+
+        for(;;)
+        {
+            // NOTE(nox): This assumes mountinfo stores everything in the order it was created!
+            int BytesParsed;
+            char EscapedMountPoint[MountPointMaximumLength+1];
+            int ConversionCount = sscanf((char *)FileStr.Data,
+                                         "%*s %*s %*s %*s %"stringify(MountPointMaximumLength)"s %*[^\n]\n%n",
+                                         EscapedMountPoint, &BytesParsed);
+            if(ConversionCount < 1)
+            {
+                break;
+            }
+
+            advance(&FileStr, BytesParsed);
+            string Escaped = wrapZ(EscapedMountPoint);
+
+            char MountPointBuff[MountPointMaximumLength+1];
+            string MountPoint = { .Data = (u8 *)MountPointBuff };
+
+            while(Escaped.Size)
+            {
+                char Character = Escaped.Data[0];
+                advance(&Escaped, 1);
+
+                if(Character == '\\')
+                {
+                    // NOTE(nox): Octal representation
+                    assert(Escaped.Size >= 3);
+                    Character = (((Escaped.Data[0] - '0') << 6) |
+                                 ((Escaped.Data[1] - '0') << 3) |
+                                 ((Escaped.Data[2] - '0') << 0));
+                    advance(&Escaped, 3);
+                }
+
+                MountPoint.Data[MountPoint.Size++] = Character;
+            }
+            MountPoint.Data[MountPoint.Size] = 0;
+
+            if(MountPoint.Size == PivotedBind.Size &&
+               memcmp(MountPoint.Data, PivotedBind.Data, PivotedBind.Size) == 0)
+            {
+                RemountCount = 0;
+                Block = RestorePoint;
+            }
+
+            if(RemountCount != (umm)-1 &&
+               MountPoint.Size > PivotedBind.Size &&
+               memcmp(MountPoint.Data, PivotedBind.Data, PivotedBind.Size) == 0)
+            {
+                assert(RemountCount < MaxRemountCount);
+                ToRemount[RemountCount++] = formatString(&Block, "%s", MountPoint.Data);
+            }
+        }
+
+        for(umm Idx = 0; Idx < RemountCount; ++Idx)
+        {
+            bindRemount(ToRemount[Idx], Options);
+        }
+
+        assert(munmap(BlockData, BlockSize) == 0);
+    }
 }
 
 internal void bindMount(char *BasePath, char *BindPath, bind_option Options)
@@ -384,26 +544,7 @@ internal void bindMount(char *BasePath, char *BindPath, bind_option Options)
     string PivotedBase = formatString(&Buffer, BaseRootFolder"%s", BasePath);
     string PivotedBind = formatString(&Buffer, BindRootFolder"%s", BindPath);
 
-    struct stat Stat;
-    if(stat((char *)PivotedBase.Data, &Stat) != 0)
-    {
-        fprintf(stderr, "Could not stat %s: %s\n", BasePath, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    if(S_ISDIR(Stat.st_mode))
-    {
-        makeDirectory(PivotedBind, 0755);
-    }
-    else {
-        createFile(PivotedBind, 0666);
-    }
-
-    if(bindMount_(PivotedBase, PivotedBind, Options) < 0)
-    {
-        fprintf(stderr, "Could not mount %s to %s: %s\n", BasePath, BindPath, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
+    bindMountRaw(PivotedBase, PivotedBind, Options);
 }
 
 typedef enum {
@@ -436,11 +577,7 @@ internal void otherMount(mount_type Type, char *BindPath)
                 string NodeSrc  = formatString(&TempBuffer, BaseRootFolder"/dev/%s",   DevNodes[Idx]);
                 string NodeDest = formatString(&TempBuffer, "%s/%s", PivotedBind.Data, DevNodes[Idx]);
 
-                if(createFile(NodeDest, 0666), bindMount_(NodeSrc, NodeDest, Bind_Dev) < 0)
-                {
-                    fprintf(stderr, "Could not mount /dev/%s to %s/%s: %s\n", DevNodes[Idx], BindPath, DevNodes[Idx], strerror(errno));
-                    exit(EXIT_FAILURE);
-                }
+                bindMountRaw(NodeSrc, NodeDest, Bind_Dev);
             }
 
             char *StdIONodes[] = { "stdin", "stdout", "stderr" };
@@ -481,11 +618,7 @@ internal void otherMount(mount_type Type, char *BindPath)
                 string BaseTTYDev  = formatString(&TempBuffer, BaseRootFolder"%s", BaseTTY);
                 string BindConsole = formatString(&TempBuffer, "%s/console", PivotedBind.Data);
 
-                if(createFile(BindConsole, 0666), bindMount_(BaseTTYDev, BindConsole, Bind_Dev) < 0)
-                {
-                    fprintf(stderr, "Could not mount %s to %s/console: %s\n", BaseTTY, BindPath, strerror(errno));
-                    exit(EXIT_FAILURE);
-                }
+                bindMountRaw(BaseTTYDev, BindConsole, Bind_Dev);
             }
         } break;
 
@@ -537,17 +670,12 @@ internal inline void setupBaseAndBindRoots()
             exit(EXIT_FAILURE);
         }
         else {
-            if(bindMount_(constZ("/tmp"BindRootFolder), constZ("/tmp"BindRootFolder), 0) < 0)
+            bindMountRaw(constZ("/tmp"BindRootFolder), constZ("/tmp"BindRootFolder), 0);
+
+            if(pivotRootSC("/tmp", "/tmp"BaseRootFolder) < 0 || chdir("/") < 0)
             {
-                fprintf(stderr, "Could not create root bind\n");
+                fprintf(stderr, "Could not pivot roots\n");
                 exit(EXIT_FAILURE);
-            }
-            else {
-                if(pivotRootSC("/tmp", "/tmp"BaseRootFolder) < 0 || chdir("/") < 0)
-                {
-                    fprintf(stderr, "Could not pivot roots\n");
-                    exit(EXIT_FAILURE);
-                }
             }
         }
     }
@@ -591,11 +719,6 @@ int main()
     uid_t BaseUID = geteuid();
     gid_t BaseGID = getegid();
 
-    if(isatty(STDOUT_FILENO))
-    {
-        BaseTTY = ttyname(STDOUT_FILENO);
-    }
-
     sigset_t SigMask;
     sigemptyset(&SigMask); sigaddset(&SigMask, SIGUSR1);
     sigprocmask(SIG_BLOCK, &SigMask, 0);
@@ -626,6 +749,18 @@ int main()
         while(sigwaitinfo(&SigMask, 0) < 0);
         sigprocmask(SIG_UNBLOCK, &SigMask, 0);
 
+        if(isatty(STDOUT_FILENO))
+        {
+            BaseTTY = ttyname(STDOUT_FILENO);
+        }
+
+        ProcFD = open("/proc", O_PATH | O_DIRECTORY | O_CLOEXEC);
+        if(ProcFD < 0)
+        {
+            fprintf(stderr, "Could not open /proc\n");
+            exit(EXIT_FAILURE);
+        }
+
         dieWithParent();
         keepCaps();
 
@@ -635,11 +770,11 @@ int main()
         otherMount(Mount_Proc, "/proc");
         otherMount(Mount_Sys,  "/sys");
 
-        bindMount("/etc",   "/etc",     0);
-        bindMount("/lib",   "/lib",     0);
-        bindMount("/lib64", "/lib64",   0);
-        bindMount("/usr",   "/usr",     0);
-        bindMount("/home",  "/home",    Bind_ReadOnly);
+        bindMount("/etc",   "/etc",   0);
+        bindMount("/lib",   "/lib",   0);
+        bindMount("/lib64", "/lib64", 0);
+        bindMount("/usr",   "/usr",   0);
+        bindMount("/home",  "/home",  Bind_ReadOnly);
 
         switchToBindRoot();
 
