@@ -701,6 +701,17 @@ internal inline void setupNetwork()
     }
 }
 
+internal inline void setupFakeIds()
+{
+    u8 BufferData[1<<13];
+
+    int Passwd = open("/etc/passwd", O_WRONLY | O_CLOEXEC);
+    // TODO(nox): Write to passwd
+    close(Passwd);
+
+    // TODO(nox): Write to other stuff!
+}
+
 internal inline void setupBaseAndBindRoots()
 {
     if(mount("tmpfs", "/tmp", "tmpfs", MS_SILENT|MS_NOATIME|MS_NODEV, 0) < 0)
@@ -828,6 +839,8 @@ int main()
         setupBaseAndBindRoots();
         configureContainer();
         switchToBindRoot();
+
+        setupFakeIds();
         runCommand();
 
         // NOTE(nox): This should never run!
