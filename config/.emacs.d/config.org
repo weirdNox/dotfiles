@@ -3289,14 +3289,7 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 
   (setq! compilation-always-kill t
          compilation-scroll-output 'first-error
-         compilation-context-lines 2
-         compilation-environment '("TERM=xterm"))
-
-  (defun +compile|ansi-color-apply ()
-    "Applies ansi codes to the compilation buffers. Meant for `compilation-filter-hook'."
-    (with-silent-modifications
-      (ansi-color-apply-on-region compilation-filter-start (point))))
-  (add-hook! 'compilation-filter-hook #'+compile|ansi-color-apply)
+         compilation-context-lines 2)
 
   (put 'compilation-error-regexp-alist 'safe-local-variable 'listp)
 #+END_SRC
