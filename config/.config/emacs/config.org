@@ -51,7 +51,7 @@ line or use --debug-init to enable this.")
 (defconst nox-emacs-dir (eval-when-compile (file-truename user-emacs-directory))
   "The path to the emacs.d directory. Must end in a slash.")
 
-(defconst nox-local-dir (concat nox-emacs-dir ".local/")
+(defconst nox-local-dir (concat nox-emacs-dir "local/")
   "Root directory for local Emacs files. Use this as permanent storage for files
 that are safe to share across systems (if this config is symlinked across
 several computers).")
@@ -438,24 +438,6 @@ called. The buffer to be switched to is current when these hooks run.")
 (add-hook 'emacs-startup-hook #'nox|setup-switch-hooks)
 #+END_SRC
 
-*** Emacs 25 compatibility
-#+BEGIN_SRC emacs-lisp
-(eval-and-compile
-  (unless EMACS26+
-    (with-no-warnings
-      (defalias 'if-let* #'if-let)
-      (defalias 'when-let* #'when-let)
-
-      ;; `alist-get' doesn't have its 5th argument before Emacs 26
-      (defun nox*alist-get (key alist &optional default remove testfn)
-        (ignore remove)
-        (let ((x (if (not testfn)
-                     (assq key alist)
-                   (assoc key alist testfn))))
-          (if x (cdr x) default)))
-      (advice-add #'alist-get :override #'nox*alist-get))))
-#+END_SRC
-
 *** Package ecosystem
 #+BEGIN_SRC emacs-lisp
 (require 'package)
@@ -479,8 +461,7 @@ called. The buffer to be switched to is current when these hooks run.")
 (setq! use-package-always-defer t
        use-package-verbose nox-debug-mode
        use-package-compute-statistics nox-debug-mode
-       use-package-minimum-reported-time (if nox-debug-mode 0 0.1)
-       use-package-expand-minimally noninteractive)
+       use-package-minimum-reported-time (if nox-debug-mode 0 0.1))
 #+END_SRC
 
 Add the :after-call keyword, that takes a symbol or list of symbols, where the symbols are
@@ -580,7 +561,7 @@ symbols.
          projectile-dynamic-mode-line nil
          projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
          projectile-globally-ignored-files '(".DS_Store" "TAGS")
-         projectile-ignored-projects '("~/.emacs.d/")
+         projectile-ignored-projects (list user-emacs-directory)
          projectile-indexing-method (if IS-WINDOWS 'native 'alien)
          projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
          projectile-other-file-alist (append projectile-other-file-alist
@@ -3642,7 +3623,7 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 #+BEGIN_SRC emacs-lisp
 (use-package doc-view
   :config
-  (setq! doc-view-resolution 200))
+  (setq! doc-view-resolution 400))
 #+END_SRC
 
 **** PDF Tools
