@@ -12,3 +12,6 @@
 
 [include]
     path = ~/.config/git/local
+
+[pull]
+	rebase = true
