@@ -25,7 +25,7 @@ CONFIGURE_CONTAINER()
     char *Rootfs = 0;
     bindRootfs(Rootfs, false, Bind_ReadOnly);
 
-    //bindHome(Rootfs, 0);
+    //bindHome(Rootfs, 0, 0);
 
     shareDisplay();
     shareGraphics();

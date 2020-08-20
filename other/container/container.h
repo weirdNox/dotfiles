@@ -1092,7 +1092,7 @@ internal void bindRootfs(char *Rootfs, b32 Full, bind_option ExtraOptions)
     symbolicLink("/run", "/var/run");
 }
 
-internal inline void bindHome(char *Prefix, char *BasePath)
+internal inline void bindHome(char *Prefix, char *BasePath, bind_option ExtraOptions)
 {
     assert(!Prefix   ||   Prefix[0] == '/');
     assert(!BasePath || BasePath[0] == '/');
@@ -1106,8 +1106,8 @@ internal inline void bindHome(char *Prefix, char *BasePath)
                    formatString(&Buffer, "%s%s", Prefix, (BasePath ? BasePath : BindPath)) :
                    wrapZ(BasePath ? BasePath : BaseHomePath));
 
-    bindMount((char *)Base.Data, BindPath, Bind_EnsureDir);
-    bindMount((char *)Base.Data, "/root",  Bind_EnsureDir);
+    bindMount((char *)Base.Data, BindPath, ExtraOptions | Bind_EnsureDir);
+    bindMount((char *)Base.Data, "/root",  ExtraOptions | Bind_EnsureDir);
 }
 
 internal inline void shareDisplay()
