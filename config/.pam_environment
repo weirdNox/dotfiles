@@ -18,5 +18,6 @@ VISUAL              DEFAULT=${EDITOR}
 ALTERNATE_EDITOR    DEFAULT=""
 
 DICPATH             DEFAULT=${XDG_DATA_HOME}/dicts
-MATLAB_LOG_DIR      DEFAULT=/tmp
+
+# Syncthing - Don't create default folder
 STNODEFAULTFOLDER   DEFAULT=yes
