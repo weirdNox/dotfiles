@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <glob.h>
 #include <limits.h>
 #include <net/if.h>
 #include <sched.h>
@@ -46,6 +47,9 @@ typedef  intptr_t smm;
 #define stringify_(X) #X
 #define stringify(X) stringify_(X)
 
+#define macroIsEmpty(X) ((~(~X + 0) == 0) && (~(~X + 1) == 1))
+#define macroValue(X) (!macroIsEmpty(X) && (X))
+
 #define arrayCount(Arr) (sizeof(Arr)/sizeof(*(Arr)))
 
 #define kibiBytes(X) (         (X) * 1024LL)
@@ -64,8 +68,21 @@ typedef  intptr_t smm;
 #define MountPointMaximumLength 255
 
 #define CONFIGURE_CONTAINER() internal void configureContainer()
-#define RUN_COMMAND() internal void runCommand()
+#define RUN_COMMAND() internal void runCommand(int ArgCount, char *ArgVals[])
     ;
+
+global_variable pid_t ParentPID;
+global_variable char *InitialWorkingDirectory;
+
+global_variable uid_t BaseUID;
+global_variable gid_t BaseGID;
+global_variable char  BaseUserName[64];
+global_variable char *BaseHomePath;
+
+global_variable char *BaseSystDBus;
+global_variable char *BaseUserDBus;
+
+global_variable char *BaseXAuth;
 
 global_variable char *BaseTTY;
 global_variable int ProcFD;
@@ -110,7 +127,7 @@ internal inline u8 *advance(buffer *Buffer, umm Size)
     return(Result);
 }
 
-internal inline string formatString(buffer *Buffer, char *Format, ...)
+internal string formatString(buffer *Buffer, char *Format, ...)
 {
     va_list ArgList;
 
@@ -133,8 +150,54 @@ internal inline string formatString(buffer *Buffer, char *Format, ...)
     }
 
     umm UsedBytes = Result.Size+1;
-    Buffer->Size -= UsedBytes;
-    Buffer->Data += UsedBytes;
+    advance(Buffer, UsedBytes);
+
+    return Result;
+}
+
+internal inline uid_t getBindUID()
+{
+    uid_t Result;
+#if macroIsEmpty(BIND_UID)
+    Result = BaseUID;
+#else
+    Result = BIND_UID;
+#endif
+    return Result;
+}
+
+internal inline gid_t getBindGID()
+{
+    gid_t Result;
+#if macroIsEmpty(BIND_GID)
+    Result = getBindUID();
+#else
+    Result = BIND_GID;
+#endif
+    return Result;
+}
+
+internal inline char *getBindUserName()
+{
+    char *Result;
+#if macroIsEmpty(BIND_USER_NAME)
+    Result = BaseUserName;
+#else
+    Result = stringify(BIND_USER_NAME);
+#endif
+    return Result;
+}
+
+internal inline char *getBindHomePath(buffer *Buffer)
+{
+    char *Result;
+
+#if macroIsEmpty(BIND_HOME_PATH)
+    string HomePath = formatString(Buffer, "/home/%s", getBindUserName());
+    Result = (char *)HomePath.Data;
+#else
+    Result = stringify(BIND_HOME_PATH);
+#endif
 
     return Result;
 }
@@ -163,8 +226,10 @@ internal inline b8 writeAll(int File, string String)
 	return Result;
 }
 
-internal void makeDirectory(string Path, mode_t Mode)
+internal b8 makeDirectoryRaw_(string Path, mode_t Mode)
 {
+    b8 Result = true;
+
     u8 Buffer[1<<13];
 
     if(Path.Size + 1 <= sizeof(Buffer))
@@ -205,8 +270,7 @@ internal void makeDirectory(string Path, mode_t Mode)
             {
                 if(mkdir((char *)Buffer, Mode) == -1 && errno != EEXIST)
                 {
-                    fprintf(stderr, "Failed to create directory %s\n", Buffer);
-                    exit(EXIT_FAILURE);
+                    Result = false;
                 }
             }
 
@@ -220,25 +284,111 @@ internal void makeDirectory(string Path, mode_t Mode)
         fprintf(stderr, "Path doesn't fit in buffer\n");
         exit(EXIT_FAILURE);
     }
+
+    return Result;
 }
 
-internal void createFile(string Path, mode_t Mode)
+internal b8 makeDirectoryRaw(string Path, mode_t Mode)
 {
-    int File = creat((char *)Path.Data, Mode);
-    if(File < 0)
+    if(!makeDirectoryRaw_(Path, Mode))
+    {
+        fprintf(stderr, "Failed to create directory %s: %s\n", Path.Data, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+}
+
+internal void makeDirectory(char *Path, mode_t Mode)
+{
+    assert(Path && Path[0] == '/');
+
+    u8 Memory[1<<13] = {};
+    string PivotedPath = formatString(&bundleArray(Memory), BindRootFolder"%s", Path);
+
+    makeDirectoryRaw(PivotedPath, Mode);
+}
+
+internal inline string getDirectory(string Path)
+{
+    string Result = { .Data = Path.Data };
+
+    umm InitialSize = Path.Size;
+
+    while(Path.Size > 1)
+    {
+        if(Path.Data[0] == '/')
+        {
+            Result.Size = InitialSize - Path.Size;
+        }
+        advance(&Path, 1);
+    }
+
+    return Result;
+}
+
+internal b8 createFileRaw_(string Path, mode_t Mode)
+{
+    b8 Result = true;
+
+    struct stat Stat;
+    if(stat((char *)Path.Data, &Stat) == 0)
+    {
+        // NOTE(nox): Node exists and is accessible
+        if(!S_ISREG(Stat.st_mode))
+        {
+            fprintf(stderr, "Node %s already exists and isn't a file\n", Path.Data);
+            exit(EXIT_FAILURE);
+        }
+    }
+    else
+    {
+        string Directory = getDirectory(Path);
+        makeDirectoryRaw(Directory, 0755);
+
+
+        int File = creat((char *)Path.Data, Mode);
+        if(File < 0)
+        {
+            Result = false;
+        }
+        else
+        {
+            close(File);
+        }
+    }
+
+    return Result;
+}
+
+internal inline void createFileRaw(string Path, mode_t Mode)
+{
+    if(!createFileRaw_(Path, Mode))
     {
         fprintf(stderr, "Could not create file %s: %s\n", Path.Data, strerror(errno));
         exit(EXIT_FAILURE);
     }
 }
 
-internal void symbolicLink(string Target, string LinkPath)
+internal void symbolicLinkRaw(string Target, string LinkPath)
 {
+    string Directory = getDirectory(LinkPath);
+    makeDirectoryRaw(Directory, 0755);
+
     if(symlink((char *)Target.Data, (char *)LinkPath.Data) < 0)
     {
         fprintf(stderr, "Could not create symlink %s (-> %s): %s\n", LinkPath.Data, Target.Data, strerror(errno));
         exit(EXIT_FAILURE);
     }
+}
+
+internal void symbolicLink(char *Target, char *LinkPath)
+{
+    assert(Target);
+    assert(LinkPath && LinkPath[0] == '/');
+
+    u8 Memory[1<<13] = {};
+    string PivotedLinkPath = formatString(&bundleArray(Memory), BindRootFolder"%s", LinkPath);
+
+    symbolicLinkRaw(wrapZ(Target), PivotedLinkPath);
 }
 
 internal inline pid_t cloneSC(u64 Flags)
@@ -258,7 +408,7 @@ internal void disableSetGroups(pid_t ChildPID)
     char FileName[100];
     formatString(&bundleArray(FileName), "/proc/%d/setgroups", ChildPID);
 
-    int File = open(FileName, O_WRONLY);
+    int File = open(FileName, O_WRONLY | O_CLOEXEC);
     if(File >= 0)
     {
         if(!writeAll(File, constZ("deny")))
@@ -286,7 +436,7 @@ internal void mapID(pid_t ChildPID, map_type Type, id_t BaseID, id_t BindID)
     char FileName[100];
     formatString(&bundleArray(FileName), "/proc/%d/%s_map", ChildPID, Type == Map_UID ? "uid" : "gid");
 
-    int File = open(FileName, O_WRONLY);
+    int File = open(FileName, O_WRONLY | O_CLOEXEC);
     if(File >= 0)
     {
         char Buffer[256];
@@ -303,6 +453,35 @@ internal void mapID(pid_t ChildPID, map_type Type, id_t BaseID, id_t BindID)
     else
     {
         fprintf(stderr, "Could not open %s\n", FileName);
+        exit(EXIT_FAILURE);
+    }
+}
+
+internal inline void dieWithParent()
+{
+    if(prctl(PR_SET_PDEATHSIG, SIGKILL) < 0)
+    {
+        fprintf(stderr, "Could not set parent death signal\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+internal void runProgramInBackground(char *ShellArgs[])
+{
+    pid_t ProcPID = fork();
+    if(ProcPID == 0)
+    {
+        // NOTE(nox): Child
+        dieWithParent();
+        if(execvp(ShellArgs[0], ShellArgs) < 0)
+        {
+            fprintf(stderr, "Couldn't execute '%s': %s\n", ShellArgs[0], strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+    }
+    else if(ProcPID < 0)
+    {
+        fprintf(stderr, "Couldn't fork to run program '%s' in background", ShellArgs[0]);
         exit(EXIT_FAILURE);
     }
 }
@@ -346,19 +525,12 @@ internal void keepCaps()
     }
 }
 
-internal inline void dieWithParent()
-{
-    if(prctl(PR_SET_PDEATHSIG, SIGKILL) < 0)
-    {
-        fprintf(stderr, "Could not set parent death signal\n");
-        exit(EXIT_FAILURE);
-    }
-}
-
 typedef enum {
-    Bind_Dev      = 1<<1,
-    Bind_ReadOnly = 1<<2,
-    Bind_Try      = 1<<3,
+    Bind_Dev        = 1<<1,
+    Bind_ReadOnly   = 1<<2,
+    Bind_Try        = 1<<3,
+    Bind_EnsureDir  = 1<<4,
+    Bind_EnsureFile = 1<<5,
 } bind_option;
 
 internal inline u64 getExtraMountFlags(bind_option Options)
@@ -389,6 +561,15 @@ internal inline void bindRemount(string Point, bind_option Options)
 
 internal void bindMountRaw(string PivotedBase, string PivotedBind, bind_option Options)
 {
+    if(Options & Bind_EnsureDir)
+    {
+        makeDirectoryRaw(PivotedBase, 0755);
+    }
+    else if(Options & Bind_EnsureFile)
+    {
+        createFileRaw(PivotedBase, 0666);
+    }
+
     struct stat Stat;
     if(stat((char *)PivotedBase.Data, &Stat) < 0)
     {
@@ -407,16 +588,48 @@ internal void bindMountRaw(string PivotedBase, string PivotedBind, bind_option O
 
     if(BindingDirectory)
     {
-        makeDirectory(PivotedBind, 0755);
+        if(!makeDirectoryRaw_(PivotedBind, 0755))
+        {
+            if(Options & Bind_Try)
+            {
+                // NOTE(nox): Error trying to create directory, but it's OK
+                return;
+            }
+            else
+            {
+                fprintf(stderr, "Could not create directory %s: %s\n", PivotedBind.Data, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+        }
     }
     else {
-        createFile(PivotedBind, 0666);
+        if(!createFileRaw_(PivotedBind, 0666))
+        {
+            if(Options & Bind_Try)
+            {
+                // NOTE(nox): Error trying to create file, but it's OK
+                return;
+            }
+            else
+            {
+                fprintf(stderr, "Could not create file %s: %s\n", PivotedBind.Data, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+        }
     }
 
     if(mount((char *)PivotedBase.Data, (char *)PivotedBind.Data, 0, MS_SILENT|MS_BIND|MS_REC, 0) < 0)
     {
-        fprintf(stderr, "Could not mount %s to %s: %s\n", PivotedBase.Data, PivotedBind.Data, strerror(errno));
-        exit(EXIT_FAILURE);
+        if(Options & Bind_Try)
+        {
+            // NOTE(nox): Couldn't bind, but it's OK
+            return;
+        }
+        else
+        {
+            fprintf(stderr, "Could not mount %s to %s: %s\n", PivotedBase.Data, PivotedBind.Data, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
     }
 
     bindRemount(PivotedBind, Options);
@@ -549,7 +762,8 @@ internal void bindMountRaw(string PivotedBase, string PivotedBind, bind_option O
 
 internal void bindMount(char *BasePath, char *BindPath, bind_option Options)
 {
-    assert(BasePath[0] == '/' && BindPath[0] == '/');
+    assert(BasePath && BasePath[0] == '/');
+    assert(BindPath && BindPath[0] == '/');
 
     u8 Memory[1<<13] = {};
     buffer Buffer = bundleArray(Memory);
@@ -560,22 +774,72 @@ internal void bindMount(char *BasePath, char *BindPath, bind_option Options)
     bindMountRaw(PivotedBase, PivotedBind, Options);
 }
 
+internal void bindMap(char *Prefix, char *Path, bind_option Options)
+{
+    assert(Path && Path[0] == '/');
+
+    char *BasePath = Path;
+
+    if(Prefix)
+    {
+        assert(Prefix[0] == '/');
+
+        u8 Memory[1<<10] = {};
+        string BaseStr = formatString(&bundleArray(Memory), "%s%s", Prefix, Path);
+
+        BasePath = (char *)BaseStr.Data;
+    }
+
+    bindMount(BasePath, Path, Options);
+}
+
+internal void bindMapGlob(char *Prefix, char *Pattern, bind_option Options)
+{
+    assert(!Prefix ||  Prefix[0]  == '/');
+    assert(Pattern && Pattern[0] == '/');
+
+    u8 Memory[1<<14] = {};
+    buffer Buffer = bundleArray(Memory);
+
+    string PivotedPattern = (Prefix ?
+                             formatString(&Buffer, BaseRootFolder"%s%s", Prefix, Pattern) :
+                             formatString(&Buffer, BaseRootFolder"%s", Pattern));
+
+    glob_t GlobResult = {};
+    if(glob((char *)PivotedPattern.Data, GLOB_NOSORT, 0, &GlobResult) == 0)
+    {
+        for(umm Idx = 0; Idx < GlobResult.gl_pathc; ++Idx)
+        {
+            char *PivotedBasePath = GlobResult.gl_pathv[Idx];
+            char *BasePath = PivotedBasePath + (sizeof(BaseRootFolder)-1);
+            char *BindPath = BasePath + (Prefix ? strlen(Prefix) : 0);
+            bindMount(BasePath, BindPath, Options);
+        }
+    }
+    else
+    {
+        fprintf(stderr, "Error globing with pattern %s\n", Pattern);
+        exit(EXIT_FAILURE);
+    }
+}
+
 typedef enum {
     Mount_Dev,
     Mount_DevPTS,
     Mount_Proc,
+    Mount_Sys,
     Mount_Tmp,
 } mount_type;
 
 internal void otherMount(mount_type Type, char *BindPath)
 {
-    assert(BindPath[0] == '/');
+    assert(BindPath && BindPath[0] == '/');
 
     u8 Memory[1<<13] = {};
     buffer Buffer = bundleArray(Memory);
 
     string PivotedBind = formatString(&Buffer, BindRootFolder"%s", BindPath);
-    makeDirectory(PivotedBind, 0755);
+    makeDirectoryRaw(PivotedBind, 0755);
 
     switch(Type) {
         case Mount_Dev: {
@@ -599,7 +863,7 @@ internal void otherMount(mount_type Type, char *BindPath)
 
                 string Target   = formatString(&TempBuffer, "/proc/self/fd/%d", Idx);
                 string LinkPath = formatString(&TempBuffer, "%s/%s", PivotedBind.Data, StdIONodes[Idx]);
-                symbolicLink(Target, LinkPath);
+                symbolicLinkRaw(Target, LinkPath);
             }
 
             {
@@ -607,21 +871,21 @@ internal void otherMount(mount_type Type, char *BindPath)
 
                 string FDLink   = formatString(&TempBuffer, "%s/fd",   PivotedBind.Data);
                 string CoreLink = formatString(&TempBuffer, "%s/core", PivotedBind.Data);
-                symbolicLink(constZ("/proc/self/fd"),    FDLink);
-                symbolicLink(constZ("/proc/self/kcore"), CoreLink);
+                symbolicLinkRaw(constZ("/proc/self/fd"),    FDLink);
+                symbolicLinkRaw(constZ("/proc/self/kcore"), CoreLink);
             }
 
             {
                 buffer TempBuffer = Buffer;
 
                 string SHM = formatString(&TempBuffer, "%s/shm", PivotedBind.Data);
-                makeDirectory(SHM, 0755);
+                makeDirectoryRaw(SHM, 0755);
 
                 string PTS = formatString(&TempBuffer, "%s/pts", BindPath);
                 otherMount(Mount_DevPTS, (char *)PTS.Data);
 
                 string PTMX = formatString(&TempBuffer, "%s/ptmx", PivotedBind.Data);
-                symbolicLink(constZ("pts/ptmx"), PTMX);
+                symbolicLinkRaw(constZ("pts/ptmx"), PTMX);
             }
 
             if(BaseTTY)
@@ -650,36 +914,261 @@ internal void otherMount(mount_type Type, char *BindPath)
             }
         } break;
 
+        case Mount_Sys: {
+            bindMountRaw(constZ(BaseRootFolder"/sys"), PivotedBind, 0);
+        } break;
+
         case Mount_Tmp: {
             if(mount("tmpfs", (char *)PivotedBind.Data, "tmpfs", MS_SILENT|MS_NOATIME|MS_NODEV, "mode=0755") < 0)
             {
-                fprintf(stderr, "Could not mount sys on %s: %s\n", BindPath, strerror(errno));
+                fprintf(stderr, "Could not mount tmpfs on %s: %s\n", BindPath, strerror(errno));
                 exit(EXIT_FAILURE);
             }
         } break;
     }
 }
 
+internal void cleanupEnvironmentVariables()
+{
+#define W(String) {.Size = sizeof(String)-1, .Data = (u8 *)(String)}
+    string EnvsToKeep[] = { ENVS_TO_KEEP };
+#undef W
+
+    for(char **EnvPtr = environ; *EnvPtr;)
+    {
+        char *EnvEntry = EnvPtr[0];
+        b8 KeepThis = false;
+
+        for(umm TestIdx = 0; TestIdx < arrayCount(EnvsToKeep); ++TestIdx)
+        {
+            string Test = EnvsToKeep[TestIdx];
+            char *TestStr = (char *)Test.Data;
+            umm TestSize = Test.Size;
+
+            if(strncmp(EnvEntry, TestStr, TestSize) == 0 && EnvEntry[TestSize] == '=')
+            {
+                KeepThis = true;
+                break;
+            }
+        }
+
+        if(!KeepThis)
+        {
+            char EnvName[1<<10];
+            umm EnvSize = 0;
+
+            for(;;)
+            {
+                if(EnvEntry[EnvSize] == 0 || EnvEntry[EnvSize] == '=')
+                {
+                    break;
+                }
+
+                assert(EnvSize < arrayCount(EnvName) - 1);
+                EnvName[EnvSize] = EnvEntry[EnvSize];
+                ++EnvSize;
+            }
+            EnvName[EnvSize] = 0;
+
+            assert(unsetenv(EnvName) == 0);
+        }
+        else
+        {
+            ++EnvPtr;
+        }
+    }
+}
+
+typedef enum {
+    Env_Set         = 0,
+    Env_Append      = 1<<0,
+    Env_Prepend     = 1<<1,
+    Env_Colon       = 1<<2,
+
+    Env_AppendColon = Env_Append  | Env_Colon,
+    Env_PrependColon= Env_Prepend | Env_Colon,
+} env_op;
+internal void modifyEnvironmentVariable(char *EnvName, env_op Operation, char *Value)
+{
+    u8 Memory[1<<13];
+    buffer Buffer = bundleArray(Memory);
+
+    char *OldValue = getenv(EnvName);
+    char *NewValue = Value;
+
+    if(OldValue && Operation != Env_Set)
+    {
+        string NewValueString = formatString(&Buffer, "%s%s%s",
+                                             Operation & Env_Append ? OldValue : NewValue,
+                                             Operation & Env_Colon  ? ":" : "",
+                                             Operation & Env_Append ? NewValue : OldValue);
+
+        NewValue = (char *)NewValueString.Data;
+    }
+
+    if(setenv(EnvName, NewValue, true))
+    {
+        fprintf(stderr, "Could not set environment variable %s = %s: %s\n", EnvName, Value, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+}
+
 internal inline void setupBaseEnvironmentVariables()
 {
-    assert(clearenv() == 0);
+    u8 Memory[1<<10];
 
-    assert(setenv("USER",    BindUser, true) == 0);
-    assert(setenv("LOGNAME", BindUser, true) == 0);
+    cleanupEnvironmentVariables();
 
-    assert(setenv("HOME", BindHome, true) == 0);
+    modifyEnvironmentVariable("USER",    Env_Set, getBindUserName());
+    modifyEnvironmentVariable("LOGNAME", Env_Set, getBindUserName());
 
+    modifyEnvironmentVariable("HOME", Env_Set, getBindHomePath(&bundleArray(Memory)));
+
+    modifyEnvironmentVariable("PATH", Env_Set, BIND_ENV_DEFAULT_PATH);
+
+    {
+        string Value = formatString(&bundleArray(Memory), "/run/user/%lu", getBindUID());
+        modifyEnvironmentVariable("XDG_RUNTIME_DIR", Env_Set, (char *)Value.Data);
+    }
+}
+
+internal void bindRootfs(char *Rootfs, b32 Full, bind_option ExtraOptions)
+{
+    if(Full)
+    {
+        if(ExtraOptions & Bind_ReadOnly)
+        {
+            fprintf(stderr, "Cannot bind full rootfs in read-only mode!\n");
+            exit(EXIT_FAILURE);
+        }
+        else
+        {
+            bindMap(Rootfs, "/bin",   ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/etc",   ExtraOptions);
+            bindMap(Rootfs, "/lib",   ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/lib64", ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/sbin",  ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/usr",   ExtraOptions);
+        }
+    }
+    else
+    {
+        bindMap(Rootfs, "/usr/bin", ExtraOptions);
+        bindMap(Rootfs, "/bin",     ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/sbin",    ExtraOptions | Bind_Try);
+
+        bindMap(Rootfs, "/usr/lib",   ExtraOptions);
+        bindMap(Rootfs, "/usr/lib32", ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/lib",       ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/lib64",     ExtraOptions | Bind_Try);
+
+        bindMap(Rootfs, "/usr/include", ExtraOptions);
+        bindMap(Rootfs, "/usr/share",   ExtraOptions);
+
+        bindMap(Rootfs, "/etc/OpenCL",          ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/etc/X11",             ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/etc/ca-certificates", ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/etc/fonts",           ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/etc/ld.so.cache",     ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/etc/ld.so.conf",      ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/etc/ld.so.conf.d",    ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/etc/localtime",       ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/etc/mime.types",      ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/etc/nsswitch.conf",   ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/etc/ssl",             ExtraOptions | Bind_Try);
+        bindMap(Rootfs, "/etc/xdg",             ExtraOptions | Bind_Try);
+
+        bindMapGlob(Rootfs, "/etc/*-release", ExtraOptions);
+    }
+
+    makeDirectory(getenv("XDG_RUNTIME_DIR"), 0700);
+
+    otherMount(Mount_Dev,  "/dev");
+    otherMount(Mount_Proc, "/proc");
+    otherMount(Mount_Sys,  "/sys");
+    otherMount(Mount_Tmp,  "/tmp");
+
+    symbolicLink("/tmp", "/var/tmp");
+    symbolicLink("/run", "/var/run");
+}
+
+internal inline void bindHome(char *Prefix, char *BasePath)
+{
+    assert(!Prefix   ||   Prefix[0] == '/');
+    assert(!BasePath || BasePath[0] == '/');
+
+    u8 Memory[1<<10];
+    buffer Buffer = bundleArray(Memory);
+
+    char *BindPath = getBindHomePath(&Buffer);
+
+    string Base = (Prefix ?
+                   formatString(&Buffer, "%s%s", Prefix, (BasePath ? BasePath : BindPath)) :
+                   wrapZ(BasePath ? BasePath : BaseHomePath));
+
+    bindMount((char *)Base.Data, BindPath, Bind_EnsureDir);
+    bindMount((char *)Base.Data, "/root",  Bind_EnsureDir);
+}
+
+internal inline void shareDisplay()
+{
+    string BindXAuth = constZ("/tmp/xauth");
+
+    modifyEnvironmentVariable("XAUTHORITY", Env_Set, (char *)BindXAuth.Data);
+    bindMount(BaseXAuth, (char *)BindXAuth.Data, Bind_ReadOnly);
+
+    bindMap(0, "/tmp/.X11-unix/X0", Bind_ReadOnly);
+}
+
+internal inline void shareGraphics()
+{
+    bindMap(0, "/dev/dri", Bind_Dev);
+
+    bindMap(0, "/dev/nvidia0",        Bind_Dev | Bind_Try);
+    bindMap(0, "/dev/nvidiactl",      Bind_Dev | Bind_Try);
+    bindMap(0, "/dev/nvidia-modeset", Bind_Dev | Bind_Try);
+    bindMount("/usr/bin/true", "/usr/bin/nvidia-modprobe", Bind_ReadOnly | Bind_Try);
+}
+
+internal inline void shareAudio()
+{
+    bindMap(0, "/dev/snd", Bind_Dev);
+    bindMap(0, "/etc/alsa", Bind_ReadOnly);
+    bindMap(0, "/etc/asound.conf", Bind_ReadOnly | Bind_Try);
+
+    bindMap(0, "/etc/pulse", Bind_ReadOnly);
+    {
+        u8 Memory[1<<12];
+        buffer Buffer = bundleArray(Memory);
+        string Base = formatString(&Buffer, "/run/user/%lu/pulse", BaseUID);
+        string Bind = formatString(&Buffer, "/run/user/%lu/pulse", getBindUID());
+        bindMount((char *)Base.Data, (char *)Bind.Data, Bind_ReadOnly);
+    }
+}
+
+internal inline void shareInput()
+{
+    bindMap(0, "/dev/input", Bind_Dev);
 }
 
 internal inline void setupNetwork()
 {
-#if UnshareNet
+#if !macroIsEmpty(BIND_HOSTNAME)
+    string Hostname = constZ(stringify(BIND_HOSTNAME));
+    if(sethostname((char *)Hostname.Data, Hostname.Size) < 0)
+    {
+        fprintf(stderr, "Could not set host name to %s\n", Hostname.Data);
+        exit(EXIT_FAILURE);
+    }
+#endif
+
+#if !SHARE_NETWORK
     struct ifreq InterfaceSetup = {
         .ifr_name = "lo",
         .ifr_flags = IFF_UP,
     };
 
-    int Socket = socket(AF_INET, SOCK_DGRAM, 0);
+    int Socket = socket(AF_INET, SOCK_DGRAM|SOCK_CLOEXEC, 0);
     if(Socket < 0)
     {
         fprintf(stderr, "Could not open network management socket: %s\n", strerror(errno));
@@ -691,25 +1180,135 @@ internal inline void setupNetwork()
         fprintf(stderr, "Could not configure interface: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
-#endif
 
-    string HostStr = constZ(HostName);
-    if(sethostname((char *)HostStr.Data, HostStr.Size) < 0)
-    {
-        fprintf(stderr, "Could not set host name to "HostName"\n");
-        exit(EXIT_FAILURE);
-    }
+    close(Socket);
+#else
+    bindMap(0, "/etc/resolv.conf", Bind_ReadOnly | Bind_Try);
+#endif
 }
 
-internal inline void setupFakeIds()
+internal void setupDBusParent()
 {
-    u8 BufferData[1<<13];
+#if SHARE_DBUS
+    u8 Memory[1<<13];
+    buffer Buffer = bundleArray(Memory);
 
-    int Passwd = open("/etc/passwd", O_WRONLY | O_CLOEXEC);
-    // TODO(nox): Write to passwd
-    close(Passwd);
+    string SystDBusPath  = constZ("/run/dbus/system_bus_socket");
+    string SystProxyAddr = formatString(&Buffer, "unix:path=%s", SystDBusPath.Data);
+    string SystProxyPath = formatString(&Buffer, "/tmp/systdbus-%lu", ParentPID);
 
-    // TODO(nox): Write to other stuff!
+    string UserDBusPath  = formatString(&Buffer, "/run/user/%lu/bus", BaseUID);
+    string UserProxyAddr = formatString(&Buffer, "unix:path=%s", UserDBusPath.Data);
+    string UserProxyPath = formatString(&Buffer, "/tmp/userdbus-%lu", ParentPID);
+
+    char *ProxyShellArgs[] = {
+        "xdg-dbus-proxy",
+
+        (char *)SystProxyAddr.Data,
+        (char *)SystProxyPath.Data,
+        DBUS_SYST_PROXY
+
+        (char *)UserProxyAddr.Data,
+        (char *)UserProxyPath.Data,
+        DBUS_USER_PROXY
+
+        0
+    };
+
+    // NOTE(nox): Use proxy for system DBus
+    runProgramInBackground(ProxyShellArgs);
+
+    BaseSystDBus = strdup((char *)SystProxyPath.Data);
+    BaseUserDBus = strdup((char *)UserProxyPath.Data);
+#endif
+}
+
+internal void setupDBus()
+{
+#if SHARE_DBUS
+    u8 Memory[1<<13];
+    buffer Buffer = bundleArray(Memory);
+    string SystDBusPath  = constZ("/run/dbus/system_bus_socket");
+    string UserDBusPath  = formatString(&Buffer, "/run/user/%lu/bus", getBindUID());
+
+    bindMount(BaseSystDBus, (char *)SystDBusPath.Data, Bind_ReadOnly);
+    bindMount(BaseUserDBus, (char *)UserDBusPath.Data, Bind_ReadOnly);
+
+    string DBusSessionAddr = formatString(&Buffer, "unix:path=%s", UserDBusPath.Data);
+
+    modifyEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS", Env_Set, (char *)DBusSessionAddr.Data);
+#endif
+}
+
+internal void bindCustomWineBuild(char *BasePath)
+{
+#define WineBindPath    "/wine"
+#define WineBindBinPath WineBindPath"/bin"
+
+    bindMount(BasePath, WineBindPath, Bind_ReadOnly);
+    modifyEnvironmentVariable("PATH", Env_PrependColon, WineBindBinPath);
+
+#undef WineBindPath
+#undef WineBindBinPath
+}
+
+internal inline void setupFakeFiles()
+{
+    u8 Memory[1<<13];
+
+    {
+        buffer Buffer = bundleArray(Memory);
+        char *BindHomePath = getBindHomePath(&Buffer);
+
+        int Passwd = open("/etc/passwd", O_WRONLY | O_CREAT | O_CLOEXEC, S_IRUSR|S_IWUSR);
+        if(Passwd < 0)
+        {
+            fprintf(stderr, "Couldn't open passwd: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+
+        string Contents = formatString(&Buffer,
+                                       "%s:x:%lu:%lu:%s:%s:/usr/bin/bash\n"
+                                       "root:x:0:0:root:%s:/usr/bin/bash\n",
+                                       getBindUserName(), getBindUID(), getBindGID(), getBindUserName(), BindHomePath,
+                                       BindHomePath);
+        writeAll(Passwd, Contents);
+        close(Passwd);
+    }
+
+    {
+        buffer Buffer = bundleArray(Memory);
+
+        int Group = open("/etc/group", O_WRONLY | O_CREAT | O_CLOEXEC, S_IRUSR|S_IWUSR);
+        if(Group < 0)
+        {
+            fprintf(stderr, "Couldn't open group: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+
+        string Contents = formatString(&Buffer,
+                                       "%s:x:%lu:%s\n"
+                                       "root:x:0:root\n"
+                                       "audio:x:995:\n",
+                                       getBindUserName(), getBindUID(), getBindUserName());
+        writeAll(Group, Contents);
+        close(Group);
+    }
+
+    {
+        buffer Buffer = bundleArray(Memory);
+
+        int MachineID = open("/etc/machine-id", O_WRONLY | O_CREAT | O_CLOEXEC, S_IRUSR|S_IWUSR);
+        if(MachineID < 0)
+        {
+            fprintf(stderr, "Couldn't open machine-id: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+
+        string Contents = formatString(&Buffer, "10000000000000000000000000000000\n");
+        writeAll(MachineID, Contents);
+        close(MachineID);
+    }
 }
 
 internal inline void setupBaseAndBindRoots()
@@ -768,26 +1367,74 @@ internal inline void switchToBindRoot()
     }
 }
 
-internal inline void execute(char *ShellArguments[])
+internal inline void changeToUsefulDirectory()
 {
-    if(execvp(ShellArguments[0], ShellArguments) < 0)
+    u8 Memory[1<<10];
+    (void)(chdir(InitialWorkingDirectory)               == 0 ||
+           chdir(getBindHomePath(&bundleArray(Memory))) == 0);
+}
+
+internal inline void execute_(int ArgCount, char *ArgVals[], u32 ShellCount, char *ShellArguments[])
+{
+    char **FinalShellArgs = 0;
+
+    if(ArgCount == 0)
     {
-        fprintf(stderr, "Couldn't execute '%s'\n", ShellArguments[0]);
+        // NOTE(nox): No additional arguments
+        FinalShellArgs = calloc(ShellCount + 1, sizeof(char *));
+        memcpy(FinalShellArgs, ShellArguments, ShellCount*sizeof(char *));
+    }
+    else
+    {
+        if(ArgCount > 1 && strcmp(ArgVals[0], ARGS_OVERRIDE_STRING) == 0)
+        {
+            // NOTE(nox): Complete override
+            FinalShellArgs = calloc(ArgCount, sizeof(char *));
+            memcpy(FinalShellArgs, ArgVals+1, (ArgCount-1)*sizeof(char *));
+        }
+        else
+        {
+            // NOTE(nox): Additional arguments
+            FinalShellArgs = calloc(ShellCount + ArgCount + 1, sizeof(char *));
+            memcpy(FinalShellArgs + 0,          ShellArguments, ShellCount*sizeof(char *));
+            memcpy(FinalShellArgs + ShellCount, ArgVals,          ArgCount*sizeof(char *));
+        }
+    }
+
+    if(execvp(FinalShellArgs[0], FinalShellArgs) < 0)
+    {
+        fprintf(stderr, "Couldn't execute '%s'\n", FinalShellArgs[0]);
         exit(EXIT_FAILURE);
     }
 }
+#define execute(ArgCount, ArgVals, ShellArguments) execute_(ArgCount, ArgVals, arrayCount(ShellArguments), ShellArguments)
 
 CONFIGURE_CONTAINER();
 RUN_COMMAND();
 
-int main()
+int main(int ArgCount, char *ArgVals[])
 {
+    --ArgCount;
+    ++ArgVals;
+
+    ParentPID = getpid();
+    InitialWorkingDirectory = get_current_dir_name();
+
+    BaseUID = geteuid();
+    BaseGID = getegid();
+    assert(getlogin_r(BaseUserName, sizeof(BaseUserName)) == 0);
+
+    BaseXAuth = strdup(getenv("XAUTHORITY"));
+    BaseHomePath = strdup(getenv("HOME"));
+
+    setupDBusParent();
+
     sigset_t SigMask;
     sigemptyset(&SigMask); sigaddset(&SigMask, SIGUSR1);
     sigprocmask(SIG_BLOCK, &SigMask, 0);
 
     u64 Flags = (SIGCHLD | CLONE_NEWUSER | CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWUTS |
-                 (UnshareNet ? CLONE_NEWNET : 0));
+                 (SHARE_NETWORK ? 0 : CLONE_NEWNET));
     pid_t ChildPID = cloneSC(Flags);
 
     if(ChildPID > 0)
@@ -803,10 +1450,8 @@ int main()
 
         disableSetGroups(ChildPID);
 
-        uid_t BaseUID = geteuid();
-        gid_t BaseGID = getegid();
-        mapID(ChildPID, Map_UID, BaseUID, BindUID < 0 ? geteuid() : BindUID);
-        mapID(ChildPID, Map_GID, BaseGID, BindGID < 0 ? getegid() : BindGID);
+        mapID(ChildPID, Map_UID, BaseUID, getBindUID());
+        mapID(ChildPID, Map_GID, BaseGID, getBindGID());
 
         kill(ChildPID, SIGUSR1);
         waitpid(ChildPID, 0, 0);
@@ -832,16 +1477,22 @@ int main()
         sigprocmask(SIG_UNBLOCK, &SigMask, 0);
 
         keepCaps();
-
         setupBaseEnvironmentVariables();
-        setupNetwork();
 
         setupBaseAndBindRoots();
         configureContainer();
+        setupNetwork();
+        setupDBus();
         switchToBindRoot();
 
-        setupFakeIds();
-        runCommand();
+        setupFakeFiles();
+
+        // NOTE(nox): Prevent creating files & folders in the root tmpfs, which is gone as soon as the
+        // container stops
+        bindRemount(constZ("/"), Bind_ReadOnly);
+
+        changeToUsefulDirectory();
+        runCommand(ArgCount, ArgVals);
 
         // NOTE(nox): This should never run!
         abort();

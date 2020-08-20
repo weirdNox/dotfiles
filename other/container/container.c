@@ -1,42 +1,44 @@
 #!/usr/bin/tcc -run
 
-   // TODO(nox): Make struct for holding configuration
+#define BIND_UID
+#define BIND_GID
+#define BIND_USER_NAME user
+#define BIND_HOME_PATH
 
-#define UnshareNet 1
+#define SHARE_NETWORK 0
 
-#define BindUser "user"
-#define BindHome "/home/"BindUser
-#define BindUID -1
-#define BindGID BindUID
+#define SHARE_DBUS    0
+#define DBUS_SYST_PROXY "--filter",
+#define DBUS_USER_PROXY "--filter",
 
-#define HostName "host"
+#define ENVS_TO_KEEP W("DISPLAY"), W("TERM")
+
+#define BIND_HOSTNAME host
+#define BIND_ENV_DEFAULT_PATH "/usr/local/sbin:/usr/local/bin:/usr/bin"
+
+#define ARGS_OVERRIDE_STRING "-"
 
 #include "container.h"
 
 CONFIGURE_CONTAINER()
 {
-    setenv("HOME", "/home/nox", true);
-    setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/bin", true);
+    char *Rootfs = 0;
+    bindRootfs(Rootfs, false, Bind_ReadOnly);
 
-    bindMount("/home",  "/home",  Bind_ReadOnly);
+    //bindHome(Rootfs, 0);
 
-    bindMount("/etc",   "/etc",   0);
-    bindMount("/lib",   "/lib",   0);
-    bindMount("/lib64", "/lib64", 0);
-    bindMount("/sys",   "/sys",   0);
-    bindMount("/usr",   "/usr",   0);
+    shareDisplay();
+    shareGraphics();
+    //shareAudio();
+    //shareInput();
 
-    otherMount(Mount_Dev,  "/dev");
-    otherMount(Mount_Proc, "/proc");
+    //bindCustomWineBuild("...")
 }
 
 RUN_COMMAND()
 {
-    char *ShellArguments[] = {
-        "bash",
-        0
-    };
-    execute(ShellArguments);
+    char *ShellArguments[] = {"bash"};
+    execute(ArgCount, ArgVals, ShellArguments);
 }
 
 // Local Variables:
