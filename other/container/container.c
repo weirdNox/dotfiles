@@ -18,6 +18,8 @@
 
 #define ARGS_OVERRIDE_STRING "-"
 
+#define PROC_VERSION
+
 #include "container.h"
 
 CONFIGURE_CONTAINER()

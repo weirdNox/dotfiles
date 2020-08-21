@@ -2,11 +2,13 @@
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <ftw.h>
 #include <glob.h>
 #include <limits.h>
 #include <net/if.h>
 #include <sched.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -75,6 +77,8 @@ typedef  intptr_t smm;
 
 global_variable pid_t ParentPID;
 global_variable char *InitialWorkingDirectory;
+
+global_variable char *MiscDirectory;
 
 global_variable uid_t BaseUID;
 global_variable gid_t BaseGID;
@@ -292,7 +296,7 @@ internal b8 makeDirectoryRaw_(string Path, mode_t Mode)
     return Result;
 }
 
-internal b8 makeDirectoryRaw(string Path, mode_t Mode)
+internal void makeDirectoryRaw(string Path, mode_t Mode)
 {
     if(!makeDirectoryRaw_(Path, Mode))
     {
@@ -408,6 +412,26 @@ internal void symbolicLink(char *Target, char *LinkPath)
     symbolicLinkRaw(wrapZ(Target), PivotedLinkPath);
 }
 
+internal int deletePathCallback_(const char *Path, const struct stat *Stat, int TypeFlag, struct FTW *FTW)
+{
+    if(remove(Path) != 0)
+    {
+        fprintf(stderr, "Couldn't remove %s\n", Path);
+        exit(EXIT_FAILURE);
+    }
+
+    return 0;
+}
+
+internal void deletePathRaw(char *Path)
+{
+    if(nftw(Path, deletePathCallback_, 64, FTW_DEPTH | FTW_PHYS) != 0)
+    {
+        fprintf(stderr, "Couldn't delete %s\n", Path);
+        exit(EXIT_FAILURE);
+    }
+}
+
 internal inline pid_t cloneSC(u64 Flags)
 {
     pid_t PID = syscall(SYS_clone, Flags, 0);
@@ -417,6 +441,23 @@ internal inline pid_t cloneSC(u64 Flags)
 internal inline int pivotRootSC(char *NewRoot, char *PutOld)
 {
     int Result = syscall(SYS_pivot_root, NewRoot, PutOld);
+    return Result;
+}
+
+internal inline void createMiscDirectory()
+{
+    u8 Memory[1<<10];
+    string MiscDirStr = formatString(&bundleArray(Memory), "/tmp/container-%lu", ParentPID);
+    makeDirectoryRaw(MiscDirStr, 0755);
+
+    MiscDirectory = strdup((char *)MiscDirStr.Data);
+}
+
+internal inline string miscDirectoryNode(buffer *Buffer, char *NodePath)
+{
+    assert(NodePath);
+
+    string Result = formatString(Buffer, "%s/%s", MiscDirectory, NodePath);
     return Result;
 }
 
@@ -1210,11 +1251,11 @@ internal void setupDBusParent()
 
     string SystDBusPath  = constZ("/run/dbus/system_bus_socket");
     string SystProxyAddr = formatString(&Buffer, "unix:path=%s", SystDBusPath.Data);
-    string SystProxyPath = formatString(&Buffer, "/tmp/systdbus-%lu", ParentPID);
+    string SystProxyPath = miscDirectoryNode(&Buffer, "systdbus");
 
     string UserDBusPath  = formatString(&Buffer, "/run/user/%lu/bus", BaseUID);
     string UserProxyAddr = formatString(&Buffer, "unix:path=%s", UserDBusPath.Data);
-    string UserProxyPath = formatString(&Buffer, "/tmp/userdbus-%lu", ParentPID);
+    string UserProxyPath = miscDirectoryNode(&Buffer, "userdbus");
 
     char *ProxyShellArgs[] = {
         "xdg-dbus-proxy",
@@ -1269,14 +1310,15 @@ internal void bindCustomWineBuild(char *BasePath)
 
 internal inline void setupFakeFiles()
 {
+#define openFake(Path) open(BindRootFolder Path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR|S_IWUSR)
     u8 Memory[1<<13];
 
     {
         buffer Buffer = bundleArray(Memory);
         char *BindHomePath = getBindHomePath(&Buffer);
 
-        int Passwd = open("/etc/passwd", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR|S_IWUSR);
-        if(Passwd < 0)
+        int File = openFake("/etc/passwd");
+        if(File < 0)
         {
             fprintf(stderr, "Couldn't open passwd: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
@@ -1289,15 +1331,15 @@ internal inline void setupFakeFiles()
                                        getBindUserName(), getBindUID(), getBindGID(), getBindUserName(), BindHomePath,
                                        getBindUID(), getBindGID(), BindHomePath,
                                        getBindUID(), getBindGID(), BindHomePath);
-        writeAll(Passwd, Contents);
-        close(Passwd);
+        writeAll(File, Contents);
+        close(File);
     }
 
     {
         buffer Buffer = bundleArray(Memory);
 
-        int Group = open("/etc/group", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR|S_IWUSR);
-        if(Group < 0)
+        int File = openFake("/etc/group");
+        if(File < 0)
         {
             fprintf(stderr, "Couldn't open group: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
@@ -1313,24 +1355,45 @@ internal inline void setupFakeFiles()
                                        "mail:x:%lu:\n",
                                        getBindUserName(), getBindGID(), getBindUserName(),
                                        getBindGID(), getBindGID(), getBindGID(), getBindGID(), getBindGID());
-        writeAll(Group, Contents);
-        close(Group);
+        writeAll(File, Contents);
+        close(File);
     }
 
     {
         buffer Buffer = bundleArray(Memory);
 
-        int MachineID = open("/etc/machine-id", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR|S_IWUSR);
-        if(MachineID < 0)
+        int File = openFake("/etc/machine-id");
+        if(File < 0)
         {
             fprintf(stderr, "Couldn't open machine-id: %s\n", strerror(errno));
             exit(EXIT_FAILURE);
         }
 
-        string Contents = formatString(&Buffer, "10000000000000000000000000000000\n");
-        writeAll(MachineID, Contents);
-        close(MachineID);
+        string Contents = formatString(&Buffer, "00000000000000000000000000000000\n");
+        writeAll(File, Contents);
+        close(File);
     }
+
+#if defined(PROC_VERSION)
+    {
+        if(constZ(PROC_VERSION"").Size)
+        {
+            buffer Buffer = bundleArray(Memory);
+            string FakeFile = miscDirectoryNode(&Buffer, "proc/version");
+            bindMount((char *)FakeFile.Data, "/proc/version", Bind_EnsureFile);
+
+            int File = openFake("/proc/version");
+            if(File < 0)
+            {
+                fprintf(stderr, "Couldn't open /proc/version: %s\n", strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+
+            writeAll(File, constZ(PROC_VERSION"\n"));
+            close(File);
+        }
+    }
+#endif
 }
 
 internal inline void setupBaseAndBindRoots()
@@ -1442,6 +1505,8 @@ int main(int ArgCount, char *ArgVals[])
     ParentPID = getpid();
     InitialWorkingDirectory = get_current_dir_name();
 
+    createMiscDirectory();
+
     BaseUID = geteuid();
     BaseGID = getegid();
     assert(getlogin_r(BaseUserName, sizeof(BaseUserName)) == 0);
@@ -1502,12 +1567,13 @@ int main(int ArgCount, char *ArgVals[])
         setupBaseEnvironmentVariables();
 
         setupBaseAndBindRoots();
-        configureContainer();
-        setupNetwork();
-        setupDBus();
+        {
+            configureContainer();
+            setupNetwork();
+            setupDBus();
+            setupFakeFiles();
+        }
         switchToBindRoot();
-
-        setupFakeFiles();
 
         if(!FullBind)
         {
@@ -1528,6 +1594,8 @@ int main(int ArgCount, char *ArgVals[])
         fprintf(stderr, "Could not clone: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
+
+    deletePathRaw(MiscDirectory);
 
     return 0;
 }
