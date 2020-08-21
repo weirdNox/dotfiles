@@ -5,11 +5,14 @@
 #include <ftw.h>
 #include <glob.h>
 #include <limits.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
 #include <net/if.h>
 #include <sched.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1420,6 +1423,30 @@ internal inline void setupFakeFiles()
 #endif
 }
 
+internal void setupSeccomp()
+{
+    struct sock_filter Filter[] = {
+        BPF_STMT(BPF_LD  | BPF_W   | BPF_ABS, offsetof(struct seccomp_data, nr)),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_chown,    4, 0),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_fchown,   3, 0),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_fchownat, 2, 0),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_lchown,   1, 0),
+        BPF_STMT(BPF_RET | BPF_K,             SECCOMP_RET_ALLOW),
+        BPF_STMT(BPF_RET | BPF_K,             SECCOMP_RET_ERRNO),
+    };
+
+    struct sock_fprog SeccompProgram = {
+        .len = arrayCount(Filter),
+        .filter = Filter,
+    };
+
+    if(prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &SeccompProgram) < 0)
+    {
+        fprintf(stderr, "Couldn't set seccomp program: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+}
+
 internal inline void setupBaseAndBindRoots()
 {
     if(mount("tmpfs", "/tmp", "tmpfs", MS_SILENT|MS_NOATIME|MS_NODEV, "mode=0755") < 0)
@@ -1596,6 +1623,7 @@ int main(int ArgCount, char *ArgVals[])
             setupNetwork();
             setupDBus();
             setupFakeFiles();
+            setupSeccomp();
         }
         switchToBindRoot();
 

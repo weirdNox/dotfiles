@@ -1,4 +1,4 @@
-#!/usr/bin/tcc -run
+#!/usr/bin/tcc -run -Werror
 
 #define BIND_UID
 #define BIND_GID
