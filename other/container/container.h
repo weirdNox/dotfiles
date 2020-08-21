@@ -58,6 +58,8 @@ typedef  intptr_t smm;
 
 #define staticAssert(Expr) static_assert(Expr, "Assertion failed: "#Expr)
 
+#define colorWarn(Text)  "\033[33m" Text "\x1B[0m"
+
 #define internal static
 #define global_variable static
 
@@ -86,6 +88,8 @@ global_variable char *BaseXAuth;
 
 global_variable char *BaseTTY;
 global_variable int ProcFD;
+
+global_variable b32 FullBind;
 
 
 typedef struct {
@@ -372,6 +376,19 @@ internal void symbolicLinkRaw(string Target, string LinkPath)
 {
     string Directory = getDirectory(LinkPath);
     makeDirectoryRaw(Directory, 0755);
+
+    struct stat Stat;
+    if(lstat((char *)LinkPath.Data, &Stat) == 0)
+    {
+        // NOTE(nox): Node exists and is accessible
+        if(!S_ISLNK(Stat.st_mode))
+        {
+            fprintf(stderr, "Node %s already exists and isn't a symbolic link\n", LinkPath.Data);
+            exit(EXIT_FAILURE);
+        }
+
+        unlink((char *)LinkPath.Data);
+    }
 
     if(symlink((char *)Target.Data, (char *)LinkPath.Data) < 0)
     {
@@ -1043,12 +1060,8 @@ internal void bindRootfs(char *Rootfs, b32 Full, bind_option ExtraOptions)
         }
         else
         {
-            bindMap(Rootfs, "/bin",   ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/etc",   ExtraOptions);
-            bindMap(Rootfs, "/lib",   ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/lib64", ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/sbin",  ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/usr",   ExtraOptions);
+            FullBind = true;
+            bindMap(Rootfs, "/", ExtraOptions);
         }
     }
     else
@@ -1081,12 +1094,13 @@ internal void bindRootfs(char *Rootfs, b32 Full, bind_option ExtraOptions)
         bindMapGlob(Rootfs, "/etc/*-release", ExtraOptions);
     }
 
-    makeDirectory(getenv("XDG_RUNTIME_DIR"), 0700);
-
     otherMount(Mount_Dev,  "/dev");
     otherMount(Mount_Proc, "/proc");
+    otherMount(Mount_Tmp,  "/run");
     otherMount(Mount_Sys,  "/sys");
     otherMount(Mount_Tmp,  "/tmp");
+
+    makeDirectory(getenv("XDG_RUNTIME_DIR"), 0700);
 
     symbolicLink("/tmp", "/var/tmp");
     symbolicLink("/run", "/var/run");
@@ -1183,6 +1197,7 @@ internal inline void setupNetwork()
 
     close(Socket);
 #else
+    puts(colorWarn("===   Sharing network!   ==="));
     bindMap(0, "/etc/resolv.conf", Bind_ReadOnly | Bind_Try);
 #endif
 }
@@ -1260,7 +1275,7 @@ internal inline void setupFakeFiles()
         buffer Buffer = bundleArray(Memory);
         char *BindHomePath = getBindHomePath(&Buffer);
 
-        int Passwd = open("/etc/passwd", O_WRONLY | O_CREAT | O_CLOEXEC, S_IRUSR|S_IWUSR);
+        int Passwd = open("/etc/passwd", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR|S_IWUSR);
         if(Passwd < 0)
         {
             fprintf(stderr, "Couldn't open passwd: %s\n", strerror(errno));
@@ -1269,9 +1284,11 @@ internal inline void setupFakeFiles()
 
         string Contents = formatString(&Buffer,
                                        "%s:x:%lu:%lu:%s:%s:/usr/bin/bash\n"
-                                       "root:x:0:0:root:%s:/usr/bin/bash\n",
+                                       "root:x:%lu:%lu:root:%s:/usr/bin/bash\n"
+                                       "postfix:x:%lu:%lu::%s:/sbin/nologin\n",
                                        getBindUserName(), getBindUID(), getBindGID(), getBindUserName(), BindHomePath,
-                                       BindHomePath);
+                                       getBindUID(), getBindGID(), BindHomePath,
+                                       getBindUID(), getBindGID(), BindHomePath);
         writeAll(Passwd, Contents);
         close(Passwd);
     }
@@ -1279,7 +1296,7 @@ internal inline void setupFakeFiles()
     {
         buffer Buffer = bundleArray(Memory);
 
-        int Group = open("/etc/group", O_WRONLY | O_CREAT | O_CLOEXEC, S_IRUSR|S_IWUSR);
+        int Group = open("/etc/group", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR|S_IWUSR);
         if(Group < 0)
         {
             fprintf(stderr, "Couldn't open group: %s\n", strerror(errno));
@@ -1288,9 +1305,14 @@ internal inline void setupFakeFiles()
 
         string Contents = formatString(&Buffer,
                                        "%s:x:%lu:%s\n"
-                                       "root:x:0:root\n"
-                                       "audio:x:995:\n",
-                                       getBindUserName(), getBindUID(), getBindUserName());
+                                       "root:x:%lu:\n"
+                                       "audio:x:%lu:\n"
+                                       "tty:x:%lu:\n"
+                                       "postdrop:x:%lu:\n"
+                                       "postfix:x:%lu:\n"
+                                       "mail:x:%lu:\n",
+                                       getBindUserName(), getBindGID(), getBindUserName(),
+                                       getBindGID(), getBindGID(), getBindGID(), getBindGID(), getBindGID());
         writeAll(Group, Contents);
         close(Group);
     }
@@ -1298,7 +1320,7 @@ internal inline void setupFakeFiles()
     {
         buffer Buffer = bundleArray(Memory);
 
-        int MachineID = open("/etc/machine-id", O_WRONLY | O_CREAT | O_CLOEXEC, S_IRUSR|S_IWUSR);
+        int MachineID = open("/etc/machine-id", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR|S_IWUSR);
         if(MachineID < 0)
         {
             fprintf(stderr, "Couldn't open machine-id: %s\n", strerror(errno));
@@ -1313,7 +1335,7 @@ internal inline void setupFakeFiles()
 
 internal inline void setupBaseAndBindRoots()
 {
-    if(mount("tmpfs", "/tmp", "tmpfs", MS_SILENT|MS_NOATIME|MS_NODEV, 0) < 0)
+    if(mount("tmpfs", "/tmp", "tmpfs", MS_SILENT|MS_NOATIME|MS_NODEV, "mode=0755") < 0)
     {
         fprintf(stderr, "Could not mount tmpfs\n");
         exit(EXIT_FAILURE);
@@ -1487,9 +1509,12 @@ int main(int ArgCount, char *ArgVals[])
 
         setupFakeFiles();
 
-        // NOTE(nox): Prevent creating files & folders in the root tmpfs, which is gone as soon as the
-        // container stops
-        bindRemount(constZ("/"), Bind_ReadOnly);
+        if(!FullBind)
+        {
+            // NOTE(nox): Prevent creating files & folders in the root tmpfs, which is gone as soon as the
+            // container stops
+            bindRemount(constZ("/"), Bind_ReadOnly);
+        }
 
         changeToUsefulDirectory();
         runCommand(ArgCount, ArgVals);
