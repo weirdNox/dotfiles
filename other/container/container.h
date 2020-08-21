@@ -62,6 +62,9 @@ typedef  intptr_t smm;
 
 #define colorWarn(Text)  "\033[33m" Text "\x1B[0m"
 
+#define openFake(Path, ...) open(BindRootFolder Path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, \
+                                 S_IRUSR|S_IWUSR|(sizeof(stringify(__VA_ARGS__)) > 1 ? __VA_ARGS__ : 0))
+
 #define internal static
 #define global_variable static
 
@@ -1208,16 +1211,24 @@ internal inline void shareInput()
 
 internal inline void setupNetwork()
 {
-#if !macroIsEmpty(BIND_HOSTNAME)
-    string Hostname = constZ(stringify(BIND_HOSTNAME));
-    if(sethostname((char *)Hostname.Data, Hostname.Size) < 0)
-    {
-        fprintf(stderr, "Could not set host name to %s\n", Hostname.Data);
-        exit(EXIT_FAILURE);
-    }
-#endif
+    u8 Memory[1<<13];
+    buffer Buffer = bundleArray(Memory);
 
-#if !SHARE_NETWORK
+    string Hostname = constZ(stringify(BIND_HOSTNAME)"");
+    if(Hostname.Size)
+    {
+        if(sethostname((char *)Hostname.Data, Hostname.Size) < 0)
+        {
+            fprintf(stderr, "Could not set host name to %s\n", Hostname.Data);
+            exit(EXIT_FAILURE);
+        }
+    }
+
+#if SHARE_NETWORK
+    puts(colorWarn("===   Sharing network!   ==="));
+    bindMap(0, "/etc/resolv.conf", Bind_ReadOnly | Bind_Try);
+    bindMap(0, "/etc/hosts",       Bind_ReadOnly | Bind_Try);
+#else
     struct ifreq InterfaceSetup = {
         .ifr_name = "lo",
         .ifr_flags = IFF_UP,
@@ -1237,9 +1248,24 @@ internal inline void setupNetwork()
     }
 
     close(Socket);
-#else
-    puts(colorWarn("===   Sharing network!   ==="));
-    bindMap(0, "/etc/resolv.conf", Bind_ReadOnly | Bind_Try);
+
+    if(Hostname.Size == 0)
+    {
+        bindMap(0, "/etc/hosts", Bind_ReadOnly | Bind_Try);
+    }
+    else
+    {
+        int File = openFake("/etc/hosts");
+        if(File < 0)
+        {
+            fprintf(stderr, "Couldn't open machine-id: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+
+        string Contents = formatString(&Buffer, "127.0.0.1 localhost %s %s.localdomain\n", Hostname.Data, Hostname.Data);
+        writeAll(File, Contents);
+        close(File);
+    }
 #endif
 }
 
@@ -1310,7 +1336,6 @@ internal void bindCustomWineBuild(char *BasePath)
 
 internal inline void setupFakeFiles()
 {
-#define openFake(Path) open(BindRootFolder Path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR|S_IWUSR)
     u8 Memory[1<<13];
 
     {
@@ -1354,14 +1379,13 @@ internal inline void setupFakeFiles()
                                        "postfix:x:%lu:\n"
                                        "mail:x:%lu:\n",
                                        getBindUserName(), getBindGID(), getBindUserName(),
-                                       getBindGID(), getBindGID(), getBindGID(), getBindGID(), getBindGID());
+                                       getBindGID(), getBindGID(), getBindGID(),
+                                       getBindGID(), getBindGID(), getBindGID());
         writeAll(File, Contents);
         close(File);
     }
 
     {
-        buffer Buffer = bundleArray(Memory);
-
         int File = openFake("/etc/machine-id");
         if(File < 0)
         {
@@ -1369,8 +1393,7 @@ internal inline void setupFakeFiles()
             exit(EXIT_FAILURE);
         }
 
-        string Contents = formatString(&Buffer, "00000000000000000000000000000000\n");
-        writeAll(File, Contents);
+        writeAll(File, constZ("00000000000000000000000000000000\n"));
         close(File);
     }
 
@@ -1379,6 +1402,7 @@ internal inline void setupFakeFiles()
         if(constZ(PROC_VERSION"").Size)
         {
             buffer Buffer = bundleArray(Memory);
+
             string FakeFile = miscDirectoryNode(&Buffer, "proc/version");
             bindMount((char *)FakeFile.Data, "/proc/version", Bind_EnsureFile);
 
