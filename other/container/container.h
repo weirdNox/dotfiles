@@ -206,12 +206,13 @@ internal inline char *getBindHomePath(buffer *Buffer)
 {
     char *Result;
 
-#if macroIsEmpty(BIND_HOME_PATH)
-    string HomePath = formatString(Buffer, "/home/%s", getBindUserName());
+    string HomePath = constZ(stringify(BIND_HOME_PATH)"");
+    if(HomePath.Size == 0)
+    {
+        HomePath = formatString(Buffer, "/home/%s", getBindUserName());
+    }
+
     Result = (char *)HomePath.Data;
-#else
-    Result = stringify(BIND_HOME_PATH);
-#endif
 
     return Result;
 }
@@ -1164,7 +1165,7 @@ internal inline void bindHome(char *Prefix, char *BasePath, bind_option ExtraOpt
     char *BindPath = getBindHomePath(&Buffer);
 
     string Base = (Prefix ?
-                   formatString(&Buffer, "%s%s", Prefix, (BasePath ? BasePath : BindPath)) :
+                   formatString(&Buffer, "%s%s", Prefix, (BasePath ? BasePath : "/home/user")) :
                    wrapZ(BasePath ? BasePath : BaseHomePath));
 
     bindMount((char *)Base.Data, BindPath, ExtraOptions | Bind_EnsureDir);
