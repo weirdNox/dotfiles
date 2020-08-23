@@ -65,9 +65,6 @@ typedef  intptr_t smm;
 
 #define colorWarn(Text)  "\033[33m" Text "\x1B[0m"
 
-#define openFake(Path, ...) open(BindRootFolder Path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, \
-                                 S_IRUSR|S_IWUSR|(sizeof(stringify(__VA_ARGS__)) > 1 ? __VA_ARGS__ : 0))
-
 #define internal static
 #define global_variable static
 
@@ -79,12 +76,11 @@ typedef  intptr_t smm;
 
 #define CONFIGURE_CONTAINER() internal void configureContainer()
 #define RUN_COMMAND() internal void runCommand(int ArgCount, char *ArgVals[])
-    ;
 
 global_variable pid_t ParentPID;
 global_variable char *InitialWorkingDirectory;
 
-global_variable char *MiscDirectory;
+global_variable char *AuxDirectory;
 
 global_variable uid_t BaseUID;
 global_variable gid_t BaseGID;
@@ -439,6 +435,20 @@ internal void deletePathRaw(char *Path)
     }
 }
 
+internal void replaceFileWithString_(char *FilePath, int File, string Contents)
+{
+    if(File < 0)
+    {
+        fprintf(stderr, "Couldn't open %s: %s\n", FilePath, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    writeAll(File, Contents);
+    close(File);
+}
+#define openFake(Path, ...) open(BindRootFolder Path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR|S_IWUSR|(sizeof(stringify(__VA_ARGS__)) > 1 ? __VA_ARGS__ : 0))
+#define replaceFileWithString(FilePath, Contents, ...) replaceFileWithString_((FilePath), openFake(FilePath, __VA_ARGS__), (Contents))
+
 internal inline pid_t cloneSC(u64 Flags)
 {
     pid_t PID = syscall(SYS_clone, Flags, 0);
@@ -451,20 +461,20 @@ internal inline int pivotRootSC(char *NewRoot, char *PutOld)
     return Result;
 }
 
-internal inline void createMiscDirectory()
+internal inline void createAuxDirectory()
 {
     u8 Memory[1<<10];
-    string MiscDirStr = formatString(&bundleArray(Memory), "/tmp/container-%lu", ParentPID);
-    makeDirectoryRaw(MiscDirStr, 0755);
+    string AuxDirStr = formatString(&bundleArray(Memory), "/tmp/container-%lu", ParentPID);
+    makeDirectoryRaw(AuxDirStr, 0755);
 
-    MiscDirectory = strdup((char *)MiscDirStr.Data);
+    AuxDirectory = strdup((char *)AuxDirStr.Data);
 }
 
-internal inline string miscDirectoryNode(buffer *Buffer, char *NodePath)
+internal inline string auxDirectoryNode(buffer *Buffer, char *NodePath)
 {
     assert(NodePath);
 
-    string Result = formatString(Buffer, "%s/%s", MiscDirectory, NodePath);
+    string Result = formatString(Buffer, "%s/%s", AuxDirectory, NodePath);
     return Result;
 }
 
@@ -888,6 +898,15 @@ internal void bindMapGlob(char *Prefix, char *Pattern, bind_option Options)
     }
 }
 
+internal inline void bindAux(char *Path)
+{
+    assert(Path && Path[0] == '/');
+
+    u8 Memory[1<<10];
+    string AuxFile = auxDirectoryNode(&bundleArray(Memory), Path+1);
+    bindMount((char *)AuxFile.Data, Path, Bind_EnsureFile);
+}
+
 typedef enum {
     Mount_Dev,
     Mount_DevPTS,
@@ -1259,16 +1278,8 @@ internal inline void setupNetwork()
     }
     else
     {
-        int File = openFake("/etc/hosts");
-        if(File < 0)
-        {
-            fprintf(stderr, "Couldn't open machine-id: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
-        string Contents = formatString(&Buffer, "127.0.0.1 localhost %s %s.localdomain\n", Hostname.Data, Hostname.Data);
-        writeAll(File, Contents);
-        close(File);
+        replaceFileWithString("/etc/hosts", formatString(&Buffer, "127.0.0.1 localhost %s %s.localdomain\n",
+                                                         Hostname.Data, Hostname.Data));
     }
 #endif
 }
@@ -1281,11 +1292,11 @@ internal void setupDBusParent()
 
     string SystDBusPath  = constZ("/run/dbus/system_bus_socket");
     string SystProxyAddr = formatString(&Buffer, "unix:path=%s", SystDBusPath.Data);
-    string SystProxyPath = miscDirectoryNode(&Buffer, "systdbus");
+    string SystProxyPath = auxDirectoryNode(&Buffer, "systdbus");
 
     string UserDBusPath  = formatString(&Buffer, "/run/user/%lu/bus", BaseUID);
     string UserProxyAddr = formatString(&Buffer, "unix:path=%s", UserDBusPath.Data);
-    string UserProxyPath = miscDirectoryNode(&Buffer, "userdbus");
+    string UserProxyPath = auxDirectoryNode(&Buffer, "userdbus");
 
     char *ProxyShellArgs[] = {
         "xdg-dbus-proxy",
@@ -1346,80 +1357,40 @@ internal inline void setupFakeFiles()
         buffer Buffer = bundleArray(Memory);
         char *BindHomePath = getBindHomePath(&Buffer);
 
-        int File = openFake("/etc/passwd");
-        if(File < 0)
-        {
-            fprintf(stderr, "Couldn't open passwd: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
         string Contents = formatString(&Buffer,
                                        "%s:x:%lu:%lu:%s:%s:/usr/bin/bash\n"
-                                       "root:x:%lu:%lu:root:%s:/usr/bin/bash\n"
-                                       "postfix:x:%lu:%lu::%s:/sbin/nologin\n",
+                                       "root:x:%lu:%lu:::/sbin/nologin\n"
+                                       "nobody:x:%lu:%lu:::/sbin/nologin\n"
+                                       "postfix:x:%lu:%lu:::/sbin/nologin\n",
                                        getBindUserName(), getBindUID(), getBindGID(), getBindUserName(), BindHomePath,
-                                       getBindUID(), getBindGID(), BindHomePath,
-                                       getBindUID(), getBindGID(), BindHomePath);
-        writeAll(File, Contents);
-        close(File);
+                                       getBindUID(), getBindGID(),
+                                       getBindUID(), getBindGID(),
+                                       getBindUID(), getBindGID());
+
+        replaceFileWithString("/etc/passwd", Contents);
     }
 
-    {
-        buffer Buffer = bundleArray(Memory);
+    replaceFileWithString("/etc/group", formatString(&bundleArray(Memory),
+                                                     "%s:x:%lu:%s\n"
+                                                     "root:x:%lu:\n"
+                                                     "nobody:x:%lu:\n"
+                                                     "audio:x:%lu:\n"
+                                                     "tty:x:%lu:\n"
+                                                     "postdrop:x:%lu:\n"
+                                                     "postfix:x:%lu:\n"
+                                                     "mail:x:%lu:\n",
+                                                     getBindUserName(), getBindGID(), getBindUserName(),
+                                                     getBindGID(), getBindGID(), getBindGID(),
+                                                     getBindGID(), getBindGID(), getBindGID(),
+                                                     getBindGID()));
 
-        int File = openFake("/etc/group");
-        if(File < 0)
-        {
-            fprintf(stderr, "Couldn't open group: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
-        string Contents = formatString(&Buffer,
-                                       "%s:x:%lu:%s\n"
-                                       "root:x:%lu:\n"
-                                       "audio:x:%lu:\n"
-                                       "tty:x:%lu:\n"
-                                       "postdrop:x:%lu:\n"
-                                       "postfix:x:%lu:\n"
-                                       "mail:x:%lu:\n",
-                                       getBindUserName(), getBindGID(), getBindUserName(),
-                                       getBindGID(), getBindGID(), getBindGID(),
-                                       getBindGID(), getBindGID(), getBindGID());
-        writeAll(File, Contents);
-        close(File);
-    }
-
-    {
-        int File = openFake("/etc/machine-id");
-        if(File < 0)
-        {
-            fprintf(stderr, "Couldn't open machine-id: %s\n", strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-
-        writeAll(File, constZ("00000000000000000000000000000000\n"));
-        close(File);
-    }
+    replaceFileWithString("/etc/machine-id", constZ("00000000000000000000000000000000\n"));
 
 #if defined(PROC_VERSION)
+    if(constZ(PROC_VERSION"").Size)
     {
-        if(constZ(PROC_VERSION"").Size)
-        {
-            buffer Buffer = bundleArray(Memory);
-
-            string FakeFile = miscDirectoryNode(&Buffer, "proc/version");
-            bindMount((char *)FakeFile.Data, "/proc/version", Bind_EnsureFile);
-
-            int File = openFake("/proc/version");
-            if(File < 0)
-            {
-                fprintf(stderr, "Couldn't open /proc/version: %s\n", strerror(errno));
-                exit(EXIT_FAILURE);
-            }
-
-            writeAll(File, constZ(PROC_VERSION"\n"));
-            close(File);
-        }
+        bindAux("/proc/version");
+        replaceFileWithString("/proc/version", constZ(PROC_VERSION"\n"));
     }
 #endif
 }
@@ -1557,7 +1528,7 @@ int main(int ArgCount, char *ArgVals[])
     ParentPID = getpid();
     InitialWorkingDirectory = get_current_dir_name();
 
-    createMiscDirectory();
+    createAuxDirectory();
 
     BaseUID = geteuid();
     BaseGID = getegid();
@@ -1648,7 +1619,7 @@ int main(int ArgCount, char *ArgVals[])
         exit(EXIT_FAILURE);
     }
 
-    deletePathRaw(MiscDirectory);
+    deletePathRaw(AuxDirectory);
 
     return 0;
 }
