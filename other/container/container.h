@@ -1482,6 +1482,13 @@ internal inline void changeToUsefulDirectory()
            chdir(getBindHomePath(&bundleArray(Memory))) == 0);
 }
 
+internal inline b8 shouldOverrideArgs(int ArgCount, char *ArgVals[])
+{
+    b8 Result = (ArgCount > 1 && strcmp(ArgVals[0], ARGS_OVERRIDE_STRING) == 0);
+
+    return Result;
+}
+
 internal inline void execute_(int ArgCount, char *ArgVals[], u32 ShellCount, char *ShellArguments[])
 {
     char **FinalShellArgs = 0;
@@ -1494,7 +1501,7 @@ internal inline void execute_(int ArgCount, char *ArgVals[], u32 ShellCount, cha
     }
     else
     {
-        if(ArgCount > 1 && strcmp(ArgVals[0], ARGS_OVERRIDE_STRING) == 0)
+        if(shouldOverrideArgs(ArgCount, ArgVals))
         {
             // NOTE(nox): Complete override
             FinalShellArgs = calloc(ArgCount, sizeof(char *));

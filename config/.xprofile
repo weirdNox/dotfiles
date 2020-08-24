@@ -6,3 +6,5 @@ x11_input_daemon ~/.local/lib/x11_input_setup.sh
 export _JAVA_OPTIONS='-Dawt.useSystemAAFontSettings=gasp -Dswing.aatext=true -Dswing.defaultlaf=com.sun.java.swing.plaf.gtk.GTKLookAndFeel'
 
 xrdb -merge "$HOME/.Xresources"
+
+xhost +local: >/dev/null
