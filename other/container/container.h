@@ -898,13 +898,14 @@ internal void bindMapGlob(char *Prefix, char *Pattern, bind_option Options)
     }
 }
 
-internal inline void bindAux(char *Path)
+internal inline void bindAux(char *Path, b8 File)
 {
     assert(Path && Path[0] == '/');
 
     u8 Memory[1<<10];
-    string AuxFile = auxDirectoryNode(&bundleArray(Memory), Path+1);
-    bindMount((char *)AuxFile.Data, Path, Bind_EnsureFile);
+    string AuxPath = auxDirectoryNode(&bundleArray(Memory), Path+1);
+
+    bindMount((char *)AuxPath.Data, Path, File ? Bind_EnsureFile : Bind_EnsureDir);
 }
 
 typedef enum {
@@ -1389,7 +1390,7 @@ internal inline void setupFakeFiles()
 #if defined(PROC_VERSION)
     if(constZ(PROC_VERSION"").Size)
     {
-        bindAux("/proc/version");
+        bindAux("/proc/version", true);
         replaceFileWithString("/proc/version", constZ(PROC_VERSION"\n"));
     }
 #endif
