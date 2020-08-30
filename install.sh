@@ -7,5 +7,3 @@ cd "$ScriptDir"
 cp -vfasT "$ScriptDir/config/" "$HOME/"
 
 mkdir -p "$HOME/temporary/"{downloads,other/desktop}
-
-./other/x11_input_daemon/build.sh

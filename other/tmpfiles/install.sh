@@ -4,7 +4,7 @@ set -euo pipefail; shopt -s nullglob
 
 cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1
 
-cp "en_SE"                    "/usr/share/i18n/locales"
-cp "locale.gen" "locale.conf" "/etc"
+systemctl mask tmp.mount
 
-locale-gen
+mkdir -p /etc/tmpfiles.d
+cp tmp.conf /etc/tmpfiles.d
