@@ -437,20 +437,6 @@ internal void deletePathRaw(char *Path)
     }
 }
 
-internal void replaceFileWithString_(char *FilePath, int File, string Contents)
-{
-    if(File < 0)
-    {
-        fprintf(stderr, "Couldn't open %s: %s\n", FilePath, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    writeAll(File, Contents);
-    close(File);
-}
-#define openFake(Path, ...) open(BindRootFolder Path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, S_IRUSR|S_IWUSR|(sizeof(stringify(__VA_ARGS__)) > 1 ? __VA_ARGS__ : 0))
-#define replaceFileWithString(FilePath, Contents, ...) replaceFileWithString_((FilePath), openFake(FilePath, __VA_ARGS__), (Contents))
-
 internal inline pid_t cloneSC(u64 Flags)
 {
     pid_t PID = syscall(SYS_clone, Flags, 0);
@@ -1045,6 +1031,23 @@ internal void otherMount(mount_type Type, char *BindPath)
     }
 }
 
+internal void replaceFile_(char *FilePath, string Contents, mode_t ExtraMode)
+{
+    bindAux(FilePath + (sizeof(BindRootFolder)-1), true);
+
+    int File = open(FilePath, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, S_IRUSR|S_IWUSR|ExtraMode);
+    if(File < 0)
+    {
+        fprintf(stderr, "Couldn't open %s: %s\n", FilePath, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    writeAll(File, Contents);
+    close(File);
+}
+#define replaceFile(FilePath, Contents, ...) replaceFile_((BindRootFolder FilePath), (Contents), \
+                                                          (sizeof(stringify(__VA_ARGS__)) > 1 ? __VA_ARGS__ : 0))
+
 internal void cleanupEnvironmentVariables()
 {
 #define W(String) {.Size = sizeof(String)-1, .Data = (u8 *)(String)}
@@ -1149,49 +1152,64 @@ internal inline void setupBaseEnvironmentVariables()
     }
 }
 
-internal void bindRootfs(char *Rootfs, b32 Full, bind_option ExtraOptions)
+typedef enum {
+    Rootfs_Minimal,
+    Rootfs_Partial,
+    Rootfs_Full,
+} bind_rootfs_type;
+internal void bindRootfs(char *Rootfs, bind_rootfs_type Type, bind_option ExtraOptions)
 {
-    if(Full)
+    switch(Type)
     {
-        if(ExtraOptions & Bind_ReadOnly)
+        case Rootfs_Minimal:
         {
-            fprintf(stderr, "Cannot bind full rootfs in read-only mode!\n");
-            exit(EXIT_FAILURE);
-        }
-        else
+            bindMap(Rootfs, "/usr/bin", ExtraOptions);
+            bindMap(Rootfs, "/bin",     ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/sbin",    ExtraOptions | Bind_Try);
+
+            bindMap(Rootfs, "/usr/lib",   ExtraOptions);
+            bindMap(Rootfs, "/usr/lib32", ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/lib",       ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/lib64",     ExtraOptions | Bind_Try);
+
+            bindMap(Rootfs, "/usr/include", ExtraOptions);
+            bindMap(Rootfs, "/usr/share",   ExtraOptions);
+
+            bindMap(Rootfs, "/etc/OpenCL",          ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/etc/X11",             ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/etc/ca-certificates", ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/etc/fonts",           ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/etc/ld.so.cache",     ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/etc/ld.so.conf",      ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/etc/ld.so.conf.d",    ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/etc/localtime",       ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/etc/mime.types",      ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/etc/nsswitch.conf",   ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/etc/ssl",             ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/etc/xdg",             ExtraOptions | Bind_Try);
+
+            bindMapGlob(Rootfs, "/etc/*-release", ExtraOptions);
+
+            symbolicLink("/tmp", "/var/tmp");
+            symbolicLink("/run", "/var/run");
+        } break;
+
+        case Rootfs_Partial:
+        {
+            bindMap(Rootfs, "/bin",   ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/etc",   ExtraOptions);
+            bindMap(Rootfs, "/lib",   ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/lib64", ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/sbin",  ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/usr",   ExtraOptions);
+            bindMap(Rootfs, "/var",   ExtraOptions);
+        } break;
+
+        case Rootfs_Full:
         {
             FullBind = true;
             bindMap(Rootfs, "/", ExtraOptions);
-        }
-    }
-    else
-    {
-        bindMap(Rootfs, "/usr/bin", ExtraOptions);
-        bindMap(Rootfs, "/bin",     ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/sbin",    ExtraOptions | Bind_Try);
-
-        bindMap(Rootfs, "/usr/lib",   ExtraOptions);
-        bindMap(Rootfs, "/usr/lib32", ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/lib",       ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/lib64",     ExtraOptions | Bind_Try);
-
-        bindMap(Rootfs, "/usr/include", ExtraOptions);
-        bindMap(Rootfs, "/usr/share",   ExtraOptions);
-
-        bindMap(Rootfs, "/etc/OpenCL",          ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/etc/X11",             ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/etc/ca-certificates", ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/etc/fonts",           ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/etc/ld.so.cache",     ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/etc/ld.so.conf",      ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/etc/ld.so.conf.d",    ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/etc/localtime",       ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/etc/mime.types",      ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/etc/nsswitch.conf",   ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/etc/ssl",             ExtraOptions | Bind_Try);
-        bindMap(Rootfs, "/etc/xdg",             ExtraOptions | Bind_Try);
-
-        bindMapGlob(Rootfs, "/etc/*-release", ExtraOptions);
+        } break;
     }
 
     otherMount(Mount_Dev,  "/dev");
@@ -1201,9 +1219,6 @@ internal void bindRootfs(char *Rootfs, b32 Full, bind_option ExtraOptions)
     otherMount(Mount_Tmp,  "/tmp");
 
     makeDirectory(getenv("XDG_RUNTIME_DIR"), 0700);
-
-    symbolicLink("/tmp", "/var/tmp");
-    symbolicLink("/run", "/var/run");
 }
 
 internal inline void bindHome(char *Prefix, char *BasePath, bind_option ExtraOptions)
@@ -1311,8 +1326,8 @@ internal inline void setupNetwork()
     }
     else
     {
-        replaceFileWithString("/etc/hosts", formatString(&Buffer, "127.0.0.1 localhost %s %s.localdomain\n",
-                                                         Hostname.Data, Hostname.Data));
+        replaceFile("/etc/hosts", formatString(&Buffer, "127.0.0.1 localhost %s %s.localdomain\n",
+                                               Hostname.Data, Hostname.Data));
     }
 #endif
 }
@@ -1400,30 +1415,30 @@ internal inline void setupFakeFiles()
                                        getBindUID(), getBindGID(),
                                        getBindUID(), getBindGID());
 
-        replaceFileWithString("/etc/passwd", Contents);
+        replaceFile("/etc/passwd", Contents);
     }
 
-    replaceFileWithString("/etc/group", formatString(&bundleArray(Memory),
-                                                     "%s:x:%lu:%s\n"
-                                                     "root:x:%lu:\n"
-                                                     "nobody:x:%lu:\n"
-                                                     "audio:x:%lu:\n"
-                                                     "tty:x:%lu:\n"
-                                                     "postdrop:x:%lu:\n"
-                                                     "postfix:x:%lu:\n"
-                                                     "mail:x:%lu:\n",
-                                                     getBindUserName(), getBindGID(), getBindUserName(),
-                                                     getBindGID(), getBindGID(), getBindGID(),
-                                                     getBindGID(), getBindGID(), getBindGID(),
-                                                     getBindGID()));
+    replaceFile("/etc/group", formatString(&bundleArray(Memory),
+                                           "%s:x:%lu:%s\n"
+                                           "root:x:%lu:\n"
+                                           "nobody:x:%lu:\n"
+                                           "audio:x:%lu:\n"
+                                           "tty:x:%lu:\n"
+                                           "postdrop:x:%lu:\n"
+                                           "postfix:x:%lu:\n"
+                                           "mail:x:%lu:\n",
+                                           getBindUserName(), getBindGID(), getBindUserName(),
+                                           getBindGID(), getBindGID(), getBindGID(),
+                                           getBindGID(), getBindGID(), getBindGID(),
+                                           getBindGID()));
 
-    replaceFileWithString("/etc/machine-id", constZ("00000000000000000000000000000000\n"));
+    replaceFile("/etc/machine-id", constZ("00000000000000000000000000000000\n"));
 
 #if defined(PROC_VERSION)
     if(constZ(PROC_VERSION"").Size)
     {
         bindAux("/proc/version", true);
-        replaceFileWithString("/proc/version", constZ(PROC_VERSION"\n"));
+        replaceFile("/proc/version", constZ(PROC_VERSION"\n"));
     }
 #endif
 }

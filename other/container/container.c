@@ -27,7 +27,7 @@
 CONFIGURE_CONTAINER()
 {
     char *Rootfs = 0;
-    bindRootfs(Rootfs, false, Bind_ReadOnly);
+    bindRootfs(Rootfs, Rootfs_Minimal, Bind_ReadOnly);
 
     //bindHome(Rootfs, 0, 0);
 
