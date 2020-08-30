@@ -66,7 +66,7 @@ typedef  intptr_t smm;
 #define colorWarn(Text)  "\033[33m" Text "\x1B[0m"
 
 #define internal static
-#define global_variable static
+#define global static
 
 
 #define BaseRootFolder "/base"
@@ -77,25 +77,27 @@ typedef  intptr_t smm;
 #define CONFIGURE_CONTAINER() internal void configureContainer()
 #define RUN_COMMAND() internal void runCommand(int ArgCount, char *ArgVals[])
 
-global_variable pid_t ParentPID;
-global_variable char *InitialWorkingDirectory;
+global pid_t ParentPID;
+global char *InitialWorkingDirectory;
 
-global_variable char *AuxDirectory;
+global char *AuxDirectory;
 
-global_variable uid_t BaseUID;
-global_variable gid_t BaseGID;
-global_variable char  BaseUserName[64];
-global_variable char *BaseHomePath;
+global uid_t BaseUID;
+global gid_t BaseGID;
+global char  BaseUserName[64];
+global char *BaseHomePath;
 
-global_variable char *BaseSystDBus;
-global_variable char *BaseUserDBus;
+global char *BaseSystDBus;
+global char *BaseUserDBus;
 
-global_variable char *BaseXAuth;
+global char *BaseXAuth;
 
-global_variable char *BaseTTY;
-global_variable int ProcFD;
+global char *BaseUnionFS;
 
-global_variable b32 FullBind;
+global char *BaseTTY;
+global int ProcFD;
+
+global b32 FullBind;
 
 
 typedef struct {
@@ -470,12 +472,49 @@ internal inline void createAuxDirectory()
     AuxDirectory = strdup((char *)AuxDirStr.Data);
 }
 
-internal inline string auxDirectoryNode(buffer *Buffer, char *NodePath)
+internal inline string auxNode(buffer *Buffer, char *NodePath)
 {
     assert(NodePath);
 
     string Result = formatString(Buffer, "%s/%s", AuxDirectory, NodePath);
     return Result;
+}
+
+internal inline void dieWithParent()
+{
+    if(prctl(PR_SET_PDEATHSIG, SIGKILL) < 0)
+    {
+        fprintf(stderr, "Could not set parent death signal\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+internal pid_t runProgramInBackground(char *ShellArgs[])
+{
+    pid_t ProcPID = fork();
+    if(ProcPID == 0)
+    {
+        // NOTE(nox): Child
+        dieWithParent();
+        if(execvp(ShellArgs[0], ShellArgs) < 0)
+        {
+            fprintf(stderr, "Couldn't execute '%s': %s\n", ShellArgs[0], strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+    }
+    else if(ProcPID < 0)
+    {
+        fprintf(stderr, "Couldn't fork to run program '%s' in background", ShellArgs[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    return ProcPID;
+}
+
+internal inline void runProgram(char *ShellArgs[])
+{
+    pid_t ProcPID = runProgramInBackground(ShellArgs);
+    waitpid(ProcPID, 0, 0);
 }
 
 internal void disableSetGroups(pid_t ChildPID)
@@ -532,41 +571,42 @@ internal void mapID(pid_t ChildPID, map_type Type, id_t BaseID, id_t BindID)
     }
 }
 
-internal inline void dieWithParent()
+internal void createUnionFS()
 {
-    if(prctl(PR_SET_PDEATHSIG, SIGKILL) < 0)
-    {
-        fprintf(stderr, "Could not set parent death signal\n");
-        exit(EXIT_FAILURE);
-    }
+#if defined(CREATE_UNIONFS) && CREATE_UNIONFS
+    u8 Memory[1<<13];
+    buffer Buffer = bundleArray(Memory);
+
+    string Upper = auxNode(&Buffer, "unionfs_upper");
+    string Merge = auxNode(&Buffer, "unionfs_merge");
+    BaseUnionFS = strdup((char *)Merge.Data);
+
+    makeDirectoryRaw(Upper, 0755);
+    makeDirectoryRaw(Merge, 0755);
+
+    char *ShellArgs[] = {
+        "unionfs",
+        "-o", "cow,relaxed_permissions",
+        (char *)formatString(&Buffer, "%s=RW:/=RO", Upper.Data).Data,
+        (char *)Merge.Data,
+
+        0
+    };
+    runProgram(ShellArgs);
+#endif
 }
 
-internal pid_t runProgramInBackground(char *ShellArgs[])
+internal inline void unmountUnionFS()
 {
-    pid_t ProcPID = fork();
-    if(ProcPID == 0)
-    {
-        // NOTE(nox): Child
-        dieWithParent();
-        if(execvp(ShellArgs[0], ShellArgs) < 0)
-        {
-            fprintf(stderr, "Couldn't execute '%s': %s\n", ShellArgs[0], strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-    }
-    else if(ProcPID < 0)
-    {
-        fprintf(stderr, "Couldn't fork to run program '%s' in background", ShellArgs[0]);
-        exit(EXIT_FAILURE);
-    }
+#if defined(CREATE_UNIONFS) && CREATE_UNIONFS
+    char *ShellArgs[] = {
+        "umount",
+        BaseUnionFS,
 
-    return ProcPID;
-}
-
-internal inline void runProgram(char *ShellArgs[])
-{
-    pid_t ProcPID = runProgramInBackground(ShellArgs);
-    waitpid(ProcPID, 0, 0);
+        0
+    };
+    runProgram(ShellArgs);
+#endif
 }
 
 internal void keepCaps()
@@ -669,35 +709,19 @@ internal void bindMountRaw(string PivotedBase, string PivotedBind, bind_option O
 
     b8 BindingDirectory = S_ISDIR(Stat.st_mode);
 
-    if(BindingDirectory)
+    if(( BindingDirectory && !makeDirectoryRaw_(PivotedBind, 0755)) ||
+       (!BindingDirectory && !createFileRaw_(PivotedBind, 0666)))
     {
-        if(!makeDirectoryRaw_(PivotedBind, 0755))
+        if(Options & Bind_Try)
         {
-            if(Options & Bind_Try)
-            {
-                // NOTE(nox): Error trying to create directory, but it's OK
-                return;
-            }
-            else
-            {
-                fprintf(stderr, "Could not create directory %s: %s\n", PivotedBind.Data, strerror(errno));
-                exit(EXIT_FAILURE);
-            }
+            // NOTE(nox): Error trying to create target, but it's OK
+            return;
         }
-    }
-    else {
-        if(!createFileRaw_(PivotedBind, 0666))
+        else
         {
-            if(Options & Bind_Try)
-            {
-                // NOTE(nox): Error trying to create file, but it's OK
-                return;
-            }
-            else
-            {
-                fprintf(stderr, "Could not create file %s: %s\n", PivotedBind.Data, strerror(errno));
-                exit(EXIT_FAILURE);
-            }
+            fprintf(stderr, "Could not create %s %s: %s\n", BindingDirectory ? "directory" : "file",
+                    PivotedBind.Data, strerror(errno));
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -911,7 +935,7 @@ internal inline void bindAux(char *Path, b8 File)
     assert(Path && Path[0] == '/');
 
     u8 Memory[1<<10];
-    string AuxPath = auxDirectoryNode(&bundleArray(Memory), Path+1);
+    string AuxPath = auxNode(&bundleArray(Memory), Path+1);
 
     bindMount((char *)AuxPath.Data, Path, File ? Bind_EnsureFile : Bind_EnsureDir);
 }
@@ -1301,11 +1325,11 @@ internal void setupDBusParent()
 
     string SystDBusPath  = constZ("/run/dbus/system_bus_socket");
     string SystProxyAddr = formatString(&Buffer, "unix:path=%s", SystDBusPath.Data);
-    string SystProxyPath = auxDirectoryNode(&Buffer, "systdbus");
+    string SystProxyPath = auxNode(&Buffer, "systdbus");
 
     string UserDBusPath  = formatString(&Buffer, "/run/user/%lu/bus", BaseUID);
     string UserProxyAddr = formatString(&Buffer, "unix:path=%s", UserDBusPath.Data);
-    string UserProxyPath = auxDirectoryNode(&Buffer, "userdbus");
+    string UserProxyPath = auxNode(&Buffer, "userdbus");
 
     char *ProxyShellArgs[] = {
         "xdg-dbus-proxy",
@@ -1553,6 +1577,7 @@ int main(int ArgCount, char *ArgVals[])
     BaseXAuth = strdup(getenv("XAUTHORITY"));
     BaseHomePath = strdup(getenv("HOME"));
 
+    createUnionFS();
     setupDBusParent();
 
     sigset_t SigMask;
@@ -1635,11 +1660,13 @@ int main(int ArgCount, char *ArgVals[])
         exit(EXIT_FAILURE);
     }
 
+    unmountUnionFS();
+#if !defined(KEEP_AUX) || !KEEP_AUX
     deletePathRaw(AuxDirectory);
+#endif
 
     return 0;
 }
-
 // Local Variables:
 // mode: c
 // End:

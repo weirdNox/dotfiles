@@ -1,5 +1,8 @@
 #!/usr/bin/tcc -run -Werror
 
+#define CREATE_UNIONFS 0
+#define KEEP_AUX       0
+
 #define BIND_UID
 #define BIND_GID
 #define BIND_USER_NAME user
@@ -15,10 +18,9 @@
 #define ENVS_TO_KEEP W("DISPLAY"), W("TERM")
 
 #define BIND_ENV_DEFAULT_PATH "/usr/local/sbin:/usr/local/bin:/usr/bin"
+#define PROC_VERSION
 
 #define ARGS_OVERRIDE_STRING "-"
-
-#define PROC_VERSION
 
 #include "container.h"
 
