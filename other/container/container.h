@@ -541,7 +541,7 @@ internal inline void dieWithParent()
     }
 }
 
-internal void runProgramInBackground(char *ShellArgs[])
+internal pid_t runProgramInBackground(char *ShellArgs[])
 {
     pid_t ProcPID = fork();
     if(ProcPID == 0)
@@ -559,6 +559,14 @@ internal void runProgramInBackground(char *ShellArgs[])
         fprintf(stderr, "Couldn't fork to run program '%s' in background", ShellArgs[0]);
         exit(EXIT_FAILURE);
     }
+
+    return ProcPID;
+}
+
+internal inline void runProgram(char *ShellArgs[])
+{
+    pid_t ProcPID = runProgramInBackground(ShellArgs);
+    waitpid(ProcPID, 0, 0);
 }
 
 internal void keepCaps()
