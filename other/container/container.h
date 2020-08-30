@@ -559,11 +559,11 @@ internal void mapID(pid_t ChildPID, map_type Type, id_t BaseID, id_t BindID)
 
 internal void createUnionFS()
 {
-#if defined(CREATE_UNIONFS) && CREATE_UNIONFS
+#if defined(UNIONFS_CREATE) && UNIONFS_CREATE
     u8 Memory[1<<13];
     buffer Buffer = bundleArray(Memory);
 
-    string Upper = auxNode(&Buffer, "unionfs_upper");
+    string Upper = constZ(UNIONFS_UPPER"").Size ? constZ(UNIONFS_UPPER"") : auxNode(&Buffer, "unionfs_upper");
     string Merge = auxNode(&Buffer, "unionfs_merge");
     BaseUnionFS = strdup((char *)Merge.Data);
 
@@ -584,7 +584,7 @@ internal void createUnionFS()
 
 internal inline void unmountUnionFS()
 {
-#if defined(CREATE_UNIONFS) && CREATE_UNIONFS
+#if defined(UNIONFS_CREATE) && UNIONFS_CREATE
     char *ShellArgs[] = {
         "umount",
         BaseUnionFS,

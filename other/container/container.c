@@ -1,7 +1,9 @@
 #!/usr/bin/tcc -run -Werror
 
-#define CREATE_UNIONFS 0
-#define KEEP_AUX       0
+#define KEEP_AUX 0
+
+#define UNIONFS_CREATE 0
+#define UNIONFS_UPPER
 
 #define BIND_UID
 #define BIND_GID
@@ -26,7 +28,7 @@
 
 CONFIGURE_CONTAINER()
 {
-    char *Rootfs = 0;
+    char *Rootfs = BaseUnionFS;
     bindRootfs(Rootfs, Rootfs_Minimal, Bind_ReadOnly);
 
     //bindHome(Rootfs, 0, 0);
