@@ -239,18 +239,41 @@ internal inline b8 writeAll(int File, string String)
 	return Result;
 }
 
+typedef enum {
+    Node_NoExist,
+    Node_File,
+    Node_Directory,
+    Node_Link,
+    Node_Other,
+} node_type;
+
+internal node_type getNodeType(string Path, b8 FollowLinks)
+{
+    node_type Result = Node_NoExist;
+
+    struct stat Stat;
+    if((FollowLinks ? stat : lstat)((char *)Path.Data, &Stat) == 0)
+    {
+        Result = (S_ISREG(Stat.st_mode) ? Node_File :
+                  S_ISDIR(Stat.st_mode) ? Node_Directory :
+                  S_ISLNK(Stat.st_mode) ? Node_Link : Node_Other);
+    }
+
+    return Result;
+}
+
 internal b8 makeDirectoryRaw_(string Path, mode_t Mode)
 {
     b8 Result = true;
 
-    u8 Buffer[1<<13];
+    char Buffer[1<<13];
 
     if(Path.Size + 1 <= sizeof(Buffer))
     {
         memcpy(Buffer, Path.Data, Path.Size);
         Buffer[Path.Size] = 0;
 
-        u8 *Iter = Buffer;
+        char *Iter = Buffer;
 
         while(Iter)
         {
@@ -269,22 +292,23 @@ internal b8 makeDirectoryRaw_(string Path, mode_t Mode)
                 *Iter = 0;
             }
 
-            struct stat Stat;
-            if(stat((char *)Buffer, &Stat) == 0)
+            switch(getNodeType(wrapZ(Buffer), true))
             {
-                // NOTE(nox): Node exists and is accessible
-                if(!S_ISDIR(Stat.st_mode))
+                case Node_Directory: {} break;
+
+                case Node_NoExist:
                 {
+                    if(mkdir((char *)Buffer, Mode) == -1 && errno != EEXIST)
+                    {
+                        Result = false;
+                        Iter = 0;
+                    }
+                } break;
+
+                default: {
                     fprintf(stderr, "Node %s already exists and isn't a directory\n", Buffer);
                     exit(EXIT_FAILURE);
-                }
-            }
-            else
-            {
-                if(mkdir((char *)Buffer, Mode) == -1 && errno != EEXIST)
-                {
-                    Result = false;
-                }
+                } break;
             }
 
             if(Iter) {
@@ -342,31 +366,30 @@ internal b8 createFileRaw_(string Path, mode_t Mode)
 {
     b8 Result = true;
 
-    struct stat Stat;
-    if(stat((char *)Path.Data, &Stat) == 0)
+    switch(getNodeType(Path, true))
     {
-        // NOTE(nox): Node exists and is accessible
-        if(!S_ISREG(Stat.st_mode))
+        case Node_File: {} break;
+
+        case Node_NoExist:
         {
+            string Directory = getDirectory(Path);
+            makeDirectoryRaw(Directory, 0755);
+
+            int File = creat((char *)Path.Data, Mode);
+            if(File < 0)
+            {
+                Result = false;
+            }
+            else
+            {
+                close(File);
+            }
+        } break;
+
+        default: {
             fprintf(stderr, "Node %s already exists and isn't a file\n", Path.Data);
             exit(EXIT_FAILURE);
-        }
-    }
-    else
-    {
-        string Directory = getDirectory(Path);
-        makeDirectoryRaw(Directory, 0755);
-
-
-        int File = creat((char *)Path.Data, Mode);
-        if(File < 0)
-        {
-            Result = false;
-        }
-        else
-        {
-            close(File);
-        }
+        } break;
     }
 
     return Result;
@@ -386,17 +409,18 @@ internal void symbolicLinkRaw(string Target, string LinkPath)
     string Directory = getDirectory(LinkPath);
     makeDirectoryRaw(Directory, 0755);
 
-    struct stat Stat;
-    if(lstat((char *)LinkPath.Data, &Stat) == 0)
+    switch(getNodeType(LinkPath, false))
     {
-        // NOTE(nox): Node exists and is accessible
-        if(!S_ISLNK(Stat.st_mode))
-        {
+        case Node_NoExist: break;
+
+        case Node_Link: {
+            unlink((char *)LinkPath.Data);
+        } break;
+
+        default: {
             fprintf(stderr, "Node %s already exists and isn't a symbolic link\n", LinkPath.Data);
             exit(EXIT_FAILURE);
-        }
-
-        unlink((char *)LinkPath.Data);
+        } break;
     }
 
     if(symlink((char *)Target.Data, (char *)LinkPath.Data) < 0)
@@ -679,21 +703,20 @@ internal void bindMountRaw(string PivotedBase, string PivotedBind, bind_option O
         createFileRaw(PivotedBase, 0666);
     }
 
-    struct stat Stat;
-    if(stat((char *)PivotedBase.Data, &Stat) < 0)
+    node_type BaseType = getNodeType(PivotedBase, true);
+
+    if(BaseType == Node_NoExist)
     {
-        if(Options & Bind_Try)
+        if(!(Options & Bind_Try))
         {
-            // NOTE(nox): Trying to bind an inexistent file, but it's OK
-            return;
-        }
-        else {
             fprintf(stderr, "Could not stat required file %s: %s\n", PivotedBase.Data, strerror(errno));
             exit(EXIT_FAILURE);
         }
+
+        return;
     }
 
-    b8 BindingDirectory = S_ISDIR(Stat.st_mode);
+    b8 BindingDirectory = (BaseType == Node_Directory);
 
     if(( BindingDirectory && !makeDirectoryRaw_(PivotedBind, 0755)) ||
        (!BindingDirectory && !createFileRaw_(PivotedBind, 0666)))
@@ -1108,6 +1131,7 @@ typedef enum {
     Env_AppendColon = Env_Append  | Env_Colon,
     Env_PrependColon= Env_Prepend | Env_Colon,
 } env_op;
+
 internal void modifyEnvironmentVariable(char *EnvName, env_op Operation, char *Value)
 {
     u8 Memory[1<<13];
@@ -1157,6 +1181,7 @@ typedef enum {
     Rootfs_Partial,
     Rootfs_Full,
 } bind_rootfs_type;
+
 internal void bindRootfs(char *Rootfs, bind_rootfs_type Type, bind_option ExtraOptions)
 {
     switch(Type)
@@ -1164,13 +1189,16 @@ internal void bindRootfs(char *Rootfs, bind_rootfs_type Type, bind_option ExtraO
         case Rootfs_Minimal:
         {
             bindMap(Rootfs, "/usr/bin", ExtraOptions);
-            bindMap(Rootfs, "/bin",     ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/sbin",    ExtraOptions | Bind_Try);
+
+            (getNodeType(constZ(BaseRootFolder"/bin"),      false) == Node_Link) ? symbolicLink("/usr/bin",  "/bin")      : bindMap(Rootfs, "/bin",      ExtraOptions | Bind_Try);
+            (getNodeType(constZ(BaseRootFolder"/sbin"),     false) == Node_Link) ? symbolicLink("/usr/sbin", "/sbin")     : bindMap(Rootfs, "/sbin",     ExtraOptions | Bind_Try);
+            (getNodeType(constZ(BaseRootFolder"/usr/sbin"), false) == Node_Link) ? symbolicLink("/usr/bin",  "/usr/sbin") : bindMap(Rootfs, "/usr/sbin", ExtraOptions | Bind_Try);
 
             bindMap(Rootfs, "/usr/lib",   ExtraOptions);
             bindMap(Rootfs, "/usr/lib32", ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/lib",       ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/lib64",     ExtraOptions | Bind_Try);
+            (getNodeType(constZ(BaseRootFolder"/lib"),       false) == Node_Link) ? symbolicLink("/usr/lib",   "/lib")       : bindMap(Rootfs, "/lib",       ExtraOptions | Bind_Try);
+            (getNodeType(constZ(BaseRootFolder"/lib64"),     false) == Node_Link) ? symbolicLink("/usr/lib64", "/lib64")     : bindMap(Rootfs, "/lib64",     ExtraOptions | Bind_Try);
+            (getNodeType(constZ(BaseRootFolder"/usr/lib64"), false) == Node_Link) ? symbolicLink("/usr/lib",   "/usr/lib64") : bindMap(Rootfs, "/usr/lib64", ExtraOptions | Bind_Try);
 
             bindMap(Rootfs, "/usr/include", ExtraOptions);
             bindMap(Rootfs, "/usr/share",   ExtraOptions);
@@ -1196,12 +1224,14 @@ internal void bindRootfs(char *Rootfs, bind_rootfs_type Type, bind_option ExtraO
 
         case Rootfs_Partial:
         {
-            bindMap(Rootfs, "/bin",   ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/etc",   ExtraOptions);
-            bindMap(Rootfs, "/lib",   ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/lib64", ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/sbin",  ExtraOptions | Bind_Try);
             bindMap(Rootfs, "/usr",   ExtraOptions);
+
+            (getNodeType(constZ(BaseRootFolder"/bin"),   false) == Node_Link) ? symbolicLink("/usr/bin",  "/bin")   : bindMap(Rootfs, "/bin",   ExtraOptions | Bind_Try);
+            (getNodeType(constZ(BaseRootFolder"/sbin"),  false) == Node_Link) ? symbolicLink("/usr/sbin", "/sbin")  : bindMap(Rootfs, "/sbin",  ExtraOptions | Bind_Try);
+            (getNodeType(constZ(BaseRootFolder"/lib"),   false) == Node_Link) ? symbolicLink("/usr/lib",  "/lib")   : bindMap(Rootfs, "/lib",   ExtraOptions | Bind_Try);
+            (getNodeType(constZ(BaseRootFolder"/lib64"), false) == Node_Link) ? symbolicLink("/usr/lib",  "/lib64") : bindMap(Rootfs, "/lib64", ExtraOptions | Bind_Try);
+
+            bindMap(Rootfs, "/etc",   ExtraOptions);
             bindMap(Rootfs, "/var",   ExtraOptions);
         } break;
 
