@@ -19,7 +19,7 @@
 
 #define ENVS_TO_KEEP W("DISPLAY"), W("TERM")
 
-#define BIND_ENV_DEFAULT_PATH "/usr/local/sbin:/usr/local/bin:/usr/bin"
+#define BIND_ENV_DEFAULT_PATH "/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin"
 #define PROC_VERSION
 
 #define ARGS_OVERRIDE_STRING "-"

@@ -1248,6 +1248,7 @@ internal void bindRootfs(char *Rootfs, bind_rootfs_type Type, bind_option ExtraO
     otherMount(Mount_Sys,  "/sys");
     otherMount(Mount_Tmp,  "/tmp");
 
+    makeDirectory(getBindHomePath(&bundleArray((u8[1<<9]){})), 0700);
     makeDirectory(getenv("XDG_RUNTIME_DIR"), 0700);
 }
 
@@ -1261,9 +1262,9 @@ internal inline void bindHome(char *Prefix, char *BasePath, bind_option ExtraOpt
 
     char *BindPath = getBindHomePath(&Buffer);
 
-    string Base = (Prefix ?
-                   formatString(&Buffer, "%s%s", Prefix, (BasePath ? BasePath : "/home/user")) :
-                   wrapZ(BasePath ? BasePath : BaseHomePath));
+    string Base = formatString(&Buffer, "%s%s",
+                               (Prefix ? Prefix : ""),
+                               (BasePath ? BasePath : (!Prefix || Prefix == BaseUnionFS ? BaseHomePath : BindPath)));
 
     bindMount((char *)Base.Data, BindPath, ExtraOptions | Bind_EnsureDir);
     bindMount((char *)Base.Data, "/root",  ExtraOptions | Bind_EnsureDir);
