@@ -136,7 +136,17 @@ internal inline u8 *advance(buffer *Buffer, umm Size)
         exit(EXIT_FAILURE);
     }
 
-    return(Result);
+    return Result;
+}
+
+internal inline buffer getSubBuffer(buffer *Buffer, umm Size)
+{
+    buffer Result = {
+        .Data = advance(Buffer, Size),
+        .Size = Size,
+    };
+
+    return Result;
 }
 
 internal string formatString(buffer *Buffer, char *Format, ...)
@@ -441,6 +451,23 @@ internal void symbolicLink(char *Target, char *LinkPath)
     symbolicLinkRaw(wrapZ(Target), PivotedLinkPath);
 }
 
+internal string linkTargetRaw(buffer *Buffer, string LinkPath)
+{
+    assert(LinkPath.Data && LinkPath.Data[0] == '/');
+
+    smm TargetPathSize = readlink((char *)LinkPath.Data, (char *)Buffer->Data, Buffer->Size);
+    if(TargetPathSize < 0)
+    {
+        fprintf(stderr, "Could not read link %s target: %s\n", (char *)LinkPath.Data, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    string Result = getSubBuffer(Buffer, TargetPathSize+1);
+    Result.Data[Result.Size-1] = 0;
+
+    return Result;
+}
+
 internal int deletePathCallback_(const char *Path, const struct stat *Stat, int TypeFlag, struct FTW *FTW)
 {
     if(remove(Path) != 0)
@@ -664,6 +691,7 @@ typedef enum {
     Bind_Try        = 1<<3,
     Bind_EnsureDir  = 1<<4,
     Bind_EnsureFile = 1<<5,
+    Bind_KeepLinks  = 1<<6
 } bind_option;
 
 internal inline u64 getExtraMountFlags(bind_option Options)
@@ -703,7 +731,7 @@ internal void bindMountRaw(string PivotedBase, string PivotedBind, bind_option O
         createFileRaw(PivotedBase, 0666);
     }
 
-    node_type BaseType = getNodeType(PivotedBase, true);
+    node_type BaseType = getNodeType(PivotedBase, (Options & Bind_KeepLinks) ? false : true);
 
     if(BaseType == Node_NoExist)
     {
@@ -716,163 +744,178 @@ internal void bindMountRaw(string PivotedBase, string PivotedBind, bind_option O
         return;
     }
 
-    b8 BindingDirectory = (BaseType == Node_Directory);
+    typedef enum {
+        BindOp_Normal,
+        BindOp_Directory,
+        BindOp_Link,
+    } bind_op;
 
-    if(( BindingDirectory && !makeDirectoryRaw_(PivotedBind, 0755)) ||
-       (!BindingDirectory && !createFileRaw_(PivotedBind, 0666)))
+    bind_op Op = ((BaseType == Node_Link)      ? BindOp_Link :
+                  (BaseType == Node_Directory) ? BindOp_Directory : BindOp_Normal);
+
+    if(Op == BindOp_Link)
     {
-        if(Options & Bind_Try)
-        {
-            // NOTE(nox): Error trying to create target, but it's OK
-            return;
-        }
-        else
-        {
-            fprintf(stderr, "Could not create %s %s: %s\n", BindingDirectory ? "directory" : "file",
-                    PivotedBind.Data, strerror(errno));
-            exit(EXIT_FAILURE);
-        }
+        u8 Memory[1<<10];
+        string Target = linkTargetRaw(&bundleArray(Memory), PivotedBase);
+        symbolicLinkRaw(Target, PivotedBind);
     }
-
-    if(mount((char *)PivotedBase.Data, (char *)PivotedBind.Data, 0, MS_SILENT|MS_BIND|MS_REC, 0) < 0)
-    {
-        if(Options & Bind_Try)
+    else {
+        if((Op == BindOp_Normal    && !createFileRaw_(PivotedBind, 0666)) ||
+           (Op == BindOp_Directory && !makeDirectoryRaw_(PivotedBind, 0755)))
         {
-            // NOTE(nox): Couldn't bind, but it's OK
-            return;
-        }
-        else
-        {
-            fprintf(stderr, "Could not mount %s to %s: %s\n", PivotedBase.Data, PivotedBind.Data, strerror(errno));
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    bindRemount(PivotedBind, Options);
-
-    if(BindingDirectory)
-    {
-        // NOTE(nox): Need to remount recursively, in order to apply settings...
-
-        while(PivotedBind.Data[PivotedBind.Size-1] == '/')
-        {
-            --PivotedBind.Size;
-            PivotedBind.Data[PivotedBind.Size] = 0;
-        }
-
-        int MountInfo = openat(ProcFD, "self/mountinfo", O_RDONLY | O_CLOEXEC);
-        if(MountInfo < 0)
-        {
-            fprintf(stderr, "Couldn't open /proc/self/mountinfo\n");
-            exit(EXIT_FAILURE);
-        }
-
-        enum {
-            MaxFileSize = mebiBytes(20),
-            MaxRemountCount = 1000,
-            RemountStringArraySize = MaxRemountCount*sizeof(string),
-            RemountStringDataSize = MaxRemountCount*(MountPointMaximumLength+1),
-            BlockSize = MaxFileSize + RemountStringArraySize + RemountStringDataSize,
-        };
-        u8 *BlockData = mmap(0, BlockSize, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|MAP_NORESERVE, -1, 0);
-        assert(BlockData);
-        buffer Block = {
-            .Size = BlockSize,
-            .Data = BlockData,
-        };
-
-        buffer FileBuffer = {
-            .Size = MaxFileSize-1,
-            .Data = advance(&Block, MaxFileSize),
-        };
-        string FileStr = FileBuffer;
-
-        for(;;) {
-            ssize_t SizeRead;
-            do {
-                SizeRead = read(MountInfo, FileBuffer.Data, FileBuffer.Size);
-            } while(SizeRead < 0 && errno == EINTR);
-
-            if(SizeRead < 0)
+            if(Options & Bind_Try)
             {
-                fprintf(stderr, "Could not read mountinfo: %s\n", strerror(errno));
+                // NOTE(nox): Error trying to create target, but it's OK
+                return;
+            }
+            else
+            {
+                fprintf(stderr, "Could not create %s %s: %s\n", (Op == BindOp_Directory) ? "directory" : "file",
+                        PivotedBind.Data, strerror(errno));
                 exit(EXIT_FAILURE);
             }
-            else if(SizeRead == 0)
-            {
-                break;
-            }
-
-            advance(&FileBuffer, SizeRead);
         }
 
-        FileStr.Size = FileBuffer.Data - FileStr.Data;
-        close(MountInfo);
-
-        umm RemountCount = (umm)-1;
-        string *ToRemount = (string *)advance(&Block, RemountStringArraySize);
-        buffer RestorePoint = Block;
-
-        for(;;)
+        if(mount((char *)PivotedBase.Data, (char *)PivotedBind.Data, 0, MS_SILENT|MS_BIND|MS_REC, 0) < 0)
         {
-            // NOTE(nox): This assumes mountinfo stores everything in the order it was created!
-            int BytesParsed;
-            char EscapedMountPoint[MountPointMaximumLength+1];
-            int ConversionCount = sscanf((char *)FileStr.Data,
-                                         "%*s %*s %*s %*s %"stringify(MountPointMaximumLength)"s %*[^\n]\n%n",
-                                         EscapedMountPoint, &BytesParsed);
-            if(ConversionCount < 1)
+            if(Options & Bind_Try)
             {
-                break;
+                // NOTE(nox): Couldn't bind, but it's OK
+                return;
+            }
+            else
+            {
+                fprintf(stderr, "Could not mount %s to %s: %s\n", PivotedBase.Data, PivotedBind.Data, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        bindRemount(PivotedBind, Options);
+
+        if(Op == BindOp_Directory)
+        {
+            // NOTE(nox): Need to remount recursively, in order to apply settings...
+
+            while(PivotedBind.Data[PivotedBind.Size-1] == '/')
+            {
+                --PivotedBind.Size;
+                PivotedBind.Data[PivotedBind.Size] = 0;
             }
 
-            advance(&FileStr, BytesParsed);
-            string Escaped = wrapZ(EscapedMountPoint);
-
-            char MountPointBuff[sizeof(EscapedMountPoint)];
-            string MountPoint = { .Data = (u8 *)MountPointBuff };
-
-            while(Escaped.Size)
+            int MountInfo = openat(ProcFD, "self/mountinfo", O_RDONLY | O_CLOEXEC);
+            if(MountInfo < 0)
             {
-                char Character = Escaped.Data[0];
-                advance(&Escaped, 1);
+                fprintf(stderr, "Couldn't open /proc/self/mountinfo\n");
+                exit(EXIT_FAILURE);
+            }
 
-                if(Character == '\\')
+            enum {
+                MaxFileSize = mebiBytes(20),
+                MaxRemountCount = 1000,
+                RemountStringArraySize = MaxRemountCount*sizeof(string),
+                RemountStringDataSize = MaxRemountCount*(MountPointMaximumLength+1),
+                BlockSize = MaxFileSize + RemountStringArraySize + RemountStringDataSize,
+            };
+            u8 *BlockData = mmap(0, BlockSize, PROT_READ|PROT_WRITE, MAP_ANONYMOUS|MAP_PRIVATE|MAP_NORESERVE, -1, 0);
+            assert(BlockData);
+            buffer Block = {
+                .Size = BlockSize,
+                .Data = BlockData,
+            };
+
+            buffer FileBuffer = {
+                .Size = MaxFileSize-1,
+                .Data = advance(&Block, MaxFileSize),
+            };
+            string FileStr = FileBuffer;
+
+            for(;;) {
+                ssize_t SizeRead;
+                do {
+                    SizeRead = read(MountInfo, FileBuffer.Data, FileBuffer.Size);
+                } while(SizeRead < 0 && errno == EINTR);
+
+                if(SizeRead < 0)
                 {
-                    // NOTE(nox): Octal representation
-                    assert(Escaped.Size >= 3);
-                    Character = (((Escaped.Data[0] - '0') << 6) |
-                                 ((Escaped.Data[1] - '0') << 3) |
-                                 ((Escaped.Data[2] - '0') << 0));
-                    advance(&Escaped, 3);
+                    fprintf(stderr, "Could not read mountinfo: %s\n", strerror(errno));
+                    exit(EXIT_FAILURE);
+                }
+                else if(SizeRead == 0)
+                {
+                    break;
                 }
 
-                MountPoint.Data[MountPoint.Size++] = Character;
+                advance(&FileBuffer, SizeRead);
             }
-            MountPoint.Data[MountPoint.Size] = 0;
 
-            if(MountPoint.Size == PivotedBind.Size &&
-               memcmp(MountPoint.Data, PivotedBind.Data, PivotedBind.Size) == 0)
+            FileStr.Size = FileBuffer.Data - FileStr.Data;
+            close(MountInfo);
+
+            umm RemountCount = (umm)-1;
+            string *ToRemount = (string *)advance(&Block, RemountStringArraySize);
+            buffer RestorePoint = Block;
+
+            for(;;)
             {
-                RemountCount = 0;
-                Block = RestorePoint;
+                // NOTE(nox): This assumes mountinfo stores everything in the order it was created!
+                int BytesParsed;
+                char EscapedMountPoint[MountPointMaximumLength+1];
+                int ConversionCount = sscanf((char *)FileStr.Data,
+                                             "%*s %*s %*s %*s %"stringify(MountPointMaximumLength)"s %*[^\n]\n%n",
+                                             EscapedMountPoint, &BytesParsed);
+                if(ConversionCount < 1)
+                {
+                    break;
+                }
+
+                advance(&FileStr, BytesParsed);
+                string Escaped = wrapZ(EscapedMountPoint);
+
+                char MountPointBuff[sizeof(EscapedMountPoint)];
+                string MountPoint = { .Data = (u8 *)MountPointBuff };
+
+                while(Escaped.Size)
+                {
+                    char Character = Escaped.Data[0];
+                    advance(&Escaped, 1);
+
+                    if(Character == '\\')
+                    {
+                        // NOTE(nox): Octal representation
+                        assert(Escaped.Size >= 3);
+                        Character = (((Escaped.Data[0] - '0') << 6) |
+                                     ((Escaped.Data[1] - '0') << 3) |
+                                     ((Escaped.Data[2] - '0') << 0));
+                        advance(&Escaped, 3);
+                    }
+
+                    MountPoint.Data[MountPoint.Size++] = Character;
+                }
+                MountPoint.Data[MountPoint.Size] = 0;
+
+                if(MountPoint.Size == PivotedBind.Size &&
+                   memcmp(MountPoint.Data, PivotedBind.Data, PivotedBind.Size) == 0)
+                {
+                    RemountCount = 0;
+                    Block = RestorePoint;
+                }
+
+                if(RemountCount != (umm)-1 &&
+                   MountPoint.Size > PivotedBind.Size &&
+                   memcmp(MountPoint.Data, PivotedBind.Data, PivotedBind.Size) == 0)
+                {
+                    assert(RemountCount < MaxRemountCount);
+                    ToRemount[RemountCount++] = formatString(&Block, "%s", MountPoint.Data);
+                }
             }
 
-            if(RemountCount != (umm)-1 &&
-               MountPoint.Size > PivotedBind.Size &&
-               memcmp(MountPoint.Data, PivotedBind.Data, PivotedBind.Size) == 0)
+            for(umm Idx = 0; Idx < RemountCount; ++Idx)
             {
-                assert(RemountCount < MaxRemountCount);
-                ToRemount[RemountCount++] = formatString(&Block, "%s", MountPoint.Data);
+                bindRemount(ToRemount[Idx], Options);
             }
-        }
 
-        for(umm Idx = 0; Idx < RemountCount; ++Idx)
-        {
-            bindRemount(ToRemount[Idx], Options);
+            assert(munmap(BlockData, BlockSize) == 0);
         }
-
-        assert(munmap(BlockData, BlockSize) == 0);
     }
 }
 
@@ -1188,35 +1231,32 @@ internal void bindRootfs(char *Rootfs, bind_rootfs_type Type, bind_option ExtraO
     {
         case Rootfs_Minimal:
         {
-            bindMap(Rootfs, "/usr/bin", ExtraOptions);
-
-            (getNodeType(constZ(BaseRootFolder"/bin"),      false) == Node_Link) ? symbolicLink("/usr/bin",  "/bin")      : bindMap(Rootfs, "/bin",      ExtraOptions | Bind_Try);
-            (getNodeType(constZ(BaseRootFolder"/sbin"),     false) == Node_Link) ? symbolicLink("/usr/sbin", "/sbin")     : bindMap(Rootfs, "/sbin",     ExtraOptions | Bind_Try);
-            (getNodeType(constZ(BaseRootFolder"/usr/sbin"), false) == Node_Link) ? symbolicLink("/usr/bin",  "/usr/sbin") : bindMap(Rootfs, "/usr/sbin", ExtraOptions | Bind_Try);
-
-            bindMap(Rootfs, "/usr/lib",   ExtraOptions);
-            bindMap(Rootfs, "/usr/lib32", ExtraOptions | Bind_Try);
-            (getNodeType(constZ(BaseRootFolder"/lib"),       false) == Node_Link) ? symbolicLink("/usr/lib",   "/lib")       : bindMap(Rootfs, "/lib",       ExtraOptions | Bind_Try);
-            (getNodeType(constZ(BaseRootFolder"/lib64"),     false) == Node_Link) ? symbolicLink("/usr/lib64", "/lib64")     : bindMap(Rootfs, "/lib64",     ExtraOptions | Bind_Try);
-            (getNodeType(constZ(BaseRootFolder"/usr/lib64"), false) == Node_Link) ? symbolicLink("/usr/lib",   "/usr/lib64") : bindMap(Rootfs, "/usr/lib64", ExtraOptions | Bind_Try);
-
+            bindMap(Rootfs, "/usr/bin",     ExtraOptions);
             bindMap(Rootfs, "/usr/include", ExtraOptions);
+            bindMap(Rootfs, "/usr/lib",     ExtraOptions);
+            bindMap(Rootfs, "/usr/lib32",   ExtraOptions | Bind_Try);
+            bindMap(Rootfs, "/usr/lib64",   ExtraOptions | Bind_Try | Bind_KeepLinks);
+            bindMap(Rootfs, "/usr/sbin",    ExtraOptions | Bind_Try | Bind_KeepLinks);
             bindMap(Rootfs, "/usr/share",   ExtraOptions);
 
-            bindMap(Rootfs, "/etc/OpenCL",          ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/etc/X11",             ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/etc/ca-certificates", ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/etc/fonts",           ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/etc/ld.so.cache",     ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/etc/ld.so.conf",      ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/etc/ld.so.conf.d",    ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/etc/localtime",       ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/etc/mime.types",      ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/etc/nsswitch.conf",   ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/etc/ssl",             ExtraOptions | Bind_Try);
-            bindMap(Rootfs, "/etc/xdg",             ExtraOptions | Bind_Try);
+            bindMap(Rootfs,     "/etc/OpenCL",          ExtraOptions | Bind_Try);
+            bindMap(Rootfs,     "/etc/X11",             ExtraOptions | Bind_Try);
+            bindMap(Rootfs,     "/etc/ca-certificates", ExtraOptions | Bind_Try);
+            bindMap(Rootfs,     "/etc/fonts",           ExtraOptions | Bind_Try);
+            bindMap(Rootfs,     "/etc/ld.so.cache",     ExtraOptions | Bind_Try);
+            bindMap(Rootfs,     "/etc/ld.so.conf",      ExtraOptions | Bind_Try);
+            bindMap(Rootfs,     "/etc/ld.so.conf.d",    ExtraOptions | Bind_Try);
+            bindMap(Rootfs,     "/etc/localtime",       ExtraOptions | Bind_Try);
+            bindMap(Rootfs,     "/etc/mime.types",      ExtraOptions | Bind_Try);
+            bindMap(Rootfs,     "/etc/nsswitch.conf",   ExtraOptions | Bind_Try);
+            bindMap(Rootfs,     "/etc/ssl",             ExtraOptions | Bind_Try);
+            bindMap(Rootfs,     "/etc/xdg",             ExtraOptions | Bind_Try);
+            bindMapGlob(Rootfs, "/etc/*-release",       ExtraOptions);
 
-            bindMapGlob(Rootfs, "/etc/*-release", ExtraOptions);
+            bindMap(Rootfs, "/bin",   ExtraOptions | Bind_Try | Bind_KeepLinks);
+            bindMap(Rootfs, "/sbin",  ExtraOptions | Bind_Try | Bind_KeepLinks);
+            bindMap(Rootfs, "/lib",   ExtraOptions | Bind_Try | Bind_KeepLinks);
+            bindMap(Rootfs, "/lib64", ExtraOptions | Bind_Try | Bind_KeepLinks);
 
             symbolicLink("/tmp", "/var/tmp");
             symbolicLink("/run", "/var/run");
@@ -1224,14 +1264,12 @@ internal void bindRootfs(char *Rootfs, bind_rootfs_type Type, bind_option ExtraO
 
         case Rootfs_Partial:
         {
-            bindMap(Rootfs, "/usr",   ExtraOptions);
-
-            (getNodeType(constZ(BaseRootFolder"/bin"),   false) == Node_Link) ? symbolicLink("/usr/bin",  "/bin")   : bindMap(Rootfs, "/bin",   ExtraOptions | Bind_Try);
-            (getNodeType(constZ(BaseRootFolder"/sbin"),  false) == Node_Link) ? symbolicLink("/usr/sbin", "/sbin")  : bindMap(Rootfs, "/sbin",  ExtraOptions | Bind_Try);
-            (getNodeType(constZ(BaseRootFolder"/lib"),   false) == Node_Link) ? symbolicLink("/usr/lib",  "/lib")   : bindMap(Rootfs, "/lib",   ExtraOptions | Bind_Try);
-            (getNodeType(constZ(BaseRootFolder"/lib64"), false) == Node_Link) ? symbolicLink("/usr/lib",  "/lib64") : bindMap(Rootfs, "/lib64", ExtraOptions | Bind_Try);
-
+            bindMap(Rootfs, "/bin",   ExtraOptions | Bind_Try | Bind_KeepLinks);
             bindMap(Rootfs, "/etc",   ExtraOptions);
+            bindMap(Rootfs, "/lib",   ExtraOptions | Bind_Try | Bind_KeepLinks);
+            bindMap(Rootfs, "/lib64", ExtraOptions | Bind_Try | Bind_KeepLinks);
+            bindMap(Rootfs, "/sbin",  ExtraOptions | Bind_Try | Bind_KeepLinks);
+            bindMap(Rootfs, "/usr",   ExtraOptions);
             bindMap(Rootfs, "/var",   ExtraOptions);
         } break;
 
