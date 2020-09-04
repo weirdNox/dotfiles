@@ -1268,6 +1268,7 @@ internal void bindRootfs(char *Rootfs, bind_rootfs_type Type, bind_option ExtraO
             bindMap(Rootfs, "/etc",   ExtraOptions);
             bindMap(Rootfs, "/lib",   ExtraOptions | Bind_Try | Bind_KeepLinks);
             bindMap(Rootfs, "/lib64", ExtraOptions | Bind_Try | Bind_KeepLinks);
+            bindMap(Rootfs, "/opt",   ExtraOptions | Bind_Try);
             bindMap(Rootfs, "/sbin",  ExtraOptions | Bind_Try | Bind_KeepLinks);
             bindMap(Rootfs, "/usr",   ExtraOptions);
             bindMap(Rootfs, "/var",   ExtraOptions);
