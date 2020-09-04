@@ -11,6 +11,7 @@
 #define BIND_HOME_PATH
 
 #define SHARE_NETWORK 0
+#define DUMMY_LINK    0
 #define BIND_HOSTNAME host
 
 #define SHARE_DBUS 0

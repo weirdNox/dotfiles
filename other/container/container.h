@@ -138,6 +138,7 @@ internal inline u8 *advance(buffer *Buffer, umm Size)
 
     return Result;
 }
+#define consume(Buffer, type) ((type *)advance((Buffer), sizeof(type)))
 
 internal inline buffer getSubBuffer(buffer *Buffer, umm Size)
 {
@@ -1219,6 +1220,24 @@ internal inline void setupBaseEnvironmentVariables()
     }
 }
 
+internal inline void setupDummyNetworkInterface()
+{
+#if defined(DUMMY_LINK) && DUMMY_LINK
+    {
+        char *ShellArgs[] = {"ip", "link", "add", "eth0", "address", "F8:16:54:E2:81:89", "type", "dummy", 0};
+        runProgram(ShellArgs);
+    }
+    {
+        char *ShellArgs[] = {"ip", "link", "set", "dev", "eth0", "up", 0};
+        runProgram(ShellArgs);
+    }
+    {
+        char *ShellArgs[] = {"ip", "address", "add", "192.168.1.2/24", "dev", "eth0", 0};
+        runProgram(ShellArgs);
+    }
+#endif
+}
+
 typedef enum {
     Rootfs_Minimal,
     Rootfs_Partial,
@@ -1370,25 +1389,25 @@ internal inline void setupNetwork()
     bindMap(0, "/etc/resolv.conf", Bind_ReadOnly | Bind_Try);
     bindMap(0, "/etc/hosts",       Bind_ReadOnly | Bind_Try);
 #else
-    struct ifreq InterfaceSetup = {
-        .ifr_name = "lo",
-        .ifr_flags = IFF_UP,
-    };
-
-    int Socket = socket(AF_INET, SOCK_DGRAM|SOCK_CLOEXEC, 0);
-    if(Socket < 0)
     {
-        fprintf(stderr, "Could not open network management socket: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
+        int Socket = socket(AF_INET, SOCK_DGRAM|SOCK_CLOEXEC, 0);
+        if(Socket < 0)
+        {
+            fprintf(stderr, "Could not open network management socket: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
 
-    if(ioctl(Socket, SIOCSIFFLAGS, &InterfaceSetup) < 0)
-    {
-        fprintf(stderr, "Could not configure interface: %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
+        struct ifreq InterfaceSetup = {
+            .ifr_name = "lo",
+            .ifr_flags = IFF_UP,
+        };
+        if(ioctl(Socket, SIOCSIFFLAGS, &InterfaceSetup) < 0)
+        {
+            fprintf(stderr, "Could not configure interface: %s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        close(Socket);
     }
-
-    close(Socket);
 
     if(Hostname.Size == 0)
     {
@@ -1714,6 +1733,7 @@ int main(int ArgCount, char *ArgVals[])
 
         keepCaps();
         setupBaseEnvironmentVariables();
+        setupDummyNetworkInterface();
 
         setupBaseAndBindRoots();
         {
