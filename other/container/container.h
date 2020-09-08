@@ -5,6 +5,7 @@
 #include <ftw.h>
 #include <glob.h>
 #include <limits.h>
+#include <linux/audit.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 #include <net/if.h>
@@ -1541,11 +1542,17 @@ internal inline void setupFakeFiles()
 internal void setupSeccomp()
 {
     struct sock_filter Filter[] = {
-        BPF_STMT(BPF_LD  | BPF_W   | BPF_ABS, offsetof(struct seccomp_data, nr)),
+        BPF_STMT(BPF_LD  | BPF_W   | BPF_ABS, (offsetof(struct seccomp_data, arch))),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   AUDIT_ARCH_X86_64, 0, 2),
+        BPF_STMT(BPF_LD  | BPF_W   | BPF_ABS, (offsetof(struct seccomp_data, nr))),
+        BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K,   __X32_SYSCALL_BIT, 0, 1),
+        BPF_STMT(BPF_RET | BPF_K,             SECCOMP_RET_ALLOW),
+
         BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_chown,    4, 0),
         BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_fchown,   3, 0),
         BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_fchownat, 2, 0),
         BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_lchown,   1, 0),
+
         BPF_STMT(BPF_RET | BPF_K,             SECCOMP_RET_ALLOW),
         BPF_STMT(BPF_RET | BPF_K,             SECCOMP_RET_ERRNO),
     };

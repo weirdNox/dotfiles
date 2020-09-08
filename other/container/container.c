@@ -31,7 +31,6 @@ CONFIGURE_CONTAINER()
 {
     char *Rootfs = BaseUnionFS;
     bindRootfs(Rootfs, Rootfs_Minimal, Bind_ReadOnly);
-
     //bindHome(Rootfs, 0, 0);
 
     shareDisplay();
