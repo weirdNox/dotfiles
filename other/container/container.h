@@ -1558,7 +1558,7 @@ internal void setupSeccomp()
 
 internal inline void setupBaseAndBindRoots()
 {
-    if(mount("tmpfs", "/tmp", "tmpfs", MS_SILENT|MS_NOATIME|MS_NODEV, "mode=0755") < 0)
+    if(mount("tmpfs", "/tmp", "tmpfs", MS_SILENT|MS_NOATIME|MS_NODEV, "mode=0755,size=100g") < 0)
     {
         fprintf(stderr, "Could not mount tmpfs\n");
         exit(EXIT_FAILURE);
