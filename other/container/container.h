@@ -1242,6 +1242,7 @@ typedef enum {
     Rootfs_Minimal,
     Rootfs_Partial,
     Rootfs_Full,
+    Rootfs_PassThrough,
 } bind_rootfs_type;
 
 internal void bindRootfs(char *Rootfs, bind_rootfs_type Type, bind_option ExtraOptions)
@@ -1294,20 +1295,24 @@ internal void bindRootfs(char *Rootfs, bind_rootfs_type Type, bind_option ExtraO
         } break;
 
         case Rootfs_Full:
+        case Rootfs_PassThrough:
         {
             FullBind = true;
             bindMap(Rootfs, "/", ExtraOptions);
         } break;
     }
 
-    otherMount(Mount_Dev,  "/dev");
-    otherMount(Mount_Proc, "/proc");
-    otherMount(Mount_Tmp,  "/run");
-    otherMount(Mount_Sys,  "/sys");
-    otherMount(Mount_Tmp,  "/tmp");
+    if(Type != Rootfs_PassThrough)
+    {
+        otherMount(Mount_Dev,  "/dev");
+        otherMount(Mount_Proc, "/proc");
+        otherMount(Mount_Tmp,  "/run");
+        otherMount(Mount_Sys,  "/sys");
+        otherMount(Mount_Tmp,  "/tmp");
 
-    makeDirectory(getBindHomePath(&bundleArray((u8[1<<9]){})), 0700);
-    makeDirectory(getenv("XDG_RUNTIME_DIR"), 0700);
+        makeDirectory(getBindHomePath(&bundleArray((u8[1<<9]){})), 0700);
+        makeDirectory(getenv("XDG_RUNTIME_DIR"), 0700);
+    }
 }
 
 internal inline void bindHome(char *Prefix, char *BasePath, bind_option ExtraOptions)
