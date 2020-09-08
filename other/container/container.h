@@ -1480,7 +1480,8 @@ internal void bindCustomWineBuild(char *BasePath)
 #define WineBindBinPath WineBindPath"/bin"
 
     bindMount(BasePath, WineBindPath, Bind_ReadOnly);
-    modifyEnvironmentVariable("PATH", Env_PrependColon, WineBindBinPath);
+    modifyEnvironmentVariable("PATH",            Env_PrependColon, WineBindBinPath);
+    modifyEnvironmentVariable("LD_LIBRARY_PATH", Env_PrependColon, WineBindPath"/lib64:"WineBindPath"/lib:"WineBindPath"/lib32");
 
 #undef WineBindPath
 #undef WineBindBinPath
