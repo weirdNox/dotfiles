@@ -2625,10 +2625,28 @@ some heuristics to guess the result."
                   (setq time-to-now temp-time))))
 
             (if time-to-now
-                ;; NOTE(nox): This headline without todo keyword has a timestamp, so we'll prevent it
-                ;; from holding a project, this should only be used by appointments!
-                (when (and (= +agenda-level 0) (< time-to-now -60))
-                  (push entry +agenda-archivable-tasks))
+                (if (and (= +agenda-level 0) (< time-to-now -60))
+                    ;; NOTE(nox): This headline has timestamps (=> event) and they have expired, so it
+                    ;; should be archived!
+                    (push entry +agenda-archivable-tasks)
+
+                  ;; NOTE(nox): This headline has non-expired timestamps, so it may be a pseudo-project
+                  ;; with associated (parallel) tasks
+                  (let* ((+agenda-project-status nil)
+                         (children (+agenda-process-children headline t))
+                         (tail children) prev)
+                    (while tail
+                      (let ((child (car tail)))
+                        (if (+agenda-is-entry-planned child)
+                            (if prev
+                                (setcdr prev (cdr tail))
+                              (setq children (cdr tail))))
+                        (setq prev tail))
+                      (setq tail (cdr tail)))
+
+                    (when children
+                      (setf (+agenda-entry-children entry) children)
+                      (setq return entry))))
 
               ;; NOTE(nox): Just process the children of this headline without todo keyword
               (setq return (+agenda-process-children headline))))
