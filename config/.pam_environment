@@ -21,3 +21,6 @@ DICPATH             DEFAULT=${XDG_DATA_HOME}/dicts
 
 # Syncthing - Don't create default folder
 STNODEFAULTFOLDER   DEFAULT=yes
+
+# Java
+_SILENT_JAVA_OPTIONS DEFAULT="-Dawt.useSystemAAFontSettings=on -Dswing.aatext=true"
