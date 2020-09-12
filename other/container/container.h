@@ -1042,8 +1042,8 @@ internal void otherMount(mount_type Type, char *BindPath)
 
                 string FDLink   = formatString(&TempBuffer, "%s/fd",   PivotedBind.Data);
                 string CoreLink = formatString(&TempBuffer, "%s/core", PivotedBind.Data);
-                symbolicLinkRaw(constZ("/proc/self/fd"),    FDLink);
-                symbolicLinkRaw(constZ("/proc/self/kcore"), CoreLink);
+                symbolicLinkRaw(constZ("/proc/self/fd"), FDLink);
+                symbolicLinkRaw(constZ("/proc/kcore"), CoreLink);
             }
 
             {
