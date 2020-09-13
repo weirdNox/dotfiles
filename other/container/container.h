@@ -1219,6 +1219,8 @@ internal inline void setupBaseEnvironmentVariables()
         string Value = formatString(&bundleArray(Memory), "/run/user/%lu", getBindUID());
         modifyEnvironmentVariable("XDG_RUNTIME_DIR", Env_Set, (char *)Value.Data);
     }
+
+    modifyEnvironmentVariable("LC_ALL", Env_Set, "C");
 }
 
 internal inline void setupDummyNetworkInterface()

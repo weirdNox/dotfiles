@@ -38,7 +38,7 @@ CONFIGURE_CONTAINER()
     //shareAudio();
     //shareInput();
 
-    //bindCustomWineBuild("...")
+    //bindCustomWineBuild("...");
 }
 
 RUN_COMMAND()
