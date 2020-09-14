@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail; shopt -s nullglob
+[ "$(whoami)" = root ] || exec sudo -p "$(printf "This command needs to run as root.\nPassword: ")" $0 "$@"
+
+ControllersToRestore=()
+
+cleanup() {
+    killall -q xboxdrv
+
+    for Controller in ${ControllersToRestore[@]+"${ControllersToRestore[@]}"}; do
+        chown :input "$Controller" || true
+        setfacl -m m::rw "$Controller" || true
+    done
+
+    exit
+}
+stty -echoctl; trap 'cleanup' SIGINT
+
+ControllerConfig=(
+    xboxdrv --evdev /dev/input/by-id/usb-GreenAsia_Inc._USB_Joystick-event-joystick
+    --ui-clear --mimic-xpad --silent
+    --axismap -Y1=Y1,-Y2=Y2
+    --evdev-absmap ABS_X=X1,ABS_Y=Y1,ABS_Z=X2,ABS_RZ=Y2,ABS_HAT0X=DPAD_X,ABS_HAT0Y=DPAD_Y
+    --evdev-keymap BTN_THUMB2=A,BTN_THUMB=B,BTN_TOP=X,BTN_TRIGGER=Y,BTN_BASE=LT,BTN_TOP2=LB,BTN_BASE2=RT,BTN_PINKIE=RB,BTN_BASE5=TL,BTN_BASE6=TR,BTN_BASE4=start,BTN_BASE3=back
+)
+if [[ -a "${ControllerConfig[2]}" ]]; then
+    ControllersToRestore+=("${ControllerConfig[2]}")
+    chown :root "${ControllerConfig[2]}"
+    setfacl -m m::- "${ControllerConfig[2]}"
+    "${ControllerConfig[@]}" &
+fi
+
+# NOTE(nox): Hang until termination
+read -r -d '' _ </dev/tty
+
+
+# STUDY(nox): Resources for creating virtual input devices using the evdev API:
+# - https://stackoverflow.com/questions/53639022/faking-an-input-device-for-testing-purpose
+# - https://stackoverflow.com/questions/29104304/remap-a-keyboard-with-ioctl-under-linux
+# - https://stackoverflow.com/questions/12230213/how-to-comsume-a-keyboard-event-on-linux-using-input-subsystem
+# - https://gitlab.com/xboxdrv/xboxdrv/-/blob/develop/src/options.cpp (~mimic_xpad~)
+# - https://gitlab.com/xboxdrv/xboxdrv/-/blob/develop/src/uinput_options.cpp
