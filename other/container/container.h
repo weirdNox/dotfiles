@@ -1041,24 +1041,12 @@ internal void otherMount(mount_type Type, char *BindPath)
 
             {
                 buffer TempBuffer = Buffer;
-
-                string FDLink   = formatString(&TempBuffer, "%s/fd",   PivotedBind.Data);
-                string CoreLink = formatString(&TempBuffer, "%s/core", PivotedBind.Data);
-                symbolicLinkRaw(constZ("/proc/self/fd"), FDLink);
-                symbolicLinkRaw(constZ("/proc/kcore"), CoreLink);
-            }
-
-            {
-                buffer TempBuffer = Buffer;
-
-                string SHM = formatString(&TempBuffer, "%s/shm", PivotedBind.Data);
-                makeDirectoryRaw(SHM, 0755);
-
-                string PTS = formatString(&TempBuffer, "%s/pts", BindPath);
-                otherMount(Mount_DevPTS, (char *)PTS.Data);
-
-                string PTMX = formatString(&TempBuffer, "%s/ptmx", PivotedBind.Data);
-                symbolicLinkRaw(constZ("pts/ptmx"), PTMX);
+                otherMount(Mount_DevPTS,       (char *)formatString(&TempBuffer, "%s/pts", BindPath).Data);
+                symbolicLinkRaw(constZ("pts/ptmx"),    formatString(&TempBuffer, "%s/ptmx", PivotedBind.Data));
+                symbolicLinkRaw(constZ("/proc/kcore"), formatString(&TempBuffer, "%s/core", PivotedBind.Data));
+                symbolicLinkRaw(constZ("/proc/self/fd"), formatString(&TempBuffer, "%s/fd", PivotedBind.Data));
+                makeDirectoryRaw(formatString(&TempBuffer, "%s/shm",    PivotedBind.Data), 01777);
+                makeDirectoryRaw(formatString(&TempBuffer, "%s/mqueue", PivotedBind.Data), 01777);
             }
 
             if(BaseTTY)
@@ -1092,7 +1080,7 @@ internal void otherMount(mount_type Type, char *BindPath)
         } break;
 
         case Mount_Tmp: {
-            if(mount("tmpfs", (char *)PivotedBind.Data, "tmpfs", MS_SILENT|MS_NOATIME|MS_NODEV, "mode=0755") < 0)
+            if(mount("tmpfs", (char *)PivotedBind.Data, "tmpfs", MS_SILENT|MS_NOATIME|MS_NODEV, "mode=0777") < 0)
             {
                 fprintf(stderr, "Could not mount tmpfs on %s: %s\n", BindPath, strerror(errno));
                 exit(EXIT_FAILURE);
@@ -1733,6 +1721,8 @@ int main(int ArgCount, char *ArgVals[])
         // NOTE(nox): Child
         dieWithParent();
 
+        umask(0);
+
         if(isatty(STDIN_FILENO))
         {
             BaseTTY = ttyname(STDIN_FILENO);
@@ -1769,6 +1759,7 @@ int main(int ArgCount, char *ArgVals[])
             bindRemount(constZ("/"), Bind_ReadOnly);
         }
 
+        umask(0022);
         changeToUsefulDirectory();
         runCommand(ArgCount, ArgVals);
 
