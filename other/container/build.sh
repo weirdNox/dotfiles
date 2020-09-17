@@ -9,9 +9,10 @@ cd "$ScriptDir"
 Cmd=(clang)
 
 Cmd+=(
-    -ggdb
+    -ggdb -O0
 
     -Wall -Wextra
+    -Wshadow
     -Wno-unused-parameter
 )
 

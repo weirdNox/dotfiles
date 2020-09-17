@@ -304,7 +304,7 @@ internal b8 makeDirectoryRaw_(string Path, mode_t Mode)
                 *Iter = 0;
             }
 
-            switch(getNodeType(wrapZ(Buffer), true))
+            switch(getNodeType(wrapZ(Buffer), false))
             {
                 case Node_Directory: {} break;
 
@@ -378,9 +378,11 @@ internal b8 createFileRaw_(string Path, mode_t Mode)
 {
     b8 Result = true;
 
-    switch(getNodeType(Path, true))
+    switch(getNodeType(Path, false))
     {
-        case Node_File: {} break;
+        // NOTE(nox): This function is currently used to create bind mount targets, and it looks like
+        // bind mounts can be made over non-regular files!
+        case Node_Other: case Node_File: {} break;
 
         case Node_NoExist:
         {
@@ -853,7 +855,7 @@ internal void bindMountRaw(string PivotedBase, string PivotedBind, bind_option O
             FileStr.Size = FileBuffer.Data - FileStr.Data;
             close(MountInfo);
 
-            umm RemountCount = (umm)-1;
+            smm RemountCount = -1;
             string *ToRemount = (string *)advance(&Block, RemountStringArraySize);
             buffer RestorePoint = Block;
 
@@ -902,7 +904,7 @@ internal void bindMountRaw(string PivotedBase, string PivotedBind, bind_option O
                     Block = RestorePoint;
                 }
 
-                if(RemountCount != (umm)-1 &&
+                if(RemountCount >= 0 &&
                    MountPoint.Size > PivotedBind.Size &&
                    memcmp(MountPoint.Data, PivotedBind.Data, PivotedBind.Size) == 0)
                 {
@@ -911,7 +913,7 @@ internal void bindMountRaw(string PivotedBase, string PivotedBind, bind_option O
                 }
             }
 
-            for(umm Idx = 0; Idx < RemountCount; ++Idx)
+            for(smm Idx = 0; Idx < RemountCount; ++Idx)
             {
                 bindRemount(ToRemount[Idx], Options);
             }
