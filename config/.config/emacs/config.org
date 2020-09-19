@@ -1757,6 +1757,7 @@ fundamental-mode) for performance sake."
 #+BEGIN_SRC emacs-lisp
 (setq! org-startup-indented t
        org-hide-leading-stars t
+       org-startup-folded t
        org-startup-with-inline-images nil
        org-startup-with-latex-preview t
        org-pretty-entities t
