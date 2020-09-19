@@ -1210,7 +1210,14 @@ internal inline void setupBaseEnvironmentVariables()
         modifyEnvironmentVariable("XDG_RUNTIME_DIR", Env_Set, (char *)Value.Data);
     }
 
-    modifyEnvironmentVariable("LC_ALL", Env_Set, "C");
+    char *LocaleEnvs[] = {
+        "LC_ADDRESS", "LC_COLLATE", "LC_CTYPE", "LC_IDENTIFICATION", "LC_MONETARY", "LC_MESSAGES",
+        "LC_MEASUREMENT", "LC_NAME", "LC_NUMERIC", "LC_PAPER", "LC_TELEPHONE", "LC_TIME", "LC_ALL"
+    };
+    for(umm Idx = 0; Idx < arrayCount(LocaleEnvs); ++Idx)
+    {
+        modifyEnvironmentVariable(LocaleEnvs[Idx], Env_Set, "C");
+    }
 }
 
 internal inline void setupDummyNetworkInterface()
@@ -1421,6 +1428,8 @@ internal inline void setupNetwork()
 
 internal void setupDBusParent()
 {
+    modifyEnvironmentVariable("DBUS_FATAL_WARNINGS", Env_Set, "0");
+
 #if SHARE_DBUS
     u8 Memory[1<<13];
     buffer Buffer = bundleArray(Memory);
