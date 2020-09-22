@@ -1751,6 +1751,10 @@ fundamental-mode) for performance sake."
 #+BEGIN_SRC emacs-lisp
 (defun nox|org-offer-all-agenda-tags ()
   (setq-local org-complete-tags-always-offer-all-agenda-tags t))
+
+(defun +org*expand-tags-fix (orig-fun match &optional single-as-list downcased)
+  (funcall orig-fun (if downcased (downcase match) match) single-as-list downcased))
+(advice-add #'org-tags-expand :around #'+org*expand-tags-fix)
 #+END_SRC
 
 **** Appearance
