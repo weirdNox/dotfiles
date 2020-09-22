@@ -1,0 +1,29 @@
+pkgname=nox-moltengamepad
+pkgver=e370fe3
+pkgrel=1
+pkgdesc="Flexible Linux input device translator, geared for gamepads"
+url="https://github.com/weirdNox/MoltenGamepad"
+arch=('x86_64')
+license=('MIT')
+source=("git+${url}.git")
+md5sums=('SKIP')
+
+build() {
+    cd MoltenGamepad
+    sed -i '/^MG_BUILT_INS/s/^/#/' Makefile
+    make -j8 || return 1
+
+    cd installation/singleuser
+    ./configure.sh "$USER"
+}
+
+package() {
+    mkdir -p "$pkgdir/usr/bin/"
+    mkdir -p "$pkgdir/etc/"{profile.d,udev/rules.d}
+    cd MoltenGamepad
+    install -Dm755 moltengamepad "$pkgdir/usr/bin/moltengamepad"
+
+    cd installation/singleuser
+    install -Dm644 udev.rules "$pkgdir/etc/udev/rules.d/90-moltengamepad.rules"
+    install -Dm644 profile-sdl2.sh "$pkgdir/etc/profile.d/sdl2-gamecontroller-moltengamepad.sh"
+}

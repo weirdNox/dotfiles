@@ -8,5 +8,7 @@ alias grep='grep --color=auto'
 alias vpn-up='  wg-quick up   mullvad'
 alias vpn-down='wg-quick down mullvad'
 
+alias moltengamepad='moltengamepad --mimic-xpad --dpad-as-hat'
+
 # This makes bash check if the commands following sudo are aliases
 alias sudo='sudo '
