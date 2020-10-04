@@ -663,6 +663,12 @@ symbols.
 (put 'scroll-left 'disabled nil)
 #+END_SRC
 
+*** Disable bidirectional editing
+#+begin_src emacs-lisp
+(setq! bidi-paragraph-direction 'left-to-right
+       bidi-inhibit-bpa         t)
+#+end_src
+
 ** OS specific
 #+BEGIN_SRC emacs-lisp
 (setq! x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)
