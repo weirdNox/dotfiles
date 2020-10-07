@@ -1763,6 +1763,14 @@ fundamental-mode) for performance sake."
 (advice-add #'org-tags-expand :around #'+org*expand-tags-fix)
 #+END_SRC
 
+***** Metadata
+#+begin_src emacs-lisp
+(defun +org*end-of-meta-data-fix (&rest args)
+  (when (and (bolp) (org-at-heading-p))
+    (backward-char)))
+(advice-add #'org-end-of-meta-data :after #'+org*end-of-meta-data-fix)
+#+end_src
+
 **** Appearance
 #+BEGIN_SRC emacs-lisp
 (setq! org-startup-indented t
