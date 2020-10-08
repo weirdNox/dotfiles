@@ -1763,12 +1763,23 @@ fundamental-mode) for performance sake."
 (advice-add #'org-tags-expand :around #'+org*expand-tags-fix)
 #+END_SRC
 
-***** Metadata
+***** Find end of metadata
 #+begin_src emacs-lisp
 (defun +org*end-of-meta-data-fix (&rest args)
   (when (and (bolp) (org-at-heading-p))
     (backward-char)))
 (advice-add #'org-end-of-meta-data :after #'+org*end-of-meta-data-fix)
+
+;; NOTE(nox): The previous fix makes some functions create extra newlines, so this fixes it
+(defun +org*clean-up-logbook-newlines (&rest args)
+  (org-with-wide-buffer
+   (org-end-of-meta-data t)
+   (when (and (org--line-empty-p 1)
+              (save-excursion (beginning-of-line 2)
+                              (org-at-heading-p)))
+     (delete-backward-char 1))))
+(advice-add #'org-log-beginning       :after #'+org*clean-up-logbook-newlines)
+(advice-add #'org-clock-find-position :after #'+org*clean-up-logbook-newlines)
 #+end_src
 
 **** Appearance
