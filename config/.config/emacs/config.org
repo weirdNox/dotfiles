@@ -2822,8 +2822,8 @@ some heuristics to guess the result."
       (let ((inhibit-read-only t))
         (goto-char (point-max))
         (+agenda-render-block (nreverse +agenda-high-priority)    "Alta prioridade")
-        (+agenda-render-block +agenda-projects                    "Projetos" #'+agenda-project-printer)
         (+agenda-render-block (nreverse +agenda-isolated-tasks)   "Tarefas isoladas")
+        (+agenda-render-block +agenda-projects                    "Projetos" #'+agenda-project-printer)
         (+agenda-render-block (nreverse +agenda-low-priority)     "Baixa prioridade")
 
         (let ((+agenda-structure-face '(:inherit shadow :weight bold))
