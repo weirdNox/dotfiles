@@ -1333,6 +1333,18 @@ internal inline void bindHome(char *Prefix, char *BasePath, bind_option ExtraOpt
     bindMount((char *)Base.Data, "/root",  ExtraOptions | Bind_EnsureDir);
 }
 
+internal inline void bindAuxHome(bind_option ExtraOptions)
+{
+    u8 Memory[1<<10];
+    buffer Buffer = bundleArray(Memory);
+
+    char *BindPath = getBindHomePath(&Buffer);
+    string AuxPath = auxNode(&Buffer, BindPath+1);
+
+    bindMount((char *)AuxPath.Data, BindPath, ExtraOptions | Bind_EnsureDir);
+    bindMount((char *)AuxPath.Data, "/root",  ExtraOptions | Bind_EnsureDir);
+}
+
 internal inline void shareDisplay()
 {
     string BindXAuth = constZ("/tmp/xauth");
