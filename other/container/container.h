@@ -1365,19 +1365,25 @@ internal inline void shareGraphics()
     bindMount("/usr/bin/true", "/usr/bin/nvidia-modprobe", Bind_ReadOnly | Bind_Try);
 }
 
-internal inline void shareAudio()
+internal inline void shareAudio(b32 BindConfig)
 {
-    bindMap(0, "/dev/snd", Bind_Dev);
-    bindMap(0, "/etc/alsa", Bind_ReadOnly);
-    bindMap(0, "/etc/asound.conf", Bind_ReadOnly | Bind_Try);
-
-    bindMap(0, "/etc/pulse", Bind_ReadOnly);
+    if(BindConfig)
     {
-        u8 Memory[1<<12];
+        bindMap(0, "/etc/alsa", Bind_ReadOnly);
+        bindMap(0, "/etc/asound.conf", Bind_ReadOnly | Bind_Try);
+        bindMap(0, "/etc/pulse", Bind_ReadOnly);
+    }
+
+    u8 Memory[1<<12];
+    bindMap(0, "/dev/snd", Bind_Dev);
+    {
         buffer Buffer = bundleArray(Memory);
         string Base = formatString(&Buffer, "/run/user/%lu/pulse", BaseUID);
         string Bind = formatString(&Buffer, "/run/user/%lu/pulse", getBindUID());
         bindMount((char *)Base.Data, (char *)Bind.Data, Bind_ReadOnly);
+
+        string PulseServer = formatString(&Buffer, "%s/native", Bind.Data);
+        modifyEnvironmentVariable("PULSE_SERVER", Env_Set, (char *)PulseServer.Data);
     }
 }
 
