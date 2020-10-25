@@ -1218,6 +1218,7 @@ internal inline void setupBaseEnvironmentVariables()
     {
         modifyEnvironmentVariable(LocaleEnvs[Idx], Env_Set, "C");
     }
+    modifyEnvironmentVariable("TZ", Env_Set, "");
 }
 
 internal inline void setupDummyNetworkInterface()
@@ -1446,8 +1447,6 @@ internal inline void setupNetwork()
 
 internal void setupDBusParent()
 {
-    modifyEnvironmentVariable("DBUS_FATAL_WARNINGS", Env_Set, "0");
-
 #if SHARE_DBUS
     u8 Memory[1<<13];
     buffer Buffer = bundleArray(Memory);
@@ -1494,8 +1493,9 @@ internal void setupDBus()
     bindMount(BaseUserDBus, (char *)UserDBusPath.Data, Bind_ReadOnly);
 
     string DBusSessionAddr = formatString(&Buffer, "unix:path=%s", UserDBusPath.Data);
-
     modifyEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS", Env_Set, (char *)DBusSessionAddr.Data);
+
+    modifyEnvironmentVariable("DBUS_FATAL_WARNINGS", Env_Set, "0");
 #endif
 }
 
