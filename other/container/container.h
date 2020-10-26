@@ -1547,7 +1547,7 @@ internal inline void setupFakeFiles()
                                            getBindGID(), getBindGID(), getBindGID(),
                                            getBindGID()));
 
-    replaceFile("/etc/machine-id", constZ("00000000000000000000000000000000\n"));
+    replaceFile("/etc/machine-id", constZ("85023b50e53c30884e681fd19e913126\n"));
 
 #if defined(PROC_VERSION)
     if(constZ(PROC_VERSION"").Size)
