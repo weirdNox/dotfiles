@@ -969,7 +969,8 @@ internal void bindMapGlob(char *Prefix, char *Pattern, bind_option Options)
                              formatString(&Buffer, BaseRootFolder"%s", Pattern));
 
     glob_t GlobResult = {};
-    if(glob((char *)PivotedPattern.Data, GLOB_NOSORT, 0, &GlobResult) == 0)
+    int ReturnValue = glob((char *)PivotedPattern.Data, GLOB_NOSORT, 0, &GlobResult);
+    if(ReturnValue == 0)
     {
         for(umm Idx = 0; Idx < GlobResult.gl_pathc; ++Idx)
         {
@@ -978,6 +979,10 @@ internal void bindMapGlob(char *Prefix, char *Pattern, bind_option Options)
             char *BindPath = BasePath + (Prefix ? strlen(Prefix) : 0);
             bindMount(BasePath, BindPath, Options);
         }
+    }
+    else if(ReturnValue == GLOB_NOMATCH && (Options & Bind_Try))
+    {
+        // NOTE(nox): Do nothing!
     }
     else
     {
