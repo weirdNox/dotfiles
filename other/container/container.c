@@ -23,6 +23,8 @@
 #define BIND_ENV_DEFAULT_PATH "/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin"
 #define PROC_VERSION
 
+#define DROP_CAPS 0
+
 #define ARGS_OVERRIDE_STRING "-"
 
 #include "container.h"

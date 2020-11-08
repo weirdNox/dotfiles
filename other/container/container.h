@@ -668,7 +668,6 @@ internal void keepCaps()
         exit(EXIT_FAILURE);
     }
 
-
     for(s32 Idx = 0;; ++Idx)
     {
         if(prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, Idx, 0, 0) < 0)
@@ -687,6 +686,20 @@ internal void keepCaps()
             }
         }
     }
+}
+
+internal void dropCaps()
+{
+#if defined(DROP_CAPS) && DROP_CAPS
+    struct __user_cap_header_struct Header = { .version = _LINUX_CAPABILITY_VERSION_3 };
+    struct __user_cap_data_struct Payload[_LINUX_CAPABILITY_U32S_3] = {};
+
+    if(capset(&Header, Payload) < 0)
+    {
+        fprintf(stderr, "Couldn't drop capabilities\n");
+        exit(EXIT_FAILURE);
+    }
+#endif
 }
 
 typedef enum {
@@ -1792,6 +1805,7 @@ int main(int ArgCount, char *ArgVals[])
             bindRemount(constZ("/"), Bind_ReadOnly);
         }
 
+        dropCaps();
         umask(0022);
         changeToUsefulDirectory();
         runCommand(ArgCount, ArgVals);
