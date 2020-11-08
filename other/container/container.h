@@ -1395,7 +1395,8 @@ internal inline void shareAudio(b32 BindConfig)
 
 internal inline void shareInput()
 {
-    bindMap(0, "/dev/input", Bind_Dev);
+    bindMap(0, "/dev/input",  Bind_Dev);
+    bindMap(0, "/dev/uinput", Bind_Dev);
 }
 
 internal inline void setupNetwork()
