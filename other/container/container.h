@@ -1364,6 +1364,24 @@ internal inline void bindAuxHome(bind_option ExtraOptions)
     bindMount((char *)AuxPath.Data, "/root",  ExtraOptions | Bind_EnsureDir);
 }
 
+internal inline void setupMachineID(char *FakeID)
+{
+    if(!FakeID)
+    {
+        bindMap(0, "/etc/machine-id", Bind_ReadOnly);
+    }
+    else
+    {
+        u8 Memory[1<<10];
+
+        string FakeIDString = wrapZ(FakeID);
+        assert(FakeIDString.Size == 32);
+
+        string Contents = formatString(&bundleArray(Memory), "%s\n", FakeIDString.Data);
+        replaceFile("/etc/machine-id", Contents);
+    }
+}
+
 internal inline void shareDisplay()
 {
     string BindXAuth = constZ("/tmp/xauth");
@@ -1531,28 +1549,25 @@ internal void bindCustomWineBuild(char *BasePath)
 #undef WineBindBinPath
 }
 
-internal inline void setupFakeFiles()
+internal inline void setupUsersAndGroups()
 {
     u8 Memory[1<<13];
+    buffer Buffer = bundleArray(Memory);
 
-    {
-        buffer Buffer = bundleArray(Memory);
-        char *BindHomePath = getBindHomePath(&Buffer);
+    char *BindHomePath = getBindHomePath(&Buffer);
 
-        string Contents = formatString(&Buffer,
-                                       "%s:x:%lu:%lu:%s:%s:/usr/bin/bash\n"
-                                       "root:x:%lu:%lu:::/sbin/nologin\n"
-                                       "nobody:x:%lu:%lu:::/sbin/nologin\n"
-                                       "postfix:x:%lu:%lu:::/sbin/nologin\n",
-                                       getBindUserName(), getBindUID(), getBindGID(), getBindUserName(), BindHomePath,
-                                       getBindUID(), getBindGID(),
-                                       getBindUID(), getBindGID(),
-                                       getBindUID(), getBindGID());
+    string Passwd = formatString(&Buffer,
+                                 "%s:x:%lu:%lu:%s:%s:/usr/bin/bash\n"
+                                 "root:x:%lu:%lu:::/sbin/nologin\n"
+                                 "nobody:x:%lu:%lu:::/sbin/nologin\n"
+                                 "postfix:x:%lu:%lu:::/sbin/nologin\n",
+                                 getBindUserName(), getBindUID(), getBindGID(), getBindUserName(), BindHomePath,
+                                 getBindUID(), getBindGID(),
+                                 getBindUID(), getBindGID(),
+                                 getBindUID(), getBindGID());
+    replaceFile("/etc/passwd", Passwd);
 
-        replaceFile("/etc/passwd", Contents);
-    }
-
-    replaceFile("/etc/group", formatString(&bundleArray(Memory),
+    replaceFile("/etc/group", formatString(&Buffer,
                                            "%s:x:%lu:%s\n"
                                            "root:x:%lu:\n"
                                            "nobody:x:%lu:\n"
@@ -1565,13 +1580,13 @@ internal inline void setupFakeFiles()
                                            getBindGID(), getBindGID(), getBindGID(),
                                            getBindGID(), getBindGID(), getBindGID(),
                                            getBindGID()));
+}
 
-    replaceFile("/etc/machine-id", constZ("85023b50e53c30884e681fd19e913126\n"));
-
+internal inline void setupProcVersion()
+{
 #if defined(PROC_VERSION)
     if(constZ(PROC_VERSION"").Size)
     {
-        bindAux("/proc/version", true);
         replaceFile("/proc/version", constZ(PROC_VERSION"\n"));
     }
 #endif
@@ -1791,9 +1806,10 @@ int main(int ArgCount, char *ArgVals[])
         setupBaseAndBindRoots();
         {
             configureContainer();
+            setupUsersAndGroups();
+            setupProcVersion();
             setupNetwork();
             setupDBus();
-            setupFakeFiles();
             setupSeccomp();
         }
         switchToBindRoot();
