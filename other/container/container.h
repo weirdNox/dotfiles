@@ -1401,7 +1401,7 @@ internal inline void shareAudio(b32 BindConfig)
         string Bind = formatString(&Buffer, "/run/user/%lu/pulse", getBindUID());
         bindMount((char *)Base.Data, (char *)Bind.Data, Bind_ReadOnly);
 
-        string PulseServer = formatString(&Buffer, "%s/native", Bind.Data);
+        string PulseServer = formatString(&Buffer, "unix:%s/native", Bind.Data);
         modifyEnvironmentVariable("PULSE_SERVER", Env_Set, (char *)PulseServer.Data);
     }
 }
