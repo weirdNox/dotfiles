@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=org-protocol
-Exec=.local/lib/org-protocol.sh %u
+Exec=/usr/bin/sh -c "exec $HOME/.local/lib/org-protocol.sh %u"
 Type=Application
 Terminal=false
 NoDisplay=true
