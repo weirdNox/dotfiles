@@ -35,10 +35,9 @@ CONFIGURE_CONTAINER()
     bindRootfs(Rootfs, Rootfs_Minimal, Bind_ReadOnly);
     //bindHome(Rootfs, 0, 0);
 
-    setupMachineID("85023b50e53c30884e681fd19e913126");
-
     shareDisplay();
     shareGraphics();
+    //setupMachineID("");
     //shareAudio(true);
     //shareInput();
 

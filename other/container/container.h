@@ -29,6 +29,7 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 typedef  int8_t  s8;
@@ -114,7 +115,7 @@ typedef buffer string;
 internal inline string wrapZ(char *String)
 {
     string Result = {
-        .Size = strlen(String),
+        .Size = String ? strlen(String) : 0,
         .Data = (u8 *)String,
     };
 
@@ -140,6 +141,7 @@ internal inline u8 *advance(buffer *Buffer, umm Size)
     return Result;
 }
 #define consume(Buffer, type) ((type *)advance((Buffer), sizeof(type)))
+#define consumeArray(Buffer, type, Count) ((type *)advance((Buffer), sizeof(type[Count])))
 
 internal inline buffer getSubBuffer(buffer *Buffer, umm Size)
 {
@@ -1368,16 +1370,40 @@ internal inline void setupMachineID(char *FakeID)
 {
     if(!FakeID)
     {
+        // NOTE(nox): Map host machine ID
         bindMap(0, "/etc/machine-id", Bind_ReadOnly);
     }
     else
     {
         u8 Memory[1<<10];
+        buffer Buffer = bundleArray(Memory);
+        string Contents;
 
         string FakeIDString = wrapZ(FakeID);
-        assert(FakeIDString.Size == 32);
 
-        string Contents = formatString(&bundleArray(Memory), "%s\n", FakeIDString.Data);
+        if(FakeIDString.Size == 32)
+        {
+            // NOTE(nox): Map fake machine ID
+            Contents = formatString(&Buffer, "%s\n", FakeIDString.Data);
+        }
+        else if(FakeIDString.Size == 0)
+        {
+            // NOTE(nox): Generate random machine ID
+            buffer UUIDBuffer = getSubBuffer(&Buffer, 16);
+            for(umm Idx = 0; Idx < UUIDBuffer.Size; ++Idx)
+            {
+                UUIDBuffer.Data[Idx] = rand() & ((1<<8) - 1);
+            }
+
+            u64 *UUID = consumeArray(&UUIDBuffer, u64, 2);
+            Contents = formatString(&Buffer, "%016lx%016lx\n", UUID[0],  UUID[1]);
+        }
+        else
+        {
+            fprintf(stderr, "Invalid machine-id string: %s\n", FakeID);
+            exit(EXIT_FAILURE);
+        }
+
         replaceFile("/etc/machine-id", Contents);
     }
 }
@@ -1734,6 +1760,8 @@ int main(int ArgCount, char *ArgVals[])
 {
     --ArgCount;
     ++ArgVals;
+
+    srand(time(0));
 
     ParentPID = getpid();
     InitialWorkingDirectory = get_current_dir_name();
