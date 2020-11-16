@@ -1243,18 +1243,28 @@ internal inline void setupBaseEnvironmentVariables()
 
 internal inline void setupDummyNetworkInterface()
 {
-#if defined(DUMMY_LINK) && DUMMY_LINK
+#if defined(DUMMY_LINK)
+    string DummyMAC = constZ(stringify(DUMMY_LINK)"");
+
+    if((DummyMAC.Size == 1 && DummyMAC.Data[0] == '1') || DummyMAC.Size > 1)
     {
-        char *ShellArgs[] = {"ip", "link", "add", "eth0", "address", "F8:16:54:E2:81:89", "type", "dummy", 0};
-        runProgram(ShellArgs);
-    }
-    {
-        char *ShellArgs[] = {"ip", "link", "set", "dev", "eth0", "up", 0};
-        runProgram(ShellArgs);
-    }
-    {
-        char *ShellArgs[] = {"ip", "address", "add", "192.168.1.2/24", "dev", "eth0", 0};
-        runProgram(ShellArgs);
+        if(DummyMAC.Size == 1)
+        {
+            DummyMAC = constZ("F8:16:54:E2:81:89");
+        }
+
+        {
+            char *ShellArgs[] = {"ip", "link", "add", "eth0", "address", (char *)DummyMAC.Data, "type", "dummy", 0};
+            runProgram(ShellArgs);
+        }
+        {
+            char *ShellArgs[] = {"ip", "link", "set", "dev", "eth0", "up", 0};
+            runProgram(ShellArgs);
+        }
+        {
+            char *ShellArgs[] = {"ip", "address", "add", "192.168.1.2/24", "dev", "eth0", 0};
+            runProgram(ShellArgs);
+        }
     }
 #endif
 }
