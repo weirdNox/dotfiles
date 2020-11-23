@@ -3130,8 +3130,7 @@ When optional argument is non-nil, refresh cached heading."
   :config
   (setq! bibtex-dialect 'BibTeX
          bibtex-entry-format t
-         bibtex-align-at-equal-sign t
-         bibtex-clean-entry-hook '(+bibtex-replace-key))
+         bibtex-align-at-equal-sign t)
 
   (defun +bibtex-assoc-pdf (&optional prefix)
     "Prompt for a PDF to associate with entry at point.
@@ -3235,7 +3234,92 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
               (when (y-or-n-p "A PDF exists with that key. Do you want to remove it? ")
                 (move-file-to-trash new-pdf))))
 
-          (when old-exists (rename-file old-pdf new-pdf)))))))
+          (when old-exists (rename-file old-pdf new-pdf))))))
+
+  (defun bibtex-clean-entry (&optional new-key called-by-reformat)
+    (interactive "P")
+    (let ((case-fold-search t)
+          (start (bibtex-beginning-of-entry))
+          (_ (or (looking-at bibtex-any-entry-maybe-empty-head)
+	             (error "Not inside a BibTeX entry")))
+          (entry-type (bibtex-type-in-head))
+          (key (bibtex-key-in-head)))
+      (cond ((bibtex-string= entry-type "preamble")
+             ;; (bibtex-format-preamble)
+             (error "No clean up of @Preamble entries"))
+            ((bibtex-string= entry-type "string")
+             (setq entry-type 'string))
+            ;; (bibtex-format-string)
+            (t (bibtex-format-entry)))
+
+      (when (or new-key (not key))
+        (+bibtex-replace-key)
+        (bibtex-beginning-of-entry)
+        (looking-at bibtex-any-entry-maybe-empty-head)
+        (setq key (bibtex-key-in-head)))
+
+      (unless called-by-reformat
+        (let* ((end (save-excursion
+                      (bibtex-end-of-entry)
+                      (if (re-search-forward
+                           bibtex-entry-maybe-empty-head nil 'move)
+                          (goto-char (match-beginning 0)))
+                      (point)))
+               (entry (buffer-substring start end))
+               ;; include the crossref key in index
+               (index (let ((bibtex-maintain-sorted-entries 'crossref))
+                        (bibtex-entry-index))) ; moves point to end of head
+               error)
+          ;; sorting
+          (if (and bibtex-maintain-sorted-entries
+                   (not (and bibtex-sort-ignore-string-entries
+                             (eq entry-type 'string))))
+              (progn
+                (delete-region start end)
+                (setq error (not (bibtex-prepare-new-entry index))
+                      start (point)) ; update start
+                (save-excursion (insert entry)))
+            (bibtex-search-entry key)
+            (setq error (or (/= (point) start)
+                            (bibtex-search-entry key nil end))))
+          (if error
+              (error "New inserted entry yields duplicate key"))
+          (dolist (buffer (bibtex-initialize))
+            (with-current-buffer buffer
+              (if (cdr (assoc-string key bibtex-reference-keys))
+                  (error "Duplicate key in %s" (buffer-file-name)))))
+
+          ;; Only update `bibtex-strings' and `bibtex-reference-keys'
+          ;; if they have been built already.
+          (cond ((eq entry-type 'string)
+                 ;; We have a @String entry.
+                 (unless (or (functionp bibtex-strings)
+                             (assoc key bibtex-strings))
+                   (push (cons key (bibtex-text-in-string
+                                    (bibtex-parse-string) t))
+                         bibtex-strings)))
+                ;; We have a normal entry.
+                ((not (functionp bibtex-reference-keys))
+                 (let ((found (assoc key bibtex-reference-keys)))
+                   (cond ((not found)
+                          (push (cons key t) bibtex-reference-keys))
+                         ((not (cdr found))
+                          ;; Turn a crossref key into a header key
+                          (setq bibtex-reference-keys
+                                (cons (cons key t)
+                                      (delete (list key) bibtex-reference-keys))))))
+                 ;; If entry has a crossref key, it goes into the list
+                 ;; `bibtex-reference-keys', too.
+                 (if (and (nth 1 index)
+                          (not (assoc (nth 1 index) bibtex-reference-keys)))
+                     (push (list (nth 1 index)) bibtex-reference-keys)))))
+
+        ;; final clean up
+        (if bibtex-clean-entry-hook
+            (save-excursion
+              (save-restriction
+                (bibtex-narrow-to-entry)
+                (run-hooks 'bibtex-clean-entry-hook))))))))
 
 (use-package reftex
   :config
@@ -3318,7 +3402,7 @@ Return DEFAULT if FIELD is not present in ENTRY."
 :NOTER_DOCUMENT: %s${=key=}.pdf
 :END:
 "
-                                                           (concat "../" +bibtex-pdf-relative-dir))
+                                                                 (concat "../" +bibtex-pdf-relative-dir))
          bibtex-completion-display-formats
          '((t . "${author:36} │ ${title:*} ${year:4} ${=type=:7} ${=has-pdf=:1}${=has-note=:1}"))
          bibtex-completion-pdf-symbol  ""
