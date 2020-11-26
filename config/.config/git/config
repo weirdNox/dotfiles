@@ -15,3 +15,6 @@
 
 [pull]
 	rebase = true
+
+[init]
+	templatedir = ~/.config/git/template

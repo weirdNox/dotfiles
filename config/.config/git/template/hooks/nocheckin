@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mapfile -t FilesWithNoCheckIn < <(git diff --staged --diff-filter=d --name-only -i -G "nocheckin")
+
+if [[ -n "${FilesWithNoCheckIn[@]+${FilesWithNoCheckIn[@]}}" ]]; then
+    echo "Found files with nocheckin!"
+    printf '  - %s\n' "${FilesWithNoCheckIn[@]}"
+    exit 1
+fi
