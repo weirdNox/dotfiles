@@ -1080,7 +1080,7 @@ internal void otherMount(mount_type Type, char *BindPath)
         } break;
 
         case Mount_DevPTS: {
-            if(mount("devpts", (char *)PivotedBind.Data, "devpts", MS_SILENT|MS_NOATIME|MS_NOSUID|MS_NOEXEC, 0) < 0)
+            if(mount("devpts", (char *)PivotedBind.Data, "devpts", MS_SILENT|MS_NOATIME|MS_NOSUID|MS_NOEXEC, "ptmxmode=666") < 0)
             {
                 fprintf(stderr, "Could not mount devpts on %s: %s\n", BindPath, strerror(errno));
                 exit(EXIT_FAILURE);
