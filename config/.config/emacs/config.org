@@ -3099,7 +3099,8 @@ When optional argument is non-nil, refresh cached heading."
 
   :config
   (setq! org-noter-default-heading-title "Notas da página $p$"
-         org-noter-default-notes-file-names '("Notes.org" "Notas.org")))
+         org-noter-notes-search-path '("~/archive/literature/notes/")
+         org-noter-default-notes-file-names '("notes.org" "notas.org")))
 #+END_SRC
 
 *** Source blocks
