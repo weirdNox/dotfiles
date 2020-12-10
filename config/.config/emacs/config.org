@@ -3128,7 +3128,7 @@ When optional argument is non-nil, refresh cached heading."
     (expand-file-name +bibtex-notes-relative-dir (file-name-directory (or (car-safe bib-file-path) bib-file-path))))
 
   :config
-  (setq! bibtex-dialect 'BibTeX
+  (setq! bibtex-dialect 'biblatex
          bibtex-entry-format t
          bibtex-align-at-equal-sign t)
 
