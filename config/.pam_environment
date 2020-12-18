@@ -19,6 +19,9 @@ ALTERNATE_EDITOR    DEFAULT=""
 
 DICPATH             DEFAULT=${XDG_DATA_HOME}/dicts
 
+# SSH key agent
+SSH_AUTH_SOCK DEFAULT="${XDG_RUNTIME_DIR}/ssh-agent.socket"
+
 # Syncthing - Don't create default folder
 STNODEFAULTFOLDER   DEFAULT=yes
 
