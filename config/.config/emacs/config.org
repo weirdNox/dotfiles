@@ -3341,7 +3341,8 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 (use-package ivy-bibtex :ensure
   :config
   (defun +bibtex*ivy-bibtex (orig-fun &optional arg local-lib)
-    (let* ((local-bib (bibtex-completion-find-local-bibliography))
+    (let* ((local-bib (and (eq major-mode 'bibtex-mode)
+                           (bibtex-completion-find-local-bibliography)))
            (bibtex-completion-bibliography (or local-bib
                                                bibtex-completion-bibliography))
            (bibtex-completion-library-path (+bibtex-pdf-dir bibtex-completion-bibliography))
