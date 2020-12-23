@@ -1621,6 +1621,7 @@ fundamental-mode) for performance sake."
 *** LaTeX
 #+BEGIN_SRC emacs-lisp
 (use-package tex :ensure auctex
+  :commands +tex*set-auto-location
   :config
   (setq! TeX-auto-save t
          TeX-parse-self t
@@ -1628,11 +1629,20 @@ fundamental-mode) for performance sake."
          TeX-default-mode 'latex-mode
          TeX-force-default-mode t
          TeX-source-correlate-start-server t
-         TeX-view-program-selection '((output-pdf "PDF Tools")))
+         TeX-view-program-selection '((output-pdf "PDF Tools"))
+         TeX-auto-local (file-truename "~/.cache/emacs/latexauto/fallback"))
 
   (TeX-global-PDF-mode 1)
   (TeX-source-correlate-mode 1)
-  (add-hook 'TeX-after-compilation-finished-functions #'TeX-revert-document-buffer))
+  (add-hook 'TeX-after-compilation-finished-functions #'TeX-revert-document-buffer)
+
+  (defun +tex*set-auto-location (&rest _)
+    (let ((hash (sha1 (file-truename (TeX-master-directory)))))
+      (setq-local TeX-auto-local (expand-file-name hash
+                                                   (file-name-directory (default-value 'TeX-auto-local)))
+                  TeX-style-local TeX-auto-local)))
+  (advice-add #'TeX-tex-mode :after #'+tex*set-auto-location)
+  (make-directory TeX-auto-local t))
 #+END_SRC
 
 *** MATLAB & Octave
@@ -3127,6 +3137,8 @@ When optional argument is non-nil, refresh cached heading."
   (defvar-local +bibtex-notes-relative-dir "notes/")
   (defsubst +bibtex-notes-dir (bib-file-path)
     (expand-file-name +bibtex-notes-relative-dir (file-name-directory (or (car-safe bib-file-path) bib-file-path))))
+
+  (add-hook 'bibtex-mode-hook #'+tex*set-auto-location)
 
   :config
   (setq! bibtex-dialect 'biblatex
