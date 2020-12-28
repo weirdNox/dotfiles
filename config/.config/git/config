@@ -7,9 +7,6 @@
 [log]
 	date = iso
 
-[credential]
-	helper = cache --timeout=3600
-
 [include]
     path = ~/.config/git/local
 
