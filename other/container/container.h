@@ -1343,6 +1343,7 @@ internal void bindRootfs(char *Rootfs, bind_rootfs_type Type, bind_option ExtraO
 
         makeDirectory(getBindHomePath(&bundleArray((u8[1<<9]){})), 0700);
         makeDirectory(getenv("XDG_RUNTIME_DIR"), 0700);
+        makeDirectory("/run/lock", 0755);
     }
 }
 
