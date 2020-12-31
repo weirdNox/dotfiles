@@ -3404,6 +3404,7 @@ Return DEFAULT if FIELD is not present in ENTRY."
 
   (setq! bibtex-completion-bibliography +bibtex-bibliography
          bibtex-completion-notes-extension ".org"
+         bibtex-completion-pdf-extension '(".pdf" ".djvu")
          bibtex-completion-find-additional-pdfs t
          bibtex-completion-additional-search-fields '("keywords")
 
