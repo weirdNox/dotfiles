@@ -3142,7 +3142,8 @@ When optional argument is non-nil, refresh cached heading."
 
   :config
   (setq! bibtex-dialect 'biblatex
-         bibtex-entry-format t
+         bibtex-entry-format '(numerical-fields page-dashes whitespace inherit-booktitle realign
+                               last-comma delimiters unify-case braces strings sort-fields)
          bibtex-align-at-equal-sign t)
 
   (defun +bibtex-assoc-pdf (&optional prefix)
@@ -3249,6 +3250,14 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 
           (when old-exists (rename-file old-pdf new-pdf))))))
 
+  (defun bibtex-autokey-get-year ()
+    "Return year field contents as a string obeying `bibtex-autokey-year-length'."
+    (let* ((yearfield (bibtex-autokey-get-field "year"))
+           (date (bibtex-autokey-get-field "date"))
+           (year (cond ((> (length yearfield) 0) yearfield)
+                       ((string-match "[0-9]+X*" date) (match-string 0 date)))))
+      (substring year (max 0 (- (length year) bibtex-autokey-year-length)))))
+
   (defun bibtex-clean-entry (&optional new-key called-by-reformat)
     (interactive "P")
     (let ((case-fold-search t)
@@ -3257,12 +3266,9 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 	             (error "Not inside a BibTeX entry")))
           (entry-type (bibtex-type-in-head))
           (key (bibtex-key-in-head)))
-      (cond ((bibtex-string= entry-type "preamble")
-             ;; (bibtex-format-preamble)
-             (error "No clean up of @Preamble entries"))
-            ((bibtex-string= entry-type "string")
-             (setq entry-type 'string))
-            ;; (bibtex-format-string)
+
+      (cond ((bibtex-string= entry-type "preamble") (error "No clean up of @Preamble entries"))
+            ((bibtex-string= entry-type "string") (setq entry-type 'string))
             (t (bibtex-format-entry)))
 
       (when (or new-key (not key))
@@ -3332,7 +3338,13 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
             (save-excursion
               (save-restriction
                 (bibtex-narrow-to-entry)
-                (run-hooks 'bibtex-clean-entry-hook))))))))
+                (run-hooks 'bibtex-clean-entry-hook)))))
+
+      ;; NOTE(nox): Check if there are any missing fields
+      (let ((bibtex-entry-format '(required-fields)))
+        (cond ((bibtex-string= entry-type "preamble") (error "No clean up of @Preamble entries"))
+              ((bibtex-string= entry-type "string") (setq entry-type 'string))
+              (t (bibtex-format-entry)))))))
 
 (use-package reftex
   :config
@@ -3349,6 +3361,46 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
            (bibtex-completion-notes-path (+bibtex-notes-dir bibtex-completion-bibliography)))
       (funcall orig-fun arg local-bib)))
   (advice-add #'ivy-bibtex :around #'+bibtex*ivy-bibtex)
+
+  (defun bibtex-completion-format-entry (entry width)
+    "Formats a BibTeX ENTRY for display in results list.
+WIDTH is the width of the results list.  The display format is
+governed by the variable `bibtex-completion-display-formats'."
+    (let* ((format (or (assoc-string (bibtex-completion-get-value "=type=" entry)
+                                     bibtex-completion-display-formats-internal
+                                     'case-fold)
+                       (assoc t bibtex-completion-display-formats-internal)))
+           (format-string (cadr format)))
+      (s-format
+       format-string
+       (lambda (field)
+         (let* ((field (split-string field ":"))
+                (field-name (car field))
+                (field-width (cadr field))
+                (field-value (bibtex-completion-get-value field-name entry)))
+           (when (string= field-name "title")
+             (let ((maintitle (bibtex-completion-get-value "maintitle" entry)))
+               (if (and maintitle field-value)
+                   (setq field-value (concat maintitle ": " field-value))
+                 (setq field-value (or maintitle field-value)))))
+           (when (and (string= field-name "author")
+                      (not field-value))
+             (setq field-value (bibtex-completion-get-value "editor" entry)))
+           (when (and (string= field-name "year")
+                      (not field-value))
+             (setq field-value (car (split-string (bibtex-completion-get-value "date" entry "") "-"))))
+           (setq field-value (bibtex-completion-clean-string (or field-value " ")))
+           (when (member field-name '("author" "editor"))
+             (setq field-value (bibtex-completion-shorten-authors field-value)))
+           (if (not field-width)
+               field-value
+             (setq field-width (string-to-number field-width))
+             (truncate-string-to-width
+              field-value
+              (if (> field-width 0)
+                  field-width
+                (- width (cddr format)))
+              0 ?\s)))))))
 
   (defun bibtex-completion-apa-get-value (field entry &optional default)
     "Return FIELD or ENTRY formatted following the APA guidelines.
@@ -3406,7 +3458,7 @@ Return DEFAULT if FIELD is not present in ENTRY."
          bibtex-completion-notes-extension ".org"
          bibtex-completion-pdf-extension '(".pdf" ".djvu")
          bibtex-completion-find-additional-pdfs t
-         bibtex-completion-additional-search-fields '("keywords")
+         bibtex-completion-additional-search-fields '("maintitle" "keywords")
 
          bibtex-completion-notes-template-multiple-files (format "#+TITLE: ${title} (${year})
 ,#+AUTHOR: ${author-or-editor}
