@@ -2008,8 +2008,6 @@ The next part was taken from DOOM themes
                             (,nox-org-tracker-file . (:level    . 1))
                             (,nox-org-someday-file . (:maxlevel . 1))))
 
-(after! deft (setq! org-refile-targets (push '(deft-all-files . (:maxlevel . 1)) org-refile-targets)))
-
 (add-hook! 'org-after-refile-insert-hook
   (org-up-heading-safe)
   (org-update-statistics-cookies nil))
@@ -2922,24 +2920,6 @@ after removing the face property. This serves to restore the custom face set in 
     (unless (org-before-first-heading-p) (org-set-property "CREATED" (+org-inactive-timestamp))))
   (add-hook 'org-capture-before-finalize-hook '+capture|add-created-property)
 
-  (defun +capture-bookmark-template ()
-    (let ((title (completing-read "Title: " (list (plist-get org-store-link-plist :description))))
-          (create-new (y-or-n-p "Create new file?")))
-      (org-capture-put :bookmark-title title)
-      (org-capture-put :bookmark-new-file create-new)
-      (if create-new
-          (format "#+TITLE: %s\n#+PROPERTY: CREATED %s\n\n[[%s][Link]]\n"
-                  title (+org-inactive-timestamp) (plist-get org-store-link-plist :link))
-        (format "* [[%s][%s]]\n" (plist-get org-store-link-plist :link) title))))
-
-  (defun +capture-bookmark-location ()
-    (require 'deft)
-    (set-buffer
-     (if (org-capture-get :bookmark-new-file)
-         (find-file-noselect (deft-absolute-filename (org-capture-get :bookmark-title)))
-       (find-file-noselect (read-file-name "Target file: " deft-directory nil 'confirm))))
-    (goto-char (point-max)))
-
   (defconst +capture-tracker-type-to-heading '(movie "Filmes" series "Séries" book "Livros"))
   (defconst +capture-tracker-type-template   '(movie "* WATCH " series "* WATCH " book "* READ "))
 
@@ -2967,10 +2947,10 @@ after removing the face property. This serves to restore the custom face set in 
         (cond
          (selection-info
           (let* ((old-frame (selected-frame))
-                (target-frame (cond ((not (frame-parameter old-frame 'org-capture-frame)) old-frame)
-                                    ((not (equal (next-frame) old-frame)) (next-frame))
-                                    ((make-frame '((fullscreen . maximized))))))
-                (org-show-context-detail 'tree))
+                 (target-frame (cond ((not (frame-parameter old-frame 'org-capture-frame)) old-frame)
+                                     ((not (equal (next-frame) old-frame)) (next-frame))
+                                     ((make-frame '((fullscreen . maximized))))))
+                 (org-show-context-detail 'tree))
             (with-selected-frame target-frame
               (raise-frame target-frame)
               (x-focus-frame target-frame)
@@ -3007,7 +2987,6 @@ after removing the face property. This serves to restore the custom face set in 
                            ("mb" "book" entry #'+capture-tracker-location #'+capture-tracker-template
                             :track-type book)
                            ("w" "web")
-                           ("wb" "bookmark" plain #'+capture-bookmark-location #'+capture-bookmark-template)
                            ("wc" "capture" entry (file "") "* [[%:link][%^{Title|%:description}]]\n%?")))
 
   (add-hook 'org-capture-mode-hook 'nox|org-offer-all-agenda-tags)
