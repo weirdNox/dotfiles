@@ -3122,7 +3122,7 @@ When optional argument is non-nil, refresh cached heading."
   :config
   (setq! bibtex-dialect 'biblatex
          bibtex-entry-format '(numerical-fields page-dashes whitespace inherit-booktitle realign
-                               last-comma delimiters unify-case braces strings sort-fields)
+                                                last-comma delimiters unify-case braces strings sort-fields)
          bibtex-align-at-equal-sign t)
 
   (defun +bibtex-assoc-pdf (&optional prefix)
@@ -3376,6 +3376,14 @@ Return the result as a string."
 
 (use-package ivy-bibtex :ensure
   :config
+  (defvar +bibtex-completion-external-key nil)
+  (defun +bibtex-completion-get-key-external () +bibtex-completion-external-key)
+  (add-to-list 'bibtex-completion-key-at-point-functions #'+bibtex-completion-get-key-external)
+
+  (defun bibtex-completion-get-key-org-bibtex ()
+    (when (memq major-mode '(org-mode org-agenda-mode))
+      (thing-at-point 'symbol)))
+
   (defun +bibtex*ivy-bibtex (orig-fun &optional arg local-lib)
     (let* ((local-bib (and (not (and (numberp arg) (= arg 0)))
                            (eq major-mode 'bibtex-mode)
@@ -3507,7 +3515,14 @@ Return DEFAULT if FIELD is not present in ENTRY."
   (add-to-list 'ivy-re-builders-alist '(ivy-bibtex . ivy--regex-ignore-order))
 
   (defun nox*disable-completion-notes-mode (&optional _) (widen))
-  (advice-add #'bibtex-completion-notes-mode :override #'nox*disable-completion-notes-mode))
+  (advice-add #'bibtex-completion-notes-mode :override #'nox*disable-completion-notes-mode)
+
+  (defun +ivy-bibtex-insert-org-link (candidate)
+    (let ((key (cdr (assoc "=key=" (cdr candidate))))
+          (title (bibtex-completion-apa-get-value "title" (cdr candidate))))
+      (insert (format "[[bibtex:%s][%s]]" key title))))
+
+  (ivy-add-actions 'ivy-bibtex '(("O" +ivy-bibtex-insert-org-link "Insert Org link"))))
 
 (use-package biblio :ensure
   :demand
@@ -3526,6 +3541,17 @@ Return DEFAULT if FIELD is not present in ENTRY."
 
   (setq! biblio-cleanup-bibtex-function #'+biblio-cleanup-bibtex))
 #+END_SRC
+
+**** ivy-bibtex integration in org-mode
+#+begin_src emacs-lisp
+(after! org
+  (org-link-set-parameters "bibtex" :follow #'+org-bibtex-open)
+
+  (defun +org-bibtex-open (path _)
+    (require 'ivy-bibtex)
+    (let ((+bibtex-completion-external-key path))
+      (ivy-bibtex))))
+#+end_src
 
 *** Calc
 #+begin_src emacs-lisp
