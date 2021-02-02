@@ -1602,7 +1602,23 @@ fundamental-mode) for performance sake."
                  (c-offsets-alist . ((arglist-close . c-lineup-arglist)
                                      (case-label . +)
                                      (statement-case-intro . (+cc-style-stmt-case-intro +))
-                                     (substatement-open . 0))))))
+                                     (substatement-open . 0)))))
+
+  (after! compile
+    (add-to-list 'compilation-error-regexp-alist 'gcc)
+    (add-to-list 'compilation-error-regexp-alist-alist
+                 `(gcc
+                   ,(rx
+                     bol
+                     (group-n 1 (: (* num) (not space) (*? nonl)))
+                     (: ":" (* " ") (group-n 2 (+ num)))
+                     (? ":" (* " ") (group-n 4 (+ num)))
+                     ":" (* " ")
+                     (| (group-n 6 (| "warning"))
+                        (group-n 7 (| "info" "information" "informational" "instantiated from" "required from" "note"))
+                        (| "error" "sorry,"))
+                     (| " " ":"))
+                   1 (2 . 3) (4 . 5) (6 . 7)))))
 #+END_SRC
 
 *** GLSL
@@ -1686,8 +1702,10 @@ fundamental-mode) for performance sake."
          ("\\.scs\\'" . spice-mode))
   :config
   (set-face-attribute 'spice-title-face nil :background nil)
-  (add-to-list 'compilation-error-regexp-alist-alist
-               '(cadence-spectre "^ *\\(?:ERROR\\|\\(WARNING\\)\\) (.+): \"\\(.+\\)\" \\([0-9]+\\)" 2 3 nil (1))))
+
+  (after! compile
+    (add-to-list 'compilation-error-regexp-alist-alist
+                 '(cadence-spectre "^ *\\(?:ERROR\\|\\(WARNING\\)\\) (.+): \"\\(.+\\)\" \\([0-9]+\\)" 2 3 nil (1)))))
 #+end_src
 
 *** Verilog
@@ -3582,7 +3600,9 @@ Return DEFAULT if FIELD is not present in ENTRY."
 
   (setq! compilation-always-kill t
          compilation-scroll-output 'first-error
-         compilation-context-lines 2)
+         compilation-context-lines 2
+         compilation-error-regexp-alist       nil
+         compilation-error-regexp-alist-alist nil)
 
   (put 'compilation-error-regexp-alist 'safe-local-variable 'listp)
 #+END_SRC
