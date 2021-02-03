@@ -1569,8 +1569,7 @@ fundamental-mode) for performance sake."
 *** C/C++
 #+BEGIN_SRC emacs-lisp
 (use-package cc-mode
-  :mode (("\\.\\(c\\|h\\)\\'" . c-mode)
-         ("\\.\\(c\\|h\\)pp\\'" . c++-mode)
+  :mode (("\\.\\(c\\|h\\)\\(pp\\)?\\'" . c++-mode)
          ("\\.ino\\'" . c++-mode))
 
   :config
