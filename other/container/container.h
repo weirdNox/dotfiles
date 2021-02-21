@@ -70,38 +70,6 @@ typedef  intptr_t smm;
 #define internal static
 #define global static
 
-
-#define BaseRootFolder "/base"
-#define BindRootFolder "/bind"
-
-#define MountPointMaximumLength 255
-
-#define CONFIGURE_CONTAINER() internal void configureContainer()
-#define RUN_COMMAND() internal void runCommand(int ArgCount, char *ArgVals[])
-
-global pid_t ParentPID;
-global char *InitialWorkingDirectory;
-
-global char *AuxDirectory;
-
-global uid_t BaseUID;
-global gid_t BaseGID;
-global char  BaseUserName[64];
-global char *BaseHomePath;
-
-global char *BaseSystDBus;
-global char *BaseUserDBus;
-
-global char *BaseXAuth;
-
-global char *BaseUnionFS;
-
-global char *BaseTTY;
-global int ProcFD;
-
-global b32 FullBind;
-
-
 typedef struct {
     umm Size;
     union {
@@ -112,8 +80,9 @@ typedef struct {
 
 typedef buffer string;
 
-#define bundleArray(Array) (buffer){ .Size = sizeof(Array), .Data = (u8 *)(Array) }
-#define constZ(String) (string){ .Size = sizeof(String)-1, .Data = (u8 *)(String) }
+#define bundleArray(Array) (buffer){ .Size = sizeof(Array),    .Data = (u8 *)(Array) }
+#define constZ_(String)            { .Size = sizeof(String)-1, .Data = (u8 *)(String) }
+#define constZ(String)     (string)constZ_(String)
 
 internal inline string wrapZ(char *String)
 {
@@ -155,6 +124,40 @@ internal inline buffer getSubBuffer(buffer *Buffer, umm Size)
 
     return Result;
 }
+
+
+#define BaseRootFolder "/base"
+#define BindRootFolder "/bind"
+global string HelperBinds[] = { HELPER_BINDS(constZ_) };
+
+#define MountPointMaximumLength 255
+
+#define CONFIGURE_CONTAINER() internal void configureContainer()
+#define RUN_COMMAND() internal void runCommand(int ArgCount, char *ArgVals[])
+
+
+global pid_t ParentPID;
+global char *InitialWorkingDirectory;
+
+global char *AuxDirectory;
+
+global uid_t BaseUID;
+global gid_t BaseGID;
+global char  BaseUserName[64];
+global char *BaseHomePath;
+
+global char *BaseSystDBus;
+global char *BaseUserDBus;
+
+global char *BaseXAuth;
+
+global char *BaseUnionFS;
+
+global char *BaseTTY;
+global int ProcFD;
+
+global b32 FullBind;
+
 
 internal string formatString(buffer *Buffer, char *Format, ...)
 {
@@ -1683,6 +1686,17 @@ internal inline void setupBaseAndBindRoots()
         fprintf(stderr, "Could not pivot roots\n");
         exit(EXIT_FAILURE);
     }
+
+    // NOTE(nox): These helper binds serve as a reference for symbolic link targets
+    for(umm Idx = 0; Idx < arrayCount(HelperBinds); ++Idx)
+    {
+        string HelperBind = HelperBinds[Idx];
+
+        u8 Memory[1<<10] = {};
+        string PivotedBase = formatString(&bundleArray(Memory), BaseRootFolder"%s", HelperBind.Char);
+
+        bindMountRaw(PivotedBase, HelperBind, 0);
+    }
 }
 
 internal inline void switchToBindRoot()
@@ -1851,8 +1865,8 @@ int main(int ArgCount, char *ArgVals[])
             setupUsersAndGroups();
             setupProcVersion();
             setupNetwork();
-            setupDBus();
             setupSeccomp();
+            setupDBus();
         }
         switchToBindRoot();
 

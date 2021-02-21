@@ -1,5 +1,7 @@
 #!/usr/bin/tcc -run -Werror
 
+#define HELPER_BINDS(W) W("/etc"), W("/home"), W("/usr")
+
 #define KEEP_AUX 0
 
 #define UNIONFS_CREATE 0
