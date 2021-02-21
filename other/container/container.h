@@ -104,7 +104,10 @@ global b32 FullBind;
 
 typedef struct {
     umm Size;
-    u8 *Data;
+    union {
+        u8 *Data;
+        char *Char;
+    };
 } buffer;
 
 typedef buffer string;
