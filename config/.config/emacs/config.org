@@ -3429,14 +3429,16 @@ governed by the variable `bibtex-completion-display-formats'."
                 (field-width (cadr field))
                 (field-value (bibtex-completion-get-value field-name entry)))
            (when (string= field-name "title")
-             (let ((maintitle (bibtex-completion-get-value "maintitle" entry))
+             (let ((searchtitle (bibtex-completion-get-value "searchtitle" entry))
+                   (maintitle (bibtex-completion-get-value "maintitle" entry))
                    (volume (bibtex-completion-get-value "volume" entry)))
                (setq field-value
-                     (concat maintitle
-                             (when (and maintitle field-value) ": ")
-                             field-value
-                             (when (and (or maintitle field-value) volume) ", ")
-                             (when volume (concat "Vol. " volume))))))
+                     (or searchtitle
+                         (concat maintitle
+                                 (when (and maintitle field-value) ": ")
+                                 field-value
+                                 (when (and (or maintitle field-value) volume) ", ")
+                                 (when volume (concat "Vol. " volume)))))))
            (when (and (string= field-name "author")
                       (not field-value))
              (setq field-value (bibtex-completion-get-value "editor" entry)))
@@ -3512,7 +3514,7 @@ Return DEFAULT if FIELD is not present in ENTRY."
          bibtex-completion-notes-extension ".org"
          bibtex-completion-pdf-extension '(".pdf" ".djvu")
          bibtex-completion-find-additional-pdfs t
-         bibtex-completion-additional-search-fields '("maintitle" "volume" "keywords")
+         bibtex-completion-additional-search-fields '("searchtitle" "maintitle" "volume" "keywords" "edition")
 
          bibtex-completion-notes-template-multiple-files (format "#+TITLE: ${title} (${year})
 ,#+AUTHOR: ${author-or-editor}
