@@ -1674,9 +1674,13 @@ fundamental-mode) for performance sake."
 
 (use-package matlab :ensure matlab-mode)
 (use-package matlab-shell
+  :init
+  (setq! magic-mode-alist (assq-delete-all 'matlab-is-matlab-file magic-mode-alist))
+
   :config
   (setq! matlab-shell-command-switches '("-nodesktop" "-nosplash")
-         matlab-shell-use-emacs-toolbox nil)
+         matlab-shell-use-emacs-toolbox nil
+         magic-mode-alist (assq-delete-all 'matlab-is-matlab-file magic-mode-alist))
 
   (defun matlab-shell-first-prompt-fcn ()))
 #+END_SRC
