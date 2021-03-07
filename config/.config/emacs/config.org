@@ -1670,7 +1670,11 @@ fundamental-mode) for performance sake."
          inferior-octave-prompt "^octave\\(octave\\|[ >]\\)*"
          octave-comment-char ?%
          octave-comment-start (char-to-string octave-comment-char)
-         octave-block-comment-start (concat (make-string 2 octave-comment-char) " ")))
+         octave-block-comment-start (concat (char-to-string octave-comment-char) " ")
+         octave-block-offset 4)
+
+  (add-hook! octave-mode (setq-local comment-add 0))
+  (defun octave-indent-comment () nil))
 
 (use-package matlab :ensure matlab-mode)
 (use-package matlab-shell
