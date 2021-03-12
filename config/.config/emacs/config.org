@@ -2036,6 +2036,8 @@ The next part was taken from DOOM themes
 (add-hook! 'org-after-refile-insert-hook
   (org-up-heading-safe)
   (org-update-statistics-cookies nil))
+
+(advice-add #'org-refile :after (lambda (&rest _) (org-save-all-org-buffers)))
 #+END_SRC
 
 **** Priorities
