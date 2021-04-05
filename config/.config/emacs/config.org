@@ -1698,6 +1698,15 @@ fundamental-mode) for performance sake."
          mips-comments-column 40))
 #+END_SRC
 
+*** Python
+#+begin_src emacs-lisp
+(use-package python
+  :config
+  (when (executable-find "ipython")
+    (setq! python-shell-interpreter "ipython"
+           python-shell-interpreter-args "--simple-prompt --no-banner")))
+#+end_src
+
 *** SPICE
 #+begin_src emacs-lisp
 (use-package spice-mode :ensure

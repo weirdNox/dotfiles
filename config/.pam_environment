@@ -27,3 +27,7 @@ STNODEFAULTFOLDER   DEFAULT=yes
 
 # Java
 _SILENT_JAVA_OPTIONS DEFAULT="-Dawt.useSystemAAFontSettings=on -Dswing.aatext=true"
+
+# Python and Jupyter
+IPYTHONDIR          DEFAULT=${XDG_CONFIG_HOME}/ipython
+JUPYTER_CONFIG_DIR  DEFAULT=${XDG_CONFIG_HOME}/jupyter

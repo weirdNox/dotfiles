@@ -1,0 +1,19 @@
+import matplotlib
+import matplotlib.pyplot as pyplot
+import matplotlib.pyplot as plt
+
+import numpy
+import numpy as np
+
+import pandas
+import pandas as pd
+
+from scipy import fft
+from scipy import integrate
+from scipy import interpolate
+from scipy import signal
+
+import sympy
+import sympy as sym
+
+%matplotlib
