@@ -770,7 +770,7 @@ symbols.
 
 *** Font
 #+BEGIN_SRC emacs-lisp
-(defvar nox-fonts '(("PragmataPro" . 12) ("DejaVu Sans Mono" . 10) ("Source Code Pro" . 10)
+(defvar nox-fonts '(("PragmataPro" . 11) ("DejaVu Sans Mono" . 10) ("Source Code Pro" . 10)
                     ("Iosevka" . 12) ("Inconsolata" . 13))
   "List of fonts and sizes. The first one available will be used.")
 
