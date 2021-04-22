@@ -1174,6 +1174,7 @@ Used for sorting items.
        tab-always-indent t
        tabify-regexp "^\t* [ \t]+"
        fill-column 105
+       comment-column 0
        word-wrap t
        truncate-lines t
        truncate-partial-width-windows 70)
