@@ -358,6 +358,11 @@ When ARG is:
          (kill-server (or (equal arg '(4))
                           (and save-without-asking
                                (>= arg 0)))))
+
+    (when (and (featurep 'org-clock) (org-clocking-p)
+               (y-or-n-p (format "Clock out of '%s'?" org-clock-current-task)))
+      (org-clock-out nil t))
+
     (if kill-server
         (save-buffers-kill-emacs save-without-asking)
       (save-buffers-kill-terminal save-without-asking))))
