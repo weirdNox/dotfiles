@@ -1,33 +1,36 @@
-HOME_LOCAL_DIR      DEFAULT=@{HOME}/.local
+HOME_LOCAL_DIR      DEFAULT="@{HOME}/.local"
 
-XDG_CACHE_HOME      DEFAULT=@{HOME}/.cache
+XDG_CACHE_HOME      DEFAULT="@{HOME}/.cache"
 
-XDG_CONFIG_DIRS     DEFAULT=/etc/xdg
-XDG_CONFIG_HOME     DEFAULT=@{HOME}/.config
+XDG_CONFIG_DIRS     DEFAULT="/etc/xdg"
+XDG_CONFIG_HOME     DEFAULT="@{HOME}/.config"
 
-XDG_BIN_HOME        DEFAULT=${HOME_LOCAL_DIR}/bin
-PATH                DEFAULT=${XDG_BIN_HOME}:/usr/local/sbin:/usr/local/bin:/usr/bin
+XDG_BIN_HOME        DEFAULT="${HOME_LOCAL_DIR}/bin"
+PATH                DEFAULT="${XDG_BIN_HOME}:/usr/local/sbin:/usr/local/bin:/usr/bin"
 
-XDG_DATA_DIRS       DEFAULT=/usr/local/share/:/usr/share/
-XDG_DATA_HOME       DEFAULT=${HOME_LOCAL_DIR}/share
+XDG_DATA_DIRS       DEFAULT="/usr/local/share/:/usr/share/"
+XDG_DATA_HOME       DEFAULT="${HOME_LOCAL_DIR}/share"
 
-XDG_LIB_HOME        DEFAULT=${HOME_LOCAL_DIR}/lib
+XDG_LIB_HOME        DEFAULT="${HOME_LOCAL_DIR}/lib"
 
-EDITOR              DEFAULT=${XDG_BIN_HOME}/editor
-VISUAL              DEFAULT=${EDITOR}
+EDITOR              DEFAULT="${XDG_BIN_HOME}/editor"
+VISUAL              DEFAULT="${EDITOR}"
 ALTERNATE_EDITOR    DEFAULT=""
 
-DICPATH             DEFAULT=${XDG_DATA_HOME}/dicts
+DICPATH             DEFAULT="${XDG_DATA_HOME}/dicts"
 
 # SSH key agent
 SSH_AUTH_SOCK DEFAULT="${XDG_RUNTIME_DIR}/ssh-agent.socket"
 
 # Syncthing - Don't create default folder
-STNODEFAULTFOLDER   DEFAULT=yes
+STNODEFAULTFOLDER   DEFAULT="yes"
 
 # Java
 _SILENT_JAVA_OPTIONS DEFAULT="-Dawt.useSystemAAFontSettings=on -Dswing.aatext=true"
 
 # Python and Jupyter
-IPYTHONDIR          DEFAULT=${XDG_CONFIG_HOME}/ipython
-JUPYTER_CONFIG_DIR  DEFAULT=${XDG_CONFIG_HOME}/jupyter
+IPYTHONDIR          DEFAULT="${XDG_CONFIG_HOME}/ipython"
+JUPYTER_CONFIG_DIR  DEFAULT="${XDG_CONFIG_HOME}/jupyter"
+
+# GDB
+GDBHISTFILE         DEFAULT="${XDG_DATA_HOME}/gdb/history"

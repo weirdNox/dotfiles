@@ -14,5 +14,7 @@ alias vpn-down='wg-quick down mullvad'
 
 alias moltengamepad='moltengamepad --mimic-xpad --dpad-as-hat'
 
+alias gdash='gdb -nh -x "$XDG_CONFIG_HOME"/gdb/gdb-dashboard'
+
 # This makes bash check if the commands following sudo are aliases
 alias sudo='sudo '
