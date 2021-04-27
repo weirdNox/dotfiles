@@ -64,15 +64,12 @@ dependencies or long-term shared data.")
 (defconst nox-cache-dir (concat nox-local-dir "cache/")
   "Directory for volatile storage.
 Use this for files that change often, like cache files.")
-
-(defconst nox-packages-dir (concat nox-local-dir "packages/")
-  "Where packages are stored.")
 #+END_SRC
 
 Also create the directories if they don't exist.
 
 #+BEGIN_SRC emacs-lisp
-(dolist (dir (list nox-local-dir nox-etc-dir nox-cache-dir nox-packages-dir))
+(dolist (dir (list nox-local-dir nox-etc-dir nox-cache-dir))
   (unless (file-directory-p dir) (make-directory dir t)))
 #+END_SRC
 
@@ -445,24 +442,26 @@ called. The buffer to be switched to is current when these hooks run.")
 
 *** Package ecosystem
 #+BEGIN_SRC emacs-lisp
-(require 'package)
-(setq! package-user-dir      nox-packages-dir
-       package-gnupghome-dir nox-packages-dir
-       package-archives
-       '(("gnu"   . "https://elpa.gnu.org/packages/")
-         ("melpa" . "https://melpa.org/packages/")
-         ("org"   . "https://orgmode.org/elpa/")))
+(defvar straight-base-dir nox-local-dir)
+(defvar bootstrap-version)
 
-(package-initialize)
+(let ((bootstrap-file (expand-file-name "straight/repos/straight.el/bootstrap.el" straight-base-dir))
+      (bootstrap-version 5))
+  (unless (file-exists-p bootstrap-file)
+    (with-current-buffer (url-retrieve-synchronously
+			              "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
+			              'silent 'inhibit-cookies)
+      (goto-char (point-max))
+      (eval-print-last-sexp)))
+  (load bootstrap-file nil 'nomessage))
+
+(setq! straight-vc-git-default-clone-depth 1)
 #+END_SRC
 
 **** Setup use-package
 #+BEGIN_SRC emacs-lisp
-(unless (package-installed-p 'use-package)
-  (package-refresh-contents)
-  (package-install 'use-package))
+(straight-use-package 'use-package)
 
-(require 'use-package)
 (setq! use-package-always-defer t
        use-package-verbose nox-debug-mode
        use-package-compute-statistics nox-debug-mode
@@ -475,8 +474,9 @@ symbols.
 
 #+BEGIN_SRC emacs-lisp
 (defvar nox-deferred-packages-alist '(t))
+
 (after! use-package-core
-  (add-to-list 'use-package-deferring-keywords :after-call nil #'eq)
+  (push :after-call use-package-deferring-keywords)
   (setq use-package-keywords
         (use-package-list-insert :after-call use-package-keywords :after))
 
@@ -513,24 +513,9 @@ symbols.
          (use-package-process-keywords name rest state))))))
 #+END_SRC
 
-**** Setup Quelpa
-#+BEGIN_SRC emacs-lisp
-(use-package quelpa :ensure
-  :init
-  (setq! quelpa-dir (concat nox-packages-dir "quelpa-cache/")
-         quelpa-verbose nox-debug-mode
-         quelpa-melpa-recipe-stores nil
-         quelpa-checkout-melpa-p nil
-         quelpa-update-melpa-p nil
-         quelpa-self-upgrade-p nil))
-
-(use-package quelpa-use-package :ensure
-  :demand)
-#+END_SRC
-
 **** Async package byte compilation
 #+BEGIN_SRC emacs-lisp
-(use-package async :ensure
+(use-package async :straight t
   :demand
   :config
   (async-bytecomp-package-mode)
@@ -540,7 +525,7 @@ symbols.
 *** Packages
 **** General
 #+BEGIN_SRC emacs-lisp
-(use-package general :ensure
+(use-package general :straight t
   :demand
   :config
   (general-create-definer nox-leader :prefix "C-c")
@@ -549,13 +534,13 @@ symbols.
 
 **** Hydra
 #+BEGIN_SRC emacs-lisp
-(use-package hydra :ensure
+(use-package hydra :straight t
   :config (setq! lv-use-separator t))
 #+END_SRC
 
 **** Projectile
 #+BEGIN_SRC emacs-lisp
-(use-package projectile :ensure
+(use-package projectile :straight t
   :demand
   :general (:keymaps 'projectile-mode-map "C-c p" '(:keymap projectile-command-map :wk "Projectile"))
   :init
@@ -566,7 +551,6 @@ symbols.
          projectile-dynamic-mode-line nil
          projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
          projectile-globally-ignored-files '(".DS_Store" "TAGS")
-         projectile-ignored-projects (list user-emacs-directory)
          projectile-indexing-method (if IS-WINDOWS 'native 'alien)
          projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
          projectile-other-file-alist (append projectile-other-file-alist
@@ -578,7 +562,7 @@ symbols.
   (push ".project" projectile-project-root-files-bottom-up)
 
   (defun +projectile-ignored-project-p (path)
-    (string-prefix-p nox-local-dir path))
+    (string-prefix-p nox-emacs-dir path))
   (setq! projectile-ignored-project-function #'+projectile-ignored-project-p)
 
   (defun +projectile-project-buffers ()
@@ -872,7 +856,7 @@ ARGS are the same as in `custom-set-faces'."
      '(org-agenda-structure ((t . (:inherit font-lock-doc-face))))
      '(hl-line ((t . (:background "#32302F")))))))
 
-(use-package doom-themes :ensure
+(use-package doom-themes :straight t
   :config
   (setq! doom-one-brighter-comments t
          doom-one-comment-bg nil
@@ -893,7 +877,7 @@ ARGS are the same as in `custom-set-faces'."
     (nox-theme-set-faces
      `(org-special-keyword ((t . (:foreground ,(face-attribute 'shadow :foreground))))))))
 
-(use-package gruvbox-theme :ensure
+(use-package gruvbox-theme :straight t
   :config
   (nox-add-customize-theme-hook "^gruvbox"
     (nox-theme-set-faces
@@ -903,7 +887,7 @@ ARGS are the same as in `custom-set-faces'."
      `(org-block ((t . (:background ,(ignore-errors (color-darken-name (face-attribute 'default :background) 2))))))
      `(fringe ((t . (:foreground ,(ignore-errors (color-darken-name (face-attribute 'shadow :foreground) 10)))))))))
 
-(use-package color-theme-sanityinc-tomorrow :ensure
+(use-package color-theme-sanityinc-tomorrow :straight t
   :config
   (nox-add-customize-theme-hook "^sanityinc"
     (nox-theme-set-faces
@@ -975,7 +959,7 @@ Disable fringes in the minibuffer window.
 **** Base configuration
 ***** Settings
 #+begin_src emacs-lisp
-(use-package ivy :ensure
+(use-package ivy :straight t
   :demand
   :general
   ("C-x b"  '+ivy/switch-buffer)
@@ -1089,7 +1073,7 @@ Disable fringes in the minibuffer window.
 
 **** Ivy hydra
 #+BEGIN_SRC emacs-lisp
-(use-package ivy-hydra :ensure
+(use-package ivy-hydra :straight t
   :commands ivy-hydra-read-action
   :init (setq! ivy-read-action-function #'ivy-hydra-read-action))
 #+END_SRC
@@ -1098,14 +1082,14 @@ Disable fringes in the minibuffer window.
 Used for sorting items.
 
 #+BEGIN_SRC emacs-lisp
-(use-package flx :ensure
+(use-package flx :straight t
   :after ivy
   :demand)
 #+END_SRC
 
 *** Counsel
 #+BEGIN_SRC emacs-lisp
-(use-package counsel :ensure
+(use-package counsel :straight t
   :demand
   :config
   (defun counsel-find-file-as-root (x)
@@ -1145,14 +1129,14 @@ Used for sorting items.
 
 **** Better ~counsel-M-x~
 #+BEGIN_SRC emacs-lisp
-(use-package amx :ensure
+(use-package amx :straight t
   :config
   (setq! amx-save-file (concat nox-cache-dir "/amx-items")))
 #+END_SRC
 
 **** Better Projectile
 #+BEGIN_SRC emacs-lisp
-(use-package counsel-projectile :ensure
+(use-package counsel-projectile :straight t
   :after (:all projectile ivy counsel)
   :demand
   :config
@@ -1250,7 +1234,7 @@ Used for sorting items.
 
 *** Swiper
 #+BEGIN_SRC emacs-lisp
-(use-package swiper :ensure
+(use-package swiper :straight t
   :general
   ("C-r" 'swiper
    "C-s" 'counsel-grep-or-swiper
@@ -1262,7 +1246,7 @@ Used for sorting items.
 
 *** Company
 #+BEGIN_SRC emacs-lisp
-(use-package company :ensure
+(use-package company :straight t
   :after-call (pre-command-hook after-find-file dired-before-readin-hook)
   :general
   (:keymaps 'company-mode-map
@@ -1306,7 +1290,7 @@ Used for sorting items.
 *** Navigation
 **** Avy
 #+BEGIN_SRC emacs-lisp
-(use-package avy :ensure
+(use-package avy :straight t
   :general
   ("C-."   #'avy-goto-char-timer
    "M-g l" #'avy-goto-line
@@ -1319,7 +1303,7 @@ Used for sorting items.
 
 **** Dumb jump
 #+BEGIN_SRC emacs-lisp
-(use-package dumb-jump :ensure
+(use-package dumb-jump :straight t
   :commands dumb-jump-result-follow
   :general
   ("M-g j" #'nox@dumb-jump/body)
@@ -1479,13 +1463,13 @@ Position the cursor at its beginning, according to the current mode."
 *** Selection
 **** Expand region
 #+BEGIN_SRC emacs-lisp
-(use-package expand-region :ensure
+(use-package expand-region :straight t
   :general ("C-=" 'er/expand-region))
 #+END_SRC
 
 **** Multiple cursors
 #+BEGIN_SRC emacs-lisp
-(use-package multiple-cursors :ensure
+(use-package multiple-cursors :straight t
   :general
   ("C-c l" 'mc/edit-lines
    "C-M-»" 'mc/mark-all-like-this
@@ -1628,12 +1612,12 @@ fundamental-mode) for performance sake."
 
 *** GLSL
 #+begin_src emacs-lisp
-(use-package glsl-mode :ensure)
+(use-package glsl-mode :straight t)
 #+end_src
 
 *** Go
 #+BEGIN_SRC emacs-lisp
-(use-package go-mode :ensure
+(use-package go-mode :straight t
   :config
   (setq! gofmt-command (substitute-in-file-name "$GOPATH/bin/goimports"))
   (add-hook! go-mode (add-hook! :local 'before-save-hook 'gofmt-before-save)))
@@ -1641,7 +1625,7 @@ fundamental-mode) for performance sake."
 
 *** LaTeX
 #+BEGIN_SRC emacs-lisp
-(use-package tex :ensure auctex
+(use-package auctex :straight t
   :commands +tex*set-auto-location
   :config
   (setq! TeX-auto-save t
@@ -1682,7 +1666,7 @@ fundamental-mode) for performance sake."
   (add-hook! octave-mode (setq-local comment-add 0))
   (defun octave-indent-comment () nil))
 
-(use-package matlab :ensure matlab-mode)
+(use-package matlab :straight matlab-mode)
 (use-package matlab-shell
   :init
   (setq! magic-mode-alist (assq-delete-all 'matlab-is-matlab-file magic-mode-alist))
@@ -1715,7 +1699,7 @@ fundamental-mode) for performance sake."
 
 *** SPICE
 #+begin_src emacs-lisp
-(use-package spice-mode :ensure
+(use-package spice-mode :straight t
   :mode (("\\.sp\\'"  . spice-mode)
          ("\\.cir\\'" . spice-mode)
          ("\\.cdl\\'" . spice-mode)
@@ -1742,14 +1726,14 @@ fundamental-mode) for performance sake."
 
 *** Web
 #+BEGIN_SRC emacs-lisp
-(use-package web-mode :ensure
+(use-package web-mode :straight t
   :mode (("\\.\\(go\\)?html?\\'" . web-mode)))
 #+END_SRC
 
 ** Org Mode
 *** Base configuration
 #+BEGIN_SRC emacs-lisp
-(use-package org :ensure org-plus-contrib
+(use-package org :straight (org-plus-contrib :includes org)
   :general
   (nox-leader :infix "o"
     ""  '(:ignore t :wk "Org")
@@ -2494,7 +2478,7 @@ some heuristics to guess the result."
                       'org-complex-heading-regexp org-complex-heading-regexp
                       'org-highest-priority org-highest-priority
                       'org-lowest-priority org-lowest-priority
-                      'tags (mapcar 'org-downcase-keep-props (+agenda-entry-tags entry))
+                      'tags (+agenda-entry-tags entry)
                       'format `(nil ,prefix)))
          (tags (delq nil (mapcar #'+agenda-filter-tags (+agenda-entry-tags entry))))
          (text
@@ -3117,13 +3101,13 @@ When optional argument is non-nil, refresh cached heading."
 
 *** Latex editor and helpers
 #+BEGIN_SRC emacs-lisp
-(use-package org-edit-latex :ensure)
-(use-package cdlatex :ensure)
+(use-package org-edit-latex :straight t)
+(use-package cdlatex :straight t)
 #+END_SRC
 
 *** Org Noter
 #+BEGIN_SRC emacs-lisp
-(use-package org-noter :ensure
+(use-package org-noter :straight t
   :general
   (nox-local-leader :keymaps 'org-mode-map      "n" '(org-noter :wk "Org Noter"))
   (nox-local-leader :keymaps 'pdf-view-mode-map "n" '(org-noter :wk "Org Noter"))
@@ -3416,7 +3400,7 @@ Return the result as a string."
   :config
   (setq! reftex-default-bibliography +bibtex-bibliography))
 
-(use-package ivy-bibtex :ensure
+(use-package ivy-bibtex :straight t
   :config
   (defvar +bibtex-completion-external-key nil)
   (defun +bibtex-completion-get-key-external () +bibtex-completion-external-key)
@@ -3568,7 +3552,7 @@ Return DEFAULT if FIELD is not present in ENTRY."
 
   (ivy-add-actions 'ivy-bibtex '(("O" +ivy-bibtex-insert-org-link "Insert Org link"))))
 
-(use-package biblio :ensure
+(use-package biblio :straight t
   :demand
   :after biblio-core
   :config
@@ -3968,11 +3952,11 @@ Return DEFAULT if FIELD is not present in ENTRY."
 
 **** Diredfl and Dired+
 #+BEGIN_SRC emacs-lisp
-(use-package diredfl :ensure
+(use-package diredfl :straight t
   :after-call (dired-mode-hook)
   :config (diredfl-global-mode))
 
-(use-package dired+ :quelpa (dired+ :fetcher wiki)
+(use-package dired+ :straight t
   :after-call (dired-mode-hook))
 #+END_SRC
 
@@ -3986,7 +3970,7 @@ Return DEFAULT if FIELD is not present in ENTRY."
 
 **** PDF Tools
 #+BEGIN_SRC emacs-lisp
-(use-package pdf-tools :ensure
+(use-package pdf-tools :straight t
   :mode ("\\.pdf\\'" . pdf-view-mode)
   :commands (org-pdfview-open org-pdfview-store-link org-pdfview-complete-link)
   :general
@@ -4070,7 +4054,7 @@ and append it."
 
 **** Nov.el
 #+BEGIN_SRC emacs-lisp
-(use-package nov :ensure
+(use-package nov :straight t
   :mode (("\\.epub\\'" . nov-mode))
   :config
   (setq! nov-save-place-file (concat nox-cache-dir "nov-places")))
@@ -4144,21 +4128,28 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 
 *** GDB
 #+BEGIN_SRC emacs-lisp
-(use-package gdb-mi :quelpa (gdb-mi :fetcher git
-                                    :url "https://github.com/weirdNox/emacs-gdb.git"
-                                    :files ("*.el" "*.c" "*.h" "Makefile"))
+(use-package gdb-mi :straight (gdb-mi :type git
+                                      :host github :repo "weirdNox/emacs-gdb"
+                                      :files ("*.el" "*.c" "*.h" "Makefile"))
   :init
   (fmakunbound 'gdb)
-  (fmakunbound 'gdb-enable-debug))
+  (fmakunbound 'gdb-enable-debug)
+  (fmakunbound 'gud-gdb))
 #+END_SRC
 
 *** Git
 #+BEGIN_SRC emacs-lisp
-(use-package magit :ensure
+(use-package magit :straight t
   :when (executable-find "git")
   :config
   (setq! magit-diff-refine-hunk 'all
          magit-bury-buffer-function 'magit-mode-quit-window))
+
+(use-package transient :straight t
+  :config
+  (setq! transient-levels-file  (concat nox-etc-dir   "transient/levels.el")
+         transient-values-file  (concat nox-etc-dir   "transient/values.el")
+         transient-history-file (concat nox-cache-dir "transient/history.el")))
 #+END_SRC
 
 *** Misc
@@ -4235,7 +4226,7 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 
 *** SageMath
 #+begin_src emacs-lisp
-(use-package sage-shell-mode :ensure
+(use-package sage-shell-mode :straight t
   :init
   (sage-shell:define-alias))
 #+end_src
@@ -4254,7 +4245,7 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 
 *** Treemacs
 #+BEGIN_SRC emacs-lisp
-(use-package treemacs :ensure
+(use-package treemacs :straight t
   :config
   (setq! treemacs-collapse-dirs (if (executable-find "python") 3 0)
          treemacs-follow-after-init t
@@ -4291,7 +4282,7 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 
 *** Which-key
 #+BEGIN_SRC emacs-lisp
-(use-package which-key :ensure
+(use-package which-key :straight t
   :defer 1
   :after-call pre-command-hook
   :config
