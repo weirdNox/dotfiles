@@ -4243,19 +4243,6 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
                                        (nil "\\`root\\'" "/ssh:%h:"))))
 #+END_SRC
 
-*** Treemacs
-#+BEGIN_SRC emacs-lisp
-(use-package treemacs :straight t
-  :config
-  (setq! treemacs-collapse-dirs (if (executable-find "python") 3 0)
-         treemacs-follow-after-init t
-         treemacs-persist-file (concat nox-cache-dir "treemacs-persist")))
-
-(use-package doom-themes-ext-treemacs
-  :after treemacs :demand
-  :init (setq! doom-themes-treemacs-enable-variable-pitch nil))
-#+END_SRC
-
 ** Keybindings
 *** Global keybindings
 #+BEGIN_SRC emacs-lisp
