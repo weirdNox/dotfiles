@@ -323,7 +323,6 @@ compilation. This will no-op on features that have been disabled by the user."
 #+END_SRC
 
 **** Open file externally
-Taken from =counsel.el=
 #+begin_src emacs-lisp
 (defun nox/open-externally (file)
   "Pass FILE to `xdg-open' or equivalent command via the shell."
@@ -538,45 +537,6 @@ symbols.
   :config (setq! lv-use-separator t))
 #+END_SRC
 
-**** Projectile
-#+BEGIN_SRC emacs-lisp
-(use-package projectile :straight t
-  :demand
-  :general (:keymaps 'projectile-mode-map "C-c p" '(:keymap projectile-command-map :wk "Projectile"))
-  :init
-  (setq! projectile-cache-file (concat nox-cache-dir "projectile.cache"))
-
-  :config
-  (setq! projectile-completion-system 'ivy
-         projectile-dynamic-mode-line nil
-         projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
-         projectile-globally-ignored-files '(".DS_Store" "TAGS")
-         projectile-indexing-method (if IS-WINDOWS 'native 'alien)
-         projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
-         projectile-other-file-alist (append projectile-other-file-alist
-                                             '(("css"  "scss" "sass" "less" "styl")
-                                               ("scss" "css")
-                                               ("sass" "css")
-                                               ("less" "css")
-                                               ("styl" "css"))))
-  (push ".project" projectile-project-root-files-bottom-up)
-
-  (defun +projectile-ignored-project-p (path)
-    (string-prefix-p nox-emacs-dir path))
-  (setq! projectile-ignored-project-function #'+projectile-ignored-project-p)
-
-  (defun +projectile-project-buffers ()
-    (let* ((project-root (file-truename (projectile-ensure-project (projectile-project-root))))
-           (all-buffers (cl-remove-if-not
-                         (lambda (buffer) (projectile-project-buffer-p buffer project-root))
-                         (buffer-list))))
-      (if projectile-buffers-filter-function
-          (funcall projectile-buffers-filter-function all-buffers)
-        all-buffers)))
-
-  (projectile-mode))
-#+END_SRC
-
 ** General settings and tweaks
 #+BEGIN_SRC emacs-lisp
 (setq!
@@ -759,7 +719,7 @@ symbols.
 
 *** Font
 #+BEGIN_SRC emacs-lisp
-(defvar nox-fonts '(("PragmataPro" . 11) ("DejaVu Sans Mono" . 10) ("Source Code Pro" . 10)
+(defvar nox-fonts '(("PragmataPro" . 12) ("DejaVu Sans Mono" . 10) ("Source Code Pro" . 10)
                     ("Iosevka" . 12) ("Inconsolata" . 13))
   "List of fonts and sizes. The first one available will be used.")
 
@@ -955,192 +915,268 @@ Disable fringes in the minibuffer window.
 #+END_SRC
 
 ** Minibuffer completion
-*** Ivy
-**** Base configuration
-***** Settings
+*** Selectrum
 #+begin_src emacs-lisp
-(use-package ivy :straight t
+(use-package selectrum :straight t
+  :demand
+  :config
+  (setq! suggest-key-bindings nil
+         selectrum-max-window-height nil)
+  (selectrum-mode 1))
+#+end_src
+
+*** Filtering and frecency-based sorting
+#+begin_src emacs-lisp
+(use-package prescient
+  :config
+  (prescient-persist-mode 1)
+  (setq! prescient-history-length 1000))
+
+(use-package selectrum-prescient :straight t
+  :after selectrum :demand
+  :config
+  (selectrum-prescient-mode 1))
+#+end_src
+
+*** Consult
+#+begin_src emacs-lisp
+(use-package consult :straight t
   :demand
   :general
-  ("C-x b"  '+ivy/switch-buffer)
-  (:keymaps 'ivy-minibuffer-map
-            "RET" 'ivy-alt-done
-            "C-j" 'ivy-done
-            "C-r" 'counsel-minibuffer-history
-            "<C-return>" 'ivy-restrict-to-matches
-            "S-SPC" nil)
+  ("C-x M-:" #'consult-complex-command)
+  ("C-x b"   #'consult-buffer)
+  ("C-x 4 b" #'consult-buffer-other-window)
+  ("C-x 5 b" #'consult-buffer-other-frame)
+
+  ("M-y" #'consult-yank-pop)
+
+  ("M-g I"   #'consult-project-imenu)
+  ("M-g M-g" #'consult-goto-line)
+  ("M-g e"   #'consult-compile-error)
+  ("M-g g"   #'consult-goto-line)
+  ("M-g i"   #'consult-imenu)
+  ("M-g k"   #'consult-global-mark)
+  ("M-g m"   #'consult-mark)
+  ("M-g o"   #'consult-outline)
+
+  ("M-s f" #'consult-find)
+  ("M-s L" #'consult-locate)
+  ("M-s g" #'consult-grep)
+  ("M-s G" #'consult-git-grep)
+  ("M-s r" #'consult-ripgrep)
+  ("M-s l" #'consult-line)
+  ("M-s m" #'consult-multi-occur)
+  ("M-s k" #'consult-keep-lines)
+  ("M-s u" #'consult-focus-lines)
+  ("M-s e" #'consult-isearch)
+
+  (nox-leader "k" #'consult-kmacro)
+
+  :init
+  (setq! register-preview-delay 0
+         register-preview-function #'consult-register-format)
+  (advice-add #'register-preview :override #'consult-register-window)
+
+  (setq! xref-show-xrefs-function #'consult-xref
+         xref-show-definitions-function #'consult-xref)
 
   :config
-  (setq! ivy-count-format "(%d/%d) "
-         ivy-extra-directories nil
-         ivy-fixed-height-minibuffer t
-         ivy-format-function #'ivy-format-function-line
-         ivy-height 15
-         ivy-initial-inputs-alist nil
-         ivy-magic-slash-non-match-action nil
-         ivy-on-del-error-function nil
-         ivy-use-selectable-prompt t
-         ivy-use-virtual-buffers t
-         ivy-virtual-abbreviate 'full
-         ivy-wrap t)
+  (setq! consult-narrow-key "<")
 
-  (setq! ivy-re-builders-alist '((t . ivy--regex-plus)))
-
-  (ivy-mode)
+  (defface +consult-project '((t :inherit font-lock-constant-face))
+    "Face used to highlight projects."))
 #+end_src
 
-***** Better buffer switcher
+*** Search
 #+begin_src emacs-lisp
-(defun +ivy--colorize-buffer-str (str buffer file-name)
-  (cond ((and (not (ignore-errors (file-remote-p file-name)))
-              (not (verify-visited-file-modtime buffer)))
-         (ivy-append-face str 'ivy-modified-outside-buffer))
-        ((buffer-modified-p buffer) (ivy-append-face str 'ivy-modified-buffer))
-        (t (ivy-append-face str 'ivy-org))))
-
-(defun +ivy--get-buffer-display-and-name (buffer)
-  (let ((buffer-name (buffer-name buffer))
-        (file-name (buffer-file-name buffer))
-        str directory)
-    (setq str buffer-name)
-    (unless (eq (aref buffer-name 0) ? )
-      (if (setq directory (or (and file-name (file-name-directory (expand-file-name file-name)))
-                              (expand-file-name (buffer-local-value 'default-directory buffer))))
-          (progn
-            (when (and (not (buffer-base-buffer buffer))
-                       (setq uniquify (buffer-local-value 'uniquify-managed buffer)))
-              (setq str (uniquify-item-base (car uniquify))))
-
-            (when (eq (buffer-local-value 'major-mode buffer) 'dired-mode)
-              (setq directory (or (file-name-directory (directory-file-name directory)) "")))
-
-            (setq str (concat (ivy-append-face (abbreviate-file-name directory) 'shadow)
-                              (+ivy--colorize-buffer-str str buffer file-name))))
-        (+ivy--colorize-buffer-str str buffer file-name))
-      (cons str buffer-name))))
-
-(defun +ivy--buffers-collection ()
-  (let (collection)
-    (dolist (buffer (buffer-list))
-      (let ((display-and-name (+ivy--get-buffer-display-and-name buffer)))
-        (when display-and-name
-          (push display-and-name collection))))
-
-    (nconc (nreverse collection) (and ivy-use-virtual-buffers (ivy--virtual-buffers)))))
-
-(defun +ivy--switch-buffer-action (selection)
-  (ivy--switch-buffer-action (if (consp selection) (cdr selection) selection)))
-
-(defun +ivy--switch-buffer-other-window-action (selection)
-  (ivy--switch-buffer-other-window-action (if (consp selection) (cdr selection) selection)))
-
-(defun +ivy--find-file-action (selection)
-  (ivy--find-file-action (if (consp selection) (cdr selection) selection)))
-
-(defun +ivy--kill-buffer-action (selection)
-  (ivy--kill-buffer-action (if (consp selection) (cdr selection) selection)))
-
-(defun +ivy--rename-buffer-action (selection)
-  (+ivy--rename-buffer-action (if (consp selection) (cdr selection) selection)))
-
-(defun +ivy/switch-buffer ()
-  "Switch to another buffer."
-  (interactive)
-  (setq this-command #'+ivy-switch-buffer)
-  (let ((buffer-list (buffer-list (selected-frame)))
-        other-buffer)
-    (while (and (null other-buffer) (setq other-buffer (pop buffer-list)))
-      (when (or (minibufferp other-buffer) (get-buffer-window other-buffer))
-        (setq other-buffer nil)))
-
-    (ivy-read "Switch to buffer: " (+ivy--buffers-collection)
-              :preselect (car (+ivy--get-buffer-display-and-name other-buffer))
-              :action #'+ivy--switch-buffer-action
-              :matcher #'ivy--switch-buffer-matcher
-              :caller #'+ivy-switch-buffer)))
-
-(ivy-set-actions '+ivy-switch-buffer
-                 '(("j" +ivy--switch-buffer-other-window-action "other window")
-                   ("f" +ivy--find-file-action "find file")
-                   ("k" +ivy--kill-buffer-action "kill")
-                   ("r" +ivy--rename-buffer-action "rename")))
+(use-package ctrlf :straight t
+  :init
+  (ctrlf-mode 1))
 #+end_src
 
-***** End
+*** Actions
 #+begin_src emacs-lisp
-) ;; use-package
-#+end_src
+(use-package embark :straight t
+  :demand
+  :general
+  ("C-h b" #'embark-bindings)
+  (:keymaps 'minibuffer-local-map
+            "C-;" #'embark-act)
 
-**** Ivy hydra
-#+BEGIN_SRC emacs-lisp
-(use-package ivy-hydra :straight t
-  :commands ivy-hydra-read-action
-  :init (setq! ivy-read-action-function #'ivy-hydra-read-action))
-#+END_SRC
+  :init
+  (setq! prefix-help-command #'embark-prefix-help-command)
 
-**** flx
-Used for sorting items.
+  :config
+  (setq! embark-action-indicator (lambda (map _target)
+                                   (which-key--show-keymap "Embark" map nil nil 'no-paging)
+                                   #'which-key--hide-popup-ignore-command)
+         embark-become-indicator embark-action-indicator))
 
-#+BEGIN_SRC emacs-lisp
-(use-package flx :straight t
-  :after ivy
-  :demand)
-#+END_SRC
+(use-package embark-consult :straight t
+  :after (embark consult) :demand
+  :hook (embark-collect-mode . embark-consult-preview-minor-mode))
 
-*** Counsel
-#+BEGIN_SRC emacs-lisp
-(use-package counsel :straight t
+(use-package marginalia :straight t
   :demand
   :config
-  (defun counsel-find-file-as-root (x)
-    "Find file X with root privileges."
-    (counsel-require-program counsel-root-command)
-    (let* ((remote (file-remote-p x))
-           (host (file-remote-p x 'host))
-           (method (file-remote-p x 'method))
-           (file-name
-            (if (string= method counsel-root-command)
-                x
-              (concat (if remote
-                          (concat (substring remote 0 -1) "|")
-                        "/")
-                      (format "%s:%s:%s"
-                              counsel-root-command (or host "")
-                              (expand-file-name (if remote (file-remote-p x 'localname) x)))))))
-      (if (eq (current-buffer) (get-file-buffer x))
-          (find-alternate-file file-name)
-        (find-file file-name))))
+  (marginalia-mode))
+#+end_src
 
-  (setq! counsel-rg-base-command "rg -zS -M 150 --max-columns-preview --no-heading --line-number --color never %s ."
-         counsel-ag-base-command "ag -zS --nocolor --nogroup %s"
-         counsel-pt-base-command "pt -zS --nocolor --nogroup -e %s"
-         counsel-grep-base-command
-         (cond ((executable-find "rg") "rg -zS -M 120 --no-heading --line-number --color never %s %s")
-               ((executable-find "ag") "ag -zS --nocolor --nogroup %s %s")
-               (t "grep -i -E -n -e %s %s"))
-         counsel-find-file-ignore-regexp "\\(?:^[#.]\\)\\|\\(?:[#~]$\\)")
-
-  (ivy-configure 'counsel-M-x :initial-input "")
-  (ivy-configure 'counsel-describe-function :initial-input "")
-  (ivy-configure 'counsel-describe-variable :initial-input "")
-
-  (counsel-mode))
-#+END_SRC
-
-**** Better ~counsel-M-x~
+** Project management
 #+BEGIN_SRC emacs-lisp
-(use-package amx :straight t
-  :config
-  (setq! amx-save-file (concat nox-cache-dir "/amx-items")))
-#+END_SRC
-
-**** Better Projectile
-#+BEGIN_SRC emacs-lisp
-(use-package counsel-projectile :straight t
-  :after (:all projectile ivy counsel)
+(use-package projectile :straight t
   :demand
+  :general
+  (:keymaps 'projectile-mode-map "C-c p" '(:keymap +projectile-map :wk "Projectile"))
+  (:keymaps '+projectile-map
+            "SPC" #'+projectile
+            "p"   #'+projectile/switch-project
+            "s g" #'+projectile/git-grep
+            "s s" #'+projectile/ripgrep
+            "v"   #'projectile-vc
+            "V"   #'projectile-browse-dirty-projects)
+  :init
+  (defvar +projectile-map (make-sparse-keymap))
+
   :config
-  (counsel-projectile-mode))
+  (setq! projectile-completion-system 'default
+         projectile-cache-file (concat nox-cache-dir "projectile.cache")
+         projectile-known-projects-file (concat nox-cache-dir "projectile.projects")
+         projectile-dynamic-mode-line nil
+         projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
+         projectile-globally-ignored-files '(".DS_Store" "TAGS")
+         projectile-indexing-method (if IS-WINDOWS 'native 'alien)
+         projectile-other-file-alist (append projectile-other-file-alist
+                                             '(("css"  "scss" "sass" "less" "styl")
+                                               ("scss" "css")
+                                               ("sass" "css")
+                                               ("less" "css")
+                                               ("styl" "css"))))
+  (push ".project" projectile-project-root-files-bottom-up)
+
+  (defun +projectile-ignored-project-p (path)
+    (string-prefix-p nox-emacs-dir path))
+  (setq! projectile-ignored-project-function #'+projectile-ignored-project-p)
+
+  (defun +projectile-project-buffers ()
+    (let* ((project-root (file-truename (projectile-ensure-project (projectile-project-root))))
+           (all-buffers (cl-remove-if-not
+                         (lambda (buffer) (projectile-project-buffer-p buffer project-root))
+                         (buffer-list))))
+      (if projectile-buffers-filter-function
+          (funcall projectile-buffers-filter-function all-buffers)
+        all-buffers)))
+
+  (projectile-mode)
+
+  ;; NOTE(nox): Consult integration
+  (defun +projectile/git-grep (&optional root)
+    (interactive)
+    (when-let (root (or root (projectile-project-root) (+projectile--switch-project)))
+      (consult-git-grep root)))
+
+  (defun +projectile/ripgrep (&optional root)
+    (interactive)
+    (when-let (root (or root (projectile-project-root) (+projectile--switch-project)))
+      (consult-ripgrep root)))
+
+  (defvar +projectile--project-history nil)
+
+  (defun +projectile--switch-project ()
+    (let ((root (projectile-project-root)))
+      (consult--read projectile-known-projects
+                     :prompt (projectile-prepend-project-name "Switch to project: ")
+                     :require-match t
+                     :default (and (projectile-project-p)
+                                   (not (projectile-ignored-project-p root))
+                                   (abbreviate-file-name root))
+                     :category 'project)))
+
+  (defun +projectile--get-project-buffers (root)
+    (when root
+      (mapcar #'buffer-name
+              (cl-remove-if-not
+               (lambda (buffer)
+                 (projectile-project-buffer-p buffer root))
+               (buffer-list)))))
+
+  (defun +projectile--get-project-files (root)
+    (when root
+      (let ((files (projectile-project-files root))
+            (inv-root (propertize root 'invisible t)))
+        (mapcar (lambda (f) (concat inv-root f)) files))))
+
+  (defun +projectile--get-relevant-projects (root)
+    (cl-remove (if root (abbreviate-file-name root))
+               projectile-known-projects
+               :test #'string-equal))
+
+  (defun +projectile--annotate-project-item (root)
+    (format "Project: %s [%s]" (projectile-project-name root) (projectile-project-vcs root)))
+
+  (defun +projectile--sources (root-arg)
+    (when-let (root (or root-arg (projectile-project-root) (+projectile--switch-project)))
+      (setq root (expand-file-name root))
+
+      (list
+       (list :name     "Buffer"
+             :narrow   '(?b . "Buffer")
+             :category 'buffer
+             :face     'consult-buffer
+             :history  'buffer-name-history
+             :state    #'consult--buffer-state
+             :items    (+projectile--get-project-buffers root))
+
+       (list :name     "File"
+             :narrow   '(?f . "File")
+             :category 'file
+             :face     'consult-file
+             :history  'file-name-history
+             :action   #'consult--file-action
+             :items    (+projectile--get-project-files root))
+
+       (list :name     "Known project"
+             :narrow   '(?p . "Project")
+             :category 'project
+             :face     '+consult-project
+             :history  '+projectile--project-history
+             :annotate #'+projectile--annotate-project-item
+             :action   #'+projectile
+             :items    (+projectile--get-relevant-projects root)))))
+
+  (defun +projectile/switch-project ()
+    (interactive)
+    (+projectile (+projectile--switch-project)))
+
+  (defun +projectile (&optional root)
+    (interactive)
+    (when-let (buffer (consult--multi (+projectile--sources root)
+                                      :prompt "Switch to: "
+                                      :history 'projectile--project-history
+                                      :require-match t
+                                      :sort nil))
+      (unless (cdr buffer)
+        (funcall consult--buffer-display (car buffer)))))
+
+  ;; NOTE(nox): Embark integration
+  (defun +projectile--vc-by-name (root)
+    (interactive "sProject root: ")
+    (projectile-vc root))
+
+  (defun +projectile--git-grep-by-name (root)
+    (interactive "sProject root: ")
+    (+projectile/git-grep root))
+
+  (defun +projectile--ripgrep-by-name (root)
+    (interactive "sProject root: ")
+    (+projectile/ripgrep root))
+
+  (embark-define-keymap embark-project-map
+    "Keymap for Embark project actions."
+    ("s g" #'+projectile--git-grep-by-name)
+    ("s s" #'+projectile--ripgrep-by-name)
+    ("v"   #'+projectile--vc-by-name))
+  (add-to-list 'embark-keymap-alist '(project . embark-project-map)))
 #+END_SRC
 
 ** Editor
@@ -1206,9 +1242,7 @@ Used for sorting items.
 **** Recent files
 #+BEGIN_SRC emacs-lisp
 (use-package recentf
-  :defer 1
-  :after-call after-find-file
-  :commands recentf-open-files
+  :demand
   :config
   (setq recentf-save-file (concat nox-cache-dir "recentf")
         recentf-auto-cleanup 120
@@ -1221,6 +1255,7 @@ Used for sorting items.
               "^/var/folders/.+$"
               (lambda (file) (file-in-directory-p file nox-local-dir))))
   (advice-add 'recentf-cleanup :around 'nox*shut-up)
+
   (quiet! (recentf-mode)))
 #+END_SRC
 
@@ -1230,18 +1265,6 @@ Used for sorting items.
   :config
   (setq! bookmark-default-file (concat nox-etc-dir "bookmarks")
          bookmark-save-flag t))
-#+END_SRC
-
-*** Swiper
-#+BEGIN_SRC emacs-lisp
-(use-package swiper :straight t
-  :general
-  ("C-r" 'swiper
-   "C-s" 'counsel-grep-or-swiper
-   "C-S-s" 'isearch-forward)
-  :config
-  (add-to-list 'swiper-font-lock-exclude 'c-mode)
-  (add-to-list 'swiper-font-lock-exclude 'c++-mode))
 #+END_SRC
 
 *** Company
@@ -1318,8 +1341,7 @@ Used for sorting items.
     ("l" dumb-jump-quick-look "Quick look")
     ("b" dumb-jump-back "Back" :exit nil))
 
-  (setq! dumb-jump-selector 'ivy
-         dumb-jump-prefer-searcher 'rg
+  (setq! dumb-jump-prefer-searcher 'rg
          dumb-jump-default-project nox-emacs-dir
          dumb-jump-aggressive nil
          dumb-jump-use-visible-window nil))
@@ -1335,8 +1357,6 @@ Used for sorting items.
 #+END_SRC
 
 ***** Imenu across several buffers
-Adapted from =imenu-anywhere= and =counsel-imenu=.
-
 #+BEGIN_SRC emacs-lisp
 (defconst +imenu-friendly-modes '((c-mode c++-mode))
   "List of lists which are groups of friend modes.")
@@ -1394,28 +1414,17 @@ Adapted from =imenu-anywhere= and =counsel-imenu=.
 (defun +imenu ()
   "Jump to a buffer position indexed by imenu."
   (interactive)
-  (let ((items (+imenu-candidates))
-        (imenu-default-goto-function #'+imenu-goto))
-    (ivy-read "Jump to... " items
-              :preselect (thing-at-point 'symbol)
-              :require-match t
-              :action (lambda (candidate) (with-ivy-window (imenu candidate)
-                                                           (recenter)))
-              :caller #'+imenu)))
+  (let* ((items (+imenu-candidates))
+         (imenu-default-goto-function #'+imenu-goto)
+         (candidate (completing-read "Jump to... " items nil t nil nil (thing-at-point 'symbol)))
+         (target (assoc-string candidate items)))
+    (imenu target)
+    (recenter)))
 #+END_SRC
 
 ***** End
 #+BEGIN_SRC emacs-lisp
 ) ;; (use-package imenu)
-#+END_SRC
-
-**** Recenter after jumping
-#+BEGIN_SRC emacs-lisp
-(add-hook!
-  '(imenu-after-jump-hook
-    counsel-grep-post-action-hook
-    dumb-jump-after-jump-hook)
-  #'recenter)
 #+END_SRC
 
 **** Line movement functions
@@ -1738,8 +1747,6 @@ fundamental-mode) for performance sake."
   (nox-leader :infix "o"
     ""  '(:ignore t :wk "Org")
     "l" '(org-store-link :wk "Store link"))
-  (:keymaps 'org-mode-map
-   "C-c C-q" 'counsel-org-tag)
 
   :init
   (setq! org-directory "~/essential/agenda/")
@@ -2347,8 +2354,6 @@ some heuristics to guess the result."
   (nox-leader "a" '(org-agenda :wk "Agenda"))
 
   :config
-  (general-def :keymaps 'org-agenda-mode-map "C-c C-q" 'counsel-org-tag-agenda)
-
   (defun +agenda|check-sync-conflicts ()
     (when (directory-files org-directory nil "sync-conflict")
       (message-box "AVISO: Há conflitos de sincronização!")))
@@ -3130,6 +3135,7 @@ When optional argument is non-nil, refresh cached heading."
 
 ** Tools and utilities
 *** BibTeX & BibLaTeX
+**** General
 #+BEGIN_SRC emacs-lisp
 (use-package bibtex
   :init
@@ -3400,158 +3406,6 @@ Return the result as a string."
   :config
   (setq! reftex-default-bibliography +bibtex-bibliography))
 
-(use-package ivy-bibtex :straight t
-  :config
-  (defvar +bibtex-completion-external-key nil)
-  (defun +bibtex-completion-get-key-external () +bibtex-completion-external-key)
-  (add-to-list 'bibtex-completion-key-at-point-functions #'+bibtex-completion-get-key-external)
-
-  (defun bibtex-completion-get-key-org-bibtex ()
-    (when (memq major-mode '(org-mode org-agenda-mode))
-      (thing-at-point 'symbol)))
-
-  (defun +bibtex*ivy-bibtex (orig-fun &optional arg local-lib)
-    (let* ((local-bib (and (not (and (numberp arg) (= arg 0)))
-                           (eq major-mode 'bibtex-mode)
-                           (bibtex-completion-find-local-bibliography)))
-           (bibtex-completion-bibliography (or local-bib
-                                               bibtex-completion-bibliography))
-           (bibtex-completion-library-path (+bibtex-pdf-dir bibtex-completion-bibliography))
-           (bibtex-completion-notes-path (+bibtex-notes-dir bibtex-completion-bibliography)))
-      (funcall orig-fun arg local-bib)))
-  (advice-add #'ivy-bibtex :around #'+bibtex*ivy-bibtex)
-
-  (defun bibtex-completion-format-entry (entry width)
-    "Formats a BibTeX ENTRY for display in results list.
-WIDTH is the width of the results list.  The display format is
-governed by the variable `bibtex-completion-display-formats'."
-    (let* ((format (or (assoc-string (bibtex-completion-get-value "=type=" entry)
-                                     bibtex-completion-display-formats-internal
-                                     'case-fold)
-                       (assoc t bibtex-completion-display-formats-internal)))
-           (format-string (cadr format)))
-      (s-format
-       format-string
-       (lambda (field)
-         (let* ((field (split-string field ":"))
-                (field-name (car field))
-                (field-width (cadr field))
-                (field-value (bibtex-completion-get-value field-name entry)))
-           (when (string= field-name "title")
-             (let ((searchtitle (bibtex-completion-get-value "searchtitle" entry))
-                   (maintitle (bibtex-completion-get-value "maintitle" entry))
-                   (volume (bibtex-completion-get-value "volume" entry)))
-               (setq field-value
-                     (or searchtitle
-                         (concat maintitle
-                                 (when (and maintitle field-value) ": ")
-                                 field-value
-                                 (when (and (or maintitle field-value) volume) ", ")
-                                 (when volume (concat "Vol. " volume)))))))
-           (when (and (string= field-name "author")
-                      (not field-value))
-             (setq field-value (bibtex-completion-get-value "editor" entry)))
-           (when (and (string= field-name "year")
-                      (not field-value))
-             (setq field-value (car (split-string (bibtex-completion-get-value "date" entry "") "-"))))
-           (setq field-value (bibtex-completion-clean-string (or field-value " ")))
-           (when (member field-name '("author" "editor"))
-             (setq field-value (bibtex-completion-shorten-authors field-value)))
-           (if (not field-width)
-               field-value
-             (setq field-width (string-to-number field-width))
-             (truncate-string-to-width
-              field-value
-              (if (> field-width 0)
-                  field-width
-                (- width (cddr format)))
-              0 ?\s)))))))
-
-  (defun bibtex-completion-apa-get-value (field entry &optional default)
-    "Return FIELD or ENTRY formatted following the APA guidelines.
-Return DEFAULT if FIELD is not present in ENTRY."
-    ;; Virtual fields:
-    (pcase field
-      ("author-or-editor"
-       ;; Avoid if-let and when-let because they're not working reliably
-       ;; in all versions of Emacs that we currently support:
-       (let ((value (bibtex-completion-get-value "author" entry)))
-         (if value
-             (bibtex-completion-apa-format-authors value)
-           (bibtex-completion-apa-format-editors
-            (bibtex-completion-get-value "editor" entry)))))
-      ("author-or-editor-abbrev"
-       (let* ((value (bibtex-completion-get-value "author" entry)))
-         (if value
-             (bibtex-completion-apa-format-authors-abbrev value)
-           (bibtex-completion-apa-format-editors-abbrev
-            (bibtex-completion-get-value "editor" entry)))))
-      ("author-abbrev"
-       (let ((value (bibtex-completion-get-value "author" entry)))
-         (when value
-           (bibtex-completion-apa-format-authors-abbrev value))))
-      ("editor-abbrev"
-       (let ((value (bibtex-completion-get-value "editor" entry)))
-         (when value
-           (bibtex-completion-apa-format-editors-abbrev value))))
-      (_
-       ;; Real fields:
-       (let ((value (bibtex-completion-get-value field entry)))
-         (if value
-             (pcase field
-               ;; https://owl.english.purdue.edu/owl/resource/560/06/
-               ("author" (bibtex-completion-apa-format-authors value))
-               ("editor" (bibtex-completion-apa-format-editors value))
-               ("title" (replace-regexp-in-string ; remove braces
-                         "[{}]"
-                         ""
-                         (replace-regexp-in-string ; remove macros
-                          "\\\\[[:alpha:]]+{"
-                          ""
-                          (s-replace "\\" "\\\\" value))))
-               ("booktitle" value)
-               ;; Maintain the punctuation and capitalization that is used by
-               ;; the journal in its title.
-               ("pages" (s-join "–" (s-split "[^0-9]+" value t)))
-               ("doi" (s-concat " http://dx.doi.org/" value))
-               ("year" (or value
-                           (car (split-string (bibtex-completion-get-value "date" entry "") "-"))))
-               (_ value))
-           "")))))
-
-  (setq! bibtex-completion-bibliography +bibtex-bibliography
-         bibtex-completion-notes-extension ".org"
-         bibtex-completion-pdf-extension '(".pdf" ".djvu")
-         bibtex-completion-find-additional-pdfs t
-         bibtex-completion-additional-search-fields '("searchtitle" "maintitle" "volume" "keywords" "edition")
-
-         bibtex-completion-notes-template-multiple-files (format "#+TITLE: ${title} (${year})
-,#+AUTHOR: ${author-or-editor}
-
-,* Notes
-:PROPERTIES:
-:Custom_ID: ${=key=}
-:NOTER_DOCUMENT: %s${=key=}.pdf
-:END:
-"
-                                                                 (concat "../" +bibtex-pdf-relative-dir))
-         bibtex-completion-display-formats
-         '((t . "${author:36} │ ${title:*} ${year:4} ${=type=:7} ${=has-pdf=:1}${=has-note=:1}"))
-         bibtex-completion-pdf-symbol  ""
-         bibtex-completion-notes-symbol "")
-
-  (add-to-list 'ivy-re-builders-alist '(ivy-bibtex . ivy--regex-ignore-order))
-
-  (defun nox*disable-completion-notes-mode (&optional _) (widen))
-  (advice-add #'bibtex-completion-notes-mode :override #'nox*disable-completion-notes-mode)
-
-  (defun +ivy-bibtex-insert-org-link (candidate)
-    (let ((key (cdr (assoc "=key=" (cdr candidate))))
-          (title (bibtex-completion-apa-get-value "title" (cdr candidate))))
-      (insert (format "[[bibtex:%s][%s]]" key title))))
-
-  (ivy-add-actions 'ivy-bibtex '(("O" +ivy-bibtex-insert-org-link "Insert Org link"))))
-
 (use-package biblio :straight t
   :demand
   :after biblio-core
@@ -3570,15 +3424,255 @@ Return DEFAULT if FIELD is not present in ENTRY."
   (setq! biblio-cleanup-bibtex-function #'+biblio-cleanup-bibtex))
 #+END_SRC
 
-**** ivy-bibtex integration in org-mode
+**** Completion
 #+begin_src emacs-lisp
-(after! org
-  (org-link-set-parameters "bibtex" :follow #'+org-bibtex-open)
+(use-package bibtex-completion :straight t
+  :after embark
+  :commands nox/bibtex
+  :config
+  (setq!
+   bibtex-completion-bibliography +bibtex-bibliography
+   bibtex-completion-additional-search-fields '("searchtitle" "maintitle" "volume" "keywords" "url")
 
-  (defun +org-bibtex-open (path _)
-    (require 'ivy-bibtex)
-    (let ((+bibtex-completion-external-key path))
-      (ivy-bibtex))))
+   bibtex-completion-find-additional-pdfs t
+   bibtex-completion-pdf-extension '(".pdf" ".djvu")
+   bibtex-completion-notes-extension ".org"
+
+   bibtex-completion-pdf-symbol   ""
+   bibtex-completion-notes-symbol ""
+   bibtex-completion-link-symbol  "")
+
+  (setq! +bibtex-completion-templates
+         '((t . "${=has-pdf=}${=has-note=}${=has-link=} ${author:36} │ ${title:*} ${year:4} ${=type=:7}"))
+         bibtex-completion-notes-template-multiple-files (format "#+TITLE: ${title} (${year})
+,#+AUTHOR: ${author-or-editor}
+
+,* Notes
+:PROPERTIES:
+:Custom_ID: ${=key=}
+:NOTER_DOCUMENT: %s${=key=}.pdf
+:END:
+"
+                                                                 (concat "../" +bibtex-pdf-relative-dir)))
+
+  (setq! +bibtex-completion--candidates-hash  ""
+         +bibtex-completion--candidates-cache nil)
+
+  (defun +bibtex-completion--process-templates (templates)
+    (cl-loop for template in templates
+             collect
+             (let* ((template-string (cdr template))
+                    (fields-width 0)
+                    (string-width
+                     (string-width
+                      (s-format template-string
+                                (lambda (field)
+                                  (setq fields-width
+                                        (+ fields-width
+                                           (string-to-number (or (cadr (split-string field ":")) ""))))
+                                  "")))))
+               (-cons* (car template) template-string (+ fields-width string-width)))))
+
+  (defun +bibtex-completion--format-entry (entry width formats)
+    (let* ((format (or (assoc-string (bibtex-completion-get-value "=type=" entry) formats 'case-fold)
+                       (assoc t formats)))
+           (format-string (cadr format)))
+      (concat
+       (s-format
+        format-string
+        (lambda (field)
+          (let* ((field (split-string field ":"))
+                 (field-name (car field))
+                 (field-width (cadr field))
+                 field-value)
+            (cond
+             ((string= field-name "title")
+              (let ((title (bibtex-completion-get-value "title" entry))
+                    (searchtitle (bibtex-completion-get-value "searchtitle" entry))
+                    (maintitle (bibtex-completion-get-value "maintitle" entry))
+                    (volume (bibtex-completion-get-value "volume" entry)))
+                (setq field-value
+                      (or searchtitle
+                          (concat maintitle
+                                  (when (and maintitle title) ": ")
+                                  title
+                                  (when (and (or maintitle title) volume) ", ")
+                                  (when volume (concat "Vol. " volume)))))))
+
+             ((string= field-name "author")
+              (setq field-value (or (bibtex-completion-get-value "author" entry)
+                                    (bibtex-completion-get-value "editor" entry))))
+
+             ((string= field-name "year")
+              (setq field-value (or (bibtex-completion-get-value "year" entry)
+                                    (car (split-string (bibtex-completion-get-value "date" entry "") "-")))))
+
+             ((string= field-name "=has-link=")
+              (setq field-value (and (bibtex-completion-get-value "url" entry)
+                                     bibtex-completion-link-symbol)))
+
+             (t (setq field-value (bibtex-completion-get-value field-name entry))))
+
+            (when (member field-name '("=has-pdf=" "=has-note=" "=has-link="))
+              (setq field-value (or field-value "  ")))
+
+            (setq field-value (if field-value (replace-regexp-in-string "[\"{}]+" "" field-value) " "))
+
+            (when (member field-name '("author" "editor"))
+              (setq field-value (bibtex-completion-shorten-authors field-value)))
+
+            (if (not field-width)
+                field-value
+              (setq field-width (string-to-number field-width))
+              (when (<= field-width 0) (setq field-width (- width (cddr format))))
+              (truncate-string-to-width field-value field-width 0 ?\s)))))
+       " "
+       (propertize
+        (let ((author (bibtex-completion-get-value "author" entry))
+              (keywords (bibtex-completion-get-value "keywords" entry))
+              (pdf  (and (assoc "=has-pdf="  (cdr entry)) "has:pdf"))
+              (note (and (assoc "=has-note=" (cdr entry)) "has:note"))
+              (link (and (assoc "url"        (cdr entry)) "has:link"))
+              (citekey (bibtex-completion-get-value "=key=" entry)))
+          ;; NOTE(nox): citekey must be last!
+          (s-join " " (list author keywords pdf note link citekey)))
+        'invisible t))))
+
+  (defun +bibtex-completion--format-candidates (candidates)
+    (let ((formats (+bibtex-completion--process-templates +bibtex-completion-templates))
+          (width (- (frame-width) 6)))
+      (cl-loop for candidate in candidates
+               collect (cons (s-trim-right (+bibtex-completion--format-entry candidate width formats))
+                             (bibtex-completion-get-value "=key=" candidate)))))
+
+  (defun +bibtex-completion--hash-candidates (candidates)
+    (secure-hash 'sha256 (cl-loop for candidate in candidates
+                                  concat (car candidate))))
+
+  (defun +bibtex-completion--get-formatted-candidates (&optional rebuild-cache)
+    (when rebuild-cache (bibtex-completion-clear-cache))
+
+    (let* ((candidates (bibtex-completion-candidates))
+           (candidates-hash (+bibtex-completion--hash-candidates candidates)))
+      (when (or rebuild-cache
+                (not (string= +bibtex-completion--candidates-hash candidates-hash)))
+        (setq +bibtex-completion--candidates-hash candidates-hash
+              +bibtex-completion--candidates-cache (+bibtex-completion--format-candidates candidates))))
+
+    +bibtex-completion--candidates-cache)
+
+  (defvar +bibtex-completion--external-key nil)
+
+  (defun +bibtex-completion--prompt (&optional local-bib rebuild-cache)
+    (when-let ((candidates (+bibtex-completion--get-formatted-candidates rebuild-cache))
+               (chosen (consult--read candidates
+                                      :prompt (format "Entries%s: " (if local-bib " (local)" ""))
+                                      :category 'bibtex
+                                      :require-match t
+                                      :default +bibtex-completion--external-key)))
+      (list (cdr (assoc chosen candidates)))))
+
+  (defun nox/bibtex (arg)
+    (interactive "P")
+    (let* ((local-bib (and (not (and (numberp arg) (= arg 0)))
+                           (eq major-mode 'bibtex-mode)
+                           (bibtex-completion-find-local-bibliography)))
+           (bibtex-completion-bibliography (or local-bib
+                                               bibtex-completion-bibliography))
+           (bibtex-completion-library-path (+bibtex-pdf-dir bibtex-completion-bibliography))
+           (bibtex-completion-notes-path (+bibtex-notes-dir bibtex-completion-bibliography)))
+      (bibtex-completion-open-any (+bibtex-completion--prompt local-bib arg))))
+
+  (defun bibtex-completion-apa-get-value (field entry &optional default)
+    (pcase field
+      ("author-or-editor"
+       (if-let (value (bibtex-completion-get-value "author" entry))
+           (bibtex-completion-apa-format-authors value)
+         (bibtex-completion-apa-format-editors (bibtex-completion-get-value "editor" entry))))
+      ("author-or-editor-abbrev"
+       (if-let (value (bibtex-completion-get-value "author" entry))
+           (bibtex-completion-apa-format-authors-abbrev value)
+         (bibtex-completion-apa-format-editors-abbrev (bibtex-completion-get-value "editor" entry))))
+      ("author-abbrev"
+       (when-let (value (bibtex-completion-get-value "author" entry))
+         (bibtex-completion-apa-format-authors-abbrev value)))
+      ("editor-abbrev"
+       (when-let (value (bibtex-completion-get-value "editor" entry))
+         (bibtex-completion-apa-format-editors-abbrev value)))
+      (_
+       (if-let (value (bibtex-completion-get-value field entry))
+           (pcase field
+             ("author" (bibtex-completion-apa-format-authors value))
+             ("editor" (bibtex-completion-apa-format-editors value))
+             ("title" (replace-regexp-in-string
+                       "[{}]"
+                       ""
+                       (replace-regexp-in-string
+                        "\\\\[[:alpha:]]+{"
+                        ""
+                        (s-replace "\\" "\\\\" value))))
+             ("booktitle" value)
+             ("pages" (s-join "–" (s-split "[^0-9]+" value t)))
+             ("doi" (s-concat " http://dx.doi.org/" value))
+             ("year" (or value
+                         (car (split-string (bibtex-completion-get-value "date" entry "") "-"))))
+             (_ value))
+         ""))))
+
+  (defun nox*disable-completion-notes-mode (&optional _) (widen))
+  (advice-add #'bibtex-completion-notes-mode :override #'nox*disable-completion-notes-mode)
+
+  ;; NOTE(nox): Integration with org-mode
+  (defun +bibtex-completion-get-key-external () +bibtex-completion-external-key)
+  (add-to-list 'bibtex-completion-key-at-point-functions #'+bibtex-completion-get-key-external)
+
+  (after! org
+    (org-link-set-parameters "bibtex" :follow #'+org-bibtex-open)
+
+    (defun +org-bibtex-open (path _)
+      (require 'bibtex-completion)
+      (let ((+bibtex-completion-external-key path))
+        (nox/bibtex))))
+
+  ;; NOTE(nox): Embark actions
+  (defsubst +bibtex-completion--get-key-from-string (entry-str)
+    (substring-no-properties (replace-regexp-in-string ".* " "" entry-str)))
+
+  (defun +bibtex-completion--insert-key (entry-str)
+    (when-let (key (+bibtex-completion--get-key-from-string entry-str))
+      (bibtex-completion-insert-key (list key))))
+
+  (defun +bibtex-completion--insert-bibtex (entry-str)
+    (when-let (key (+bibtex-completion--get-key-from-string entry-str))
+      (bibtex-completion-insert-bibtex (list key))))
+
+  (defun +bibtex-completion--insert-citation (entry-str)
+    (when-let (key (+bibtex-completion--get-key-from-string entry-str))
+      (bibtex-completion-insert-citation (list key))))
+
+  (defun +bibtex-completion--show-entry (entry-str)
+    (when-let (key (+bibtex-completion--get-key-from-string entry-str))
+      (bibtex-completion-show-entry (list key))))
+
+  (defun +bibtex-completion--open-link (entry-str)
+    (when-let (key (+bibtex-completion--get-key-from-string entry-str))
+      (bibtex-completion-open-url-or-doi (list key))))
+
+  (defun +bibtex-completion--insert-org-link (entry-str)
+    (when-let ((key (+bibtex-completion--get-key-from-string entry-str))
+               (entry (bibtex-completion-get-entry key))
+               (title (bibtex-completion-apa-get-value "title" entry)))
+      (insert (format "[[bibtex:%s][%s]]" key title))))
+
+  (embark-define-keymap embark-bibtex-map
+    "Keymap for Embark bibtex actions."
+    ("k" #'+bibtex-completion--insert-key)
+    ("b" #'+bibtex-completion--insert-bibtex)
+    ("c" #'+bibtex-completion--insert-citation)
+    ("s" #'+bibtex-completion--show-entry)
+    ("l" #'+bibtex-completion--open-link)
+    ("O" #'+bibtex-completion--insert-org-link))
+  (add-to-list 'embark-keymap-alist '(bibtex . embark-bibtex-map)))
 #+end_src
 
 *** Calc
@@ -3983,6 +4077,8 @@ Return DEFAULT if FIELD is not present in ENTRY."
   :config
   (unless (or noninteractive (eq this-command 'pdf-tools-install))
     (pdf-tools-install))
+
+  (add-hook! 'pdf-isearch-minor-mode-hook (ctrlf-local-mode -1))
 
   (defun +pdf-view-scroll-page-left ()
     (interactive)
