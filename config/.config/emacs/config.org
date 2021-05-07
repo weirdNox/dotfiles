@@ -1005,6 +1005,8 @@ Disable fringes in the minibuffer window.
   ("C-h b" #'embark-bindings)
   (:keymaps 'minibuffer-local-map
             "C-;" #'embark-act)
+  (:keymaps 'embark-general-map
+            [remap embark-act] #'self-insert-command)
 
   :init
   (setq! prefix-help-command #'embark-prefix-help-command)
