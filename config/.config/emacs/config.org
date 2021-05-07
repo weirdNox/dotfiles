@@ -1098,12 +1098,11 @@ Disable fringes in the minibuffer window.
                      :category 'project)))
 
   (defun +projectile--get-project-buffers (root)
-    (when root
-      (mapcar #'buffer-name
-              (cl-remove-if-not
-               (lambda (buffer)
-                 (projectile-project-buffer-p buffer root))
-               (buffer-list)))))
+    (setq root (expand-file-name root))
+    (mapcar #'buffer-name
+            (cl-remove-if-not
+             (lambda (buffer) (projectile-project-buffer-p buffer root))
+             (buffer-list))))
 
   (defun +projectile--get-project-files (root)
     (when root
@@ -1112,17 +1111,15 @@ Disable fringes in the minibuffer window.
         (mapcar (lambda (f) (concat inv-root f)) files))))
 
   (defun +projectile--get-relevant-projects (root)
-    (cl-remove (if root (abbreviate-file-name root))
+    (cl-remove (abbreviate-file-name root)
                projectile-known-projects
                :test #'string-equal))
 
   (defun +projectile--annotate-project-item (root)
     (format "Project: %s [%s]" (projectile-project-name root) (projectile-project-vcs root)))
 
-  (defun +projectile--sources (root-arg)
-    (when-let (root (or root-arg (projectile-project-root) (+projectile--switch-project)))
-      (setq root (expand-file-name root))
-
+  (defun +projectile--sources (root)
+    (when root
       (list
        (list :name     "Buffer"
              :narrow   '(?b . "Buffer")
@@ -1155,13 +1152,12 @@ Disable fringes in the minibuffer window.
 
   (defun +projectile (&optional root)
     (interactive)
-    (when-let (buffer (consult--multi (+projectile--sources root)
-                                      :prompt "Switch to: "
-                                      :history 'projectile--project-history
-                                      :require-match t
-                                      :sort nil))
-      (unless (cdr buffer)
-        (funcall consult--buffer-display (car buffer)))))
+    (when-let (root (or root (projectile-project-root) (+projectile--switch-project)))
+      (consult--multi (+projectile--sources root)
+                      :prompt "Switch to: "
+                      :history 'projectile--project-history
+                      :require-match t
+                      :sort nil)))
 
   ;; NOTE(nox): Embark integration
   (defun +projectile--vc-by-name (root)
