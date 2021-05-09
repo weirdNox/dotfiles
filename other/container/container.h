@@ -753,7 +753,7 @@ internal void bindMountRaw(string PivotedBase, string PivotedBind, bind_option O
     }
     else if(Options & Bind_EnsureFile)
     {
-        createFileRaw(PivotedBase, 0666);
+        createFileRaw(PivotedBase, 0444);
     }
 
     node_type BaseType = getNodeType(PivotedBase, (Options & Bind_KeepLinks) ? false : true);
