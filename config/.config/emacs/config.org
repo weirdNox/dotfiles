@@ -1635,7 +1635,7 @@ fundamental-mode) for performance sake."
 
 *** LaTeX
 #+BEGIN_SRC emacs-lisp
-(use-package auctex :straight t
+(use-package latex :straight (auctex :includes latex)
   :commands +tex*set-auto-location
   :config
   (setq! TeX-auto-save t
