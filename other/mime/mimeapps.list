@@ -15,6 +15,7 @@ application/ereader=calibre-ebook-viewer.desktop
 application/x-mobi8-ebook=calibre-ebook-viewer.desktop
 application/x-mobipocket-ebook=calibre-ebook-viewer.desktop
 application/x-mobipocket-subscription=calibre-ebook-viewer.desktop
+application/vnd.ms-htmlhelp=kchmviewer.desktop
 
 # Microsoft Office
 application/msword=libreoffice-writer.desktop
