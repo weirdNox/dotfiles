@@ -1342,7 +1342,8 @@ Disable fringes in the minibuffer window.
     ("l" dumb-jump-quick-look "Quick look")
     ("b" dumb-jump-back "Back" :exit nil))
 
-  (setq! dumb-jump-prefer-searcher 'rg
+  (setq! dumb-jump-selector 'completing-read
+         dumb-jump-prefer-searcher 'rg
          dumb-jump-default-project nox-emacs-dir
          dumb-jump-aggressive nil
          dumb-jump-use-visible-window nil))
