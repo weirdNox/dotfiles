@@ -1605,20 +1605,24 @@ fundamental-mode) for performance sake."
                                      (substatement-open . 0)))))
 
   (after! compile
-    (add-to-list 'compilation-error-regexp-alist 'gcc)
-    (add-to-list 'compilation-error-regexp-alist-alist
-                 `(gcc
-                   ,(rx
-                     bol
-                     (group-n 1 (: (* num) (not space) (*? nonl)))
-                     (: ":" (* " ") (group-n 2 (+ num)))
-                     (? ":" (* " ") (group-n 4 (+ num)))
-                     ":" (* " ")
-                     (| (group-n 6 (| "warning"))
-                        (group-n 7 (| "info" "information" "informational" "instantiated from" "required from" "note"))
-                        (| "error" "sorry,"))
-                     (| " " ":"))
-                   1 (2 . 3) (4 . 5) (6 . 7)))))
+    (rx-let ((common (: (| (group-n 6 (| "warning"))
+                           (group-n 7 (| "info" "information" "informational" "instantiated from" "required from" "note"))
+                           (| "error" "sorry,"))
+                        (| " " ":"))))
+      (add-to-list 'compilation-error-regexp-alist 'cc-no-file)
+      (add-to-list 'compilation-error-regexp-alist-alist `(cc-no-file ,(rx common) nil))
+
+      (add-to-list 'compilation-error-regexp-alist 'cc)
+      (add-to-list 'compilation-error-regexp-alist-alist
+                   `(cc
+                     ,(rx
+                       bol
+                       (group-n 1 (: (* num) (not space) (*? nonl)))
+                       (: ":" (* " ") (group-n 2 (+ num)))
+                       (? ":" (* " ") (group-n 4 (+ num)))
+                       ":" (* " ")
+                       common)
+                     1 (2 . 3) (4 . 5) (6 . 7))))))
 #+END_SRC
 
 *** GLSL
