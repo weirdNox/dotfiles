@@ -1602,27 +1602,7 @@ fundamental-mode) for performance sake."
                  (c-offsets-alist . ((arglist-close . c-lineup-arglist)
                                      (case-label . +)
                                      (statement-case-intro . (+cc-style-stmt-case-intro +))
-                                     (substatement-open . 0)))))
-
-  (after! compile
-    (rx-let ((common (: (| (group-n 6 (| "warning"))
-                           (group-n 7 (| "info" "information" "informational" "instantiated from" "required from" "note"))
-                           (| "error" "sorry,"))
-                        (| " " ":"))))
-      (add-to-list 'compilation-error-regexp-alist 'cc-no-file)
-      (add-to-list 'compilation-error-regexp-alist-alist `(cc-no-file ,(rx common) nil))
-
-      (add-to-list 'compilation-error-regexp-alist 'cc)
-      (add-to-list 'compilation-error-regexp-alist-alist
-                   `(cc
-                     ,(rx
-                       bol
-                       (group-n 1 (: (* num) (not space) (*? nonl)))
-                       (: ":" (* " ") (group-n 2 (+ num)))
-                       (? ":" (* " ") (group-n 4 (+ num)))
-                       ":" (* " ")
-                       common)
-                     1 (2 . 3) (4 . 5) (6 . 7))))))
+                                     (substatement-open . 0))))))
 #+END_SRC
 
 *** GLSL
@@ -1722,11 +1702,7 @@ fundamental-mode) for performance sake."
          ("\\.mod\\'" . spice-mode)
          ("\\.scs\\'" . spice-mode))
   :config
-  (set-face-attribute 'spice-title-face nil :background nil)
-
-  (after! compile
-    (add-to-list 'compilation-error-regexp-alist-alist
-                 '(cadence-spectre "^ *\\(?:ERROR\\|\\(WARNING\\)\\) (.+): \"\\(.+\\)\" \\([0-9]+\\)" 2 3 nil (1)))))
+  (set-face-attribute 'spice-title-face nil :background nil))
 #+end_src
 
 *** Verilog
@@ -3716,6 +3692,37 @@ Return the result as a string."
 
   (put 'compilation-error-regexp-alist 'safe-local-variable 'listp)
 #+END_SRC
+
+**** Error matching
+#+begin_src emacs-lisp
+;; ====================================================================================================
+;; NOTE(nox): C/C++
+;;
+(rx-let ((common (: (| (group-n 6 (| "warning"))
+                       (group-n 7 (| "info" "information" "informational" "instantiated from" "required from" "note"))
+                       (| "error" "sorry,"))
+                    (| " " ":"))))
+  (add-to-list 'compilation-error-regexp-alist 'cc-no-file)
+  (add-to-list 'compilation-error-regexp-alist-alist `(cc-no-file ,(rx common) nil))
+
+  (add-to-list 'compilation-error-regexp-alist 'cc)
+  (add-to-list 'compilation-error-regexp-alist-alist
+               `(cc
+                 ,(rx
+                   bol
+                   (group-n 1 (: (* num) (not space) (*? nonl)))
+                   (: ":" (* " ") (group-n 2 (+ num)))
+                   (? ":" (* " ") (group-n 4 (+ num)))
+                   ":" (* " ")
+                   common)
+                 1 (2 . 3) (4 . 5) (6 . 7))))
+
+;; ====================================================================================================
+;; NOTE(nox): Cadence Spectre
+;;
+(add-to-list 'compilation-error-regexp-alist-alist
+             '(cadence-spectre "^ *\\(?:ERROR\\|\\(WARNING\\)\\) (.+): \"\\(.+\\)\" \\([0-9]+\\)" 2 3 nil (1)))
+#+end_src
 
 **** List of scripts
 #+BEGIN_SRC emacs-lisp
