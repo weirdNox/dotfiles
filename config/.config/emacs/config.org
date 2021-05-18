@@ -2320,6 +2320,11 @@ some heuristics to guess the result."
  :store 'org-pdfview-store-link)
 #+END_SRC
 
+***** BibTeX support
+#+begin_src emacs-lisp
+(org-link-set-parameters "bibtex" :follow #'+org-bibtex-open)
+#+end_src
+
 **** End
 #+BEGIN_SRC emacs-lisp
 ) ;; use-package
@@ -3410,7 +3415,7 @@ Return the result as a string."
 #+begin_src emacs-lisp
 (use-package bibtex-completion :straight t
   :after embark
-  :commands nox/bibtex
+  :commands nox/bibtex +org-bibtex-open
   :config
   (setq!
    bibtex-completion-bibliography +bibtex-bibliography
@@ -3543,7 +3548,11 @@ Return the result as a string."
 
     +bibtex-completion--candidates-cache)
 
-  (defvar +bibtex-completion--external-key nil)
+  (defun +bibtex-completion--get-default ()
+    (when-let ((at-point (bibtex-completion-key-at-point))
+               (entry (bibtex-completion-get-entry at-point))
+               (formatted (+bibtex-completion--format-candidates (list entry))))
+      (car formatted)))
 
   (defun +bibtex-completion--prompt (&optional local-bib rebuild-cache)
     (when-let ((candidates (+bibtex-completion--get-formatted-candidates rebuild-cache))
@@ -3551,10 +3560,10 @@ Return the result as a string."
                                       :prompt (format "Entries%s: " (if local-bib " (local)" ""))
                                       :category 'bibtex
                                       :require-match t
-                                      :default +bibtex-completion--external-key)))
+                                      :default (+bibtex-completion--get-default))))
       (list (cdr (assoc chosen candidates)))))
 
-  (defun nox/bibtex (arg)
+  (defun nox/bibtex (&optional arg)
     (interactive "P")
     (let* ((local-bib (and (not (and (numberp arg) (= arg 0)))
                            (eq major-mode 'bibtex-mode)
@@ -3604,17 +3613,15 @@ Return the result as a string."
   (defun nox*disable-completion-notes-mode (&optional _) (widen))
   (advice-add #'bibtex-completion-notes-mode :override #'nox*disable-completion-notes-mode)
 
-  ;; NOTE(nox): Integration with org-mode
+  ;; NOTE(nox): Integrations
+  (defvar +bibtex-completion-external-key nil)
   (defun +bibtex-completion-get-key-external () +bibtex-completion-external-key)
   (add-to-list 'bibtex-completion-key-at-point-functions #'+bibtex-completion-get-key-external)
 
-  (after! org
-    (org-link-set-parameters "bibtex" :follow #'+org-bibtex-open)
-
-    (defun +org-bibtex-open (path _)
-      (require 'bibtex-completion)
-      (let ((+bibtex-completion-external-key path))
-        (nox/bibtex))))
+  ;; NOTE(nox): Integration with org-mode
+  (defun +org-bibtex-open (path _)
+    (let ((+bibtex-completion-external-key path))
+      (nox/bibtex)))
 
   ;; NOTE(nox): Embark actions
   (defsubst +bibtex-completion--get-key-from-string (entry-str)
