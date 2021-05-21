@@ -1732,7 +1732,7 @@ fundamental-mode) for performance sake."
 ** Org Mode
 *** Base configuration
 #+BEGIN_SRC emacs-lisp
-(use-package org :straight (org-plus-contrib :includes org)
+(use-package org :straight t
   :general
   (nox-leader :infix "o"
     ""  '(:ignore t :wk "Org")
@@ -3127,6 +3127,11 @@ When optional argument is non-nil, refresh cached heading."
          org-edit-src-content-indentation 0)
   (add-to-list 'org-src-lang-modes '("html" . web)))
 #+END_SRC
+
+*** Contributed packages
+#+begin_src emacs-lisp
+(use-package org-contrib :straight t)
+#+end_src
 
 ** Tools and utilities
 *** BibTeX & BibLaTeX
