@@ -3729,7 +3729,7 @@ Return the result as a string."
 ;;
 (rx-let ((common (: (| (group-n 6 (| "warning"))
                        (group-n 7 (| "info" "information" "informational" "instantiated from" "required from" "note"))
-                       (| "error" "sorry,"))
+                       (| (: (? "fatal ") "error") "sorry,"))
                     (| " " ":"))))
   (add-to-list 'compilation-error-regexp-alist 'cc-no-file)
   (add-to-list 'compilation-error-regexp-alist-alist `(cc-no-file ,(rx common) nil))
