@@ -1557,6 +1557,15 @@ fundamental-mode) for performance sake."
 (add-hook 'find-file-hook #'nox|check-large-file)
 #+END_SRC
 
+*** Search and replace
+**** wgrep
+#+begin_src emacs-lisp
+(use-package wgrep :straight t
+  :general
+  (:keymaps 'grep-mode-map
+            "C-x C-q" #'wgrep-change-to-wgrep-mode))
+#+end_src
+
 ** Languages
 *** Assembly
 #+begin_src emacs-lisp
