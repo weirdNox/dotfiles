@@ -4090,11 +4090,11 @@ Return the result as a string."
 **** Diredfl and Dired+
 #+BEGIN_SRC emacs-lisp
 (use-package diredfl :straight t
-  :after-call (dired-mode-hook)
+  :after dired :demand
   :config (diredfl-global-mode))
 
 (use-package dired+ :straight t
-  :after-call (dired-mode-hook))
+  :after dired :demand)
 #+END_SRC
 
 *** Document viewers
