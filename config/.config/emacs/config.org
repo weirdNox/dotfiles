@@ -990,7 +990,7 @@ Disable fringes in the minibuffer window.
          "rg --null --line-buffered --color=ansi --max-columns=1000 --no-heading --line-number --smart-case . -e ARG OPTS")
 
   ;; NOTE(nox): De-prioritize buffers shown in this frame
-  (consult--define-cache consult--cached-buffers
+  (consult--define-cache consult--cached-all-buffers
     (let ((buffers (delq (current-buffer) (buffer-list)))
           (visible-p (lambda (x) (get-buffer-window x))))
       (nconc (seq-remove visible-p buffers)
