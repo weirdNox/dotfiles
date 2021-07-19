@@ -183,3 +183,7 @@ video/x-ogm+ogg=mpv.desktop
 video/x-ogm=mpv.desktop
 video/x-theora+ogg=mpv.desktop
 video/x-theora=mpv.desktop
+
+# Fonts
+font/otf=org.kde.kfontview.desktop
+font/ttf=org.kde.kfontview.desktop
