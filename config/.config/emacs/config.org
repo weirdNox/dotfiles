@@ -1617,6 +1617,9 @@ fundamental-mode) for performance sake."
         (forward-line -2))))
   (add-hook! c-mode-common #'+cc|write-header-guard)
 
+  (add-hook! c-mode (setq-local comment-start "// "
+                                comment-end   ""))
+
   (defun +cc-style-stmt-case-intro (info)
     "When the case label has inline code, don't indent the next syntactic structure.
      Eg.:
