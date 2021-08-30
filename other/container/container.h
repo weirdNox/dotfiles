@@ -1455,15 +1455,27 @@ internal inline void shareAudio(b32 BindConfig)
     }
 
     u8 Memory[1<<12];
+
+    // NOTE(nox): ALSA
     bindMap(0, "/dev/snd", Bind_Dev);
+
+    // NOTE(nox): PulseAudio
     {
         buffer Buffer = bundleArray(Memory);
         string Base = formatString(&Buffer, "/run/user/%lu/pulse", BaseUID);
         string Bind = formatString(&Buffer, "/run/user/%lu/pulse", getBindUID());
-        bindMount((char *)Base.Data, (char *)Bind.Data, Bind_ReadOnly);
+        bindMount(Base.Char, Bind.Char, Bind_ReadOnly);
 
         string PulseServer = formatString(&Buffer, "unix:%s/native", Bind.Data);
         modifyEnvironmentVariable("PULSE_SERVER", Env_Set, (char *)PulseServer.Data);
+    }
+
+    // NOTE(nox): PipeWire
+    {
+        buffer Buffer = bundleArray(Memory);
+        string Base = formatString(&Buffer, "/run/user/%lu/pipewire-0", BaseUID);
+        string Bind = formatString(&Buffer, "/run/user/%lu/pipewire-0", getBindUID());
+        bindMount(Base.Char, Bind.Char, Bind_ReadOnly);
     }
 }
 
