@@ -1228,6 +1228,10 @@ internal inline void setupBaseEnvironmentVariables()
     modifyEnvironmentVariable("LOGNAME", Env_Set, getBindUserName());
 
     modifyEnvironmentVariable("HOME", Env_Set, getBindHomePath(&bundleArray(Memory)));
+    if(constZ(""BIND_SHELL).Size != 0)
+    {
+        modifyEnvironmentVariable("SHELL", Env_Set, ""BIND_SHELL);
+    }
 
     modifyEnvironmentVariable("PATH", Env_Set, BIND_ENV_DEFAULT_PATH);
 

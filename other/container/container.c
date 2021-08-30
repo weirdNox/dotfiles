@@ -11,6 +11,7 @@
 #define BIND_GID
 #define BIND_USER_NAME user
 #define BIND_HOME_PATH
+#define BIND_SHELL "/bin/bash"
 
 #define SHARE_NETWORK 0
 #define DUMMY_LINK    0
