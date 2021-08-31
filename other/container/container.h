@@ -1253,7 +1253,7 @@ internal inline void setupBaseEnvironmentVariables()
 
 internal inline void setupDummyNetworkInterface()
 {
-#if defined(DUMMY_LINK)
+#if defined(DUMMY_LINK) && !SHARE_NETWORK
     string DummyMAC = constZ(stringify(DUMMY_LINK)"");
 
     if((DummyMAC.Size == 1 && DummyMAC.Data[0] == '1') || DummyMAC.Size > 1)

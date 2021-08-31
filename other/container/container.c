@@ -14,7 +14,7 @@
 #define BIND_SHELL "/bin/bash"
 
 #define SHARE_NETWORK 0
-#define DUMMY_LINK    0
+#define DUMMY_LINK    1
 #define BIND_HOSTNAME host
 
 #define SHARE_DBUS 0
