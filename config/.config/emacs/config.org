@@ -4395,7 +4395,12 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
          tramp-auto-save-directory   (concat nox-cache-dir "tramp-auto-save/")
          tramp-persistency-file-name (concat nox-cache-dir "tramp-persistency.el")
          tramp-default-proxies-alist '(((regexp-quote (system-name)) nil nil)
-                                       (nil "\\`root\\'" "/ssh:%h:"))))
+                                       (nil "\\`root\\'" "/ssh:%h:")))
+
+  ;; NOTE(nox): Add version that forwards ssh-agent
+  (let ((cdr (copy-tree (cdr (assoc "ssh" tramp-methods)))))
+    (cl-pushnew '("-A") (cadr (assoc 'tramp-login-args cdr)) :test #'equal)
+    (cl-pushnew (cons "sshA" cdr) tramp-methods :test #'equal)))
 #+END_SRC
 
 ** Keybindings
