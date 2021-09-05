@@ -72,6 +72,7 @@
    #define  SHUT_WR   SD_SEND
    #define  SHUT_RDWR SD_BOTH
   #endif
+  #define MSG_NOSIGNAL 0
   #define vsnprintf _vsnprintf
   #define snprintf  _snprintf
   // FILE_ATTRIBUTE_READONLY    0x00000001
@@ -124,6 +125,9 @@
   #define SOCKET_ERROR   -1
   #define ioctlsocket ioctl
   #define WSAEWOULDBLOCK EWOULDBLOCK
+  #ifndef MSG_NOSIGNAL
+   #define MSG_NOSIGNAL 0
+  #endif
 #endif
 
 // - - - - - basic types and tracing - - - - -
@@ -347,6 +351,7 @@ int  mystrnicmp     (char *psz1, cchar *psz2, int nLen);
 bool  strBegins      (char *pszStr, cchar *pszPat);
 bool  striBegins     (char *pszStr, cchar *pszPat);
 bool  strEnds        (char *pszStr, cchar *pszPat);
+bool  striEnds       (char *pszStr, cchar *pszPat);
 void  trimCR         (char *pszBuf);
 void  removeCRLF     (char *pszBuf);
 bool  sfkisalpha     (uchar uc);
@@ -365,6 +370,7 @@ char *numtoa         (num n, int nDigits=1, char *pszBuf=0);
 char *numtohex       (num n, int nDigits=1, char *pszBuf=0);
 int  timeFromString  (char *psz, num &nRetTime, bool bsilent=0, bool bUTC=0);
 void  doSleep        (int nmsec);
+void  doYield        ( );
 uchar *loadBinaryFile(char *pszFile, num &rnFileSize);
 uchar *loadBinaryFlex(char *pszFile, num &rnFileSize);
 bool  infoAllowed    ( );
@@ -418,7 +424,7 @@ private:
 };
 
 // max length of sfk (internal) filenames and URL's
-#define SFK_MAX_PATH 512
+#define SFK_MAX_PATH 1024
 
 #ifdef  MAX_PATH
  #undef MAX_PATH
@@ -693,6 +699,7 @@ public:
    char* setCurrentRoot (int iIndex);
    bool  changeFirstRoot(char *pszNewRoot);
    char* getCurrentRoot ( );
+   int   changeSingleRoot(char *pszNew); // for webserv
    char* root           (bool braw=0); // like above, but returns "" if none, with braw: 0 if none
    int  numberOfRootDirs ( );
    Array &rootDirs      ( ) { return clRootDirs; }
@@ -1091,6 +1098,8 @@ public:
    // also check FileStat::readFrom, writeTo
 
    int  nClRefs;    // not to be coi::copied
+
+   char  szClOutExt[8]; // [f]pic only jpg or png
 
    #ifndef _WIN32
 public: // not yet defined
@@ -1610,6 +1619,7 @@ public:
    char *tomask;     // output filename mask
    char *todir;      // output dir
    bool  tomaskfile; // -to mask is a single filename
+   char *overallOutFilename; // name for info
    char tomake[200]; // option -tomake
    char curcmd[50+10]; // current command. sfk1834 no pointer
    bool rootrelname; // use filenames relative to root dir
@@ -1629,6 +1639,7 @@ public:
    bool noinfo;      // do not tell infos
    bool nochain;     // disable command chains
    int  useJustNames;// create a list of filenames
+   int  useNotNames; // sfk198 list filenames not containing
    bool countMatchLines; // count no. of matching lines
    bool yes;
    bool logcmd;
@@ -1640,6 +1651,7 @@ public:
    int  flat;        // copy: flat output filenames
    char cflatpat;    // how to join flat output name
    bool nonames;     // do NOT print/pass :file records
+   bool subnames;    // print .xlsx subfile names
    bool noind;       // no indentation
    char *runCmd;     // default: "" if not set.
    bool printcmd;    // run: print raw command
@@ -1740,7 +1752,6 @@ public:
    int quiet;              // quiet mode
    bool ftpupdate;         // mput, mget: explicite -update
    bool ftpall;            // mput, mget: disable -update mode
-   bool ftpwidelist;       // with webserv
    bool webdesklist;       // with webserv
    bool noclone;           // disable time stamp replication
    bool preserve;          // copy full attributes with sft
@@ -1753,7 +1764,7 @@ public:
    bool copyLinks;         // copy symlinks     , windows only, untested
    bool copyNoBuf;         // copy w/o buffering, windows only, untested
    bool copyDecrypt;       // copy and decrypt  , windows only, untested
-   bool extrun;            // sfk run -re
+   bool rerun;             // sfk rerun
    bool textfiles;         // process only textfiles
    bool binaryfiles;       // process only binaryfiles
    bool packalnum;         // deblank: reduce filenames to alnum
@@ -1809,7 +1820,7 @@ public:
    bool rawterm;           // dump output as is
    bool usefilehead;       // use mask given below
    char szfilehead[200];   // per result file header with "%s" internal
-   bool maxdump;           // tcpdump -maxdump
+   int  maxdump;           // used differently
    bool fullhelp;
    int  reprep;            // repeat replace option
    bool perf;              // performance statistics
@@ -1859,8 +1870,11 @@ public:
    int  maxwebwait;        // network
    int  maxftpwait;        // network
    bool upath;             // run
+   char outpathchar;       // sfk198
    char *puser;
    char *ppass;
+   char *pwebuser;         // sfk198
+   char *pwebpass;         // sfk198
    bool errtotext;
    bool trimscript;
    char mlquotes;          // multi line quotes format
@@ -1946,10 +1960,6 @@ public:
    bool usingflist;        // sfk196 with -flist
    int  absdirs;           // sfk1963 with sync
    bool checkdirs;
-   #ifdef SFKPIC
-   int  srcpicwidth;
-   int  srcpicchan;
-   #endif // SFKPIC
    char rootdir[SFK_MAX_PATH+10];   // sfk197 -root
    char setxmask[60];      // draft: -setexec
    char curhost[255+20];   // sfk197
@@ -1958,6 +1968,37 @@ public:
    int  chanserv;          // sfk1972 server channel
    bool noqwild;           // sfk1972
    bool nopass;            // sfk1972 internal
+   bool procpic;           // support $outext
+   int  cliptries;
+   int  xxencode;
+   int  webnoclose;         // sfk198 for testing
+   char webbasedir[512+10]; // sfk198 webserv
+   char webcurdir[512+10];  // sfk198 webserv
+   char *pwebstartdir;
+   #ifdef SFKPIC
+   bool deeppic;           // probe file start
+   bool dumppix;
+   int  minwidth;
+   int  minheight;
+   int  dstpicwidth;       // cs.pic
+   int  dstpicheight;
+   int  dstpicquality;
+   uint picloadflags;
+   uint backcol;
+   bool notrans;
+   bool detrans;
+   int  dstchan;
+   int  nopicfiles;
+   int  pnginfiles;
+   int  jpginfiles;
+   int  pngoutfiles;
+   int  jpgoutfiles;
+   int  rgboutfiles;
+   int  srcpicwidth;
+   int  srcpicchan;
+   char *pszgallery;
+   FILE *pfgallery;
+   #endif // SFKPIC
 };
 
 // extern struct CommandStats gs;
@@ -2006,7 +2047,9 @@ enum eWalkTreeFuncs {
    eFunc_GetPic      ,
    eFunc_XFind       ,
    eFunc_Move        ,
-   eFunc_SumFiles
+   eFunc_SumFiles    ,
+   eFunc_UUEncode    ,
+   eFunc_Pic
    #ifdef SFKPACK
    , eFunc_ZipTo
    #endif // SFKPACK
@@ -2212,6 +2255,9 @@ public:
    int   addBinary(uchar *pData, int iSize);
    uchar *loadBinary(num &rSize); // owned by caller
 
+   int openOverallOutputFile(cchar *pszMode);
+   void closeOverallOutputFile(int iDoneFiles=0);
+
    num   nClOutBinarySize;  // for binary write
    num   nClInBinarySize;   // for binary read
    uint  nClOutCheckSum;
@@ -2271,7 +2317,7 @@ int makeWinFileTime(num nsrctime, FILETIME &rdsttime, num nSrcNanoSec=0, bool bU
 
 extern KeyMap glblSFKVar;
 bool   sfkhavevars();
-int    sfksetvar(char *pname, uchar *pdata, int idata, int badd=0);
+int    sfksetvar(char *pname, uchar *pdata, int idata, int nadd=0);
 uchar *sfkgetvar(char *pname, int *plen);
 uchar *sfkgetvar(int i, char **ppname, int *plen);
 void   sfkfreevars();
@@ -2457,16 +2503,6 @@ char
    szClFixSysDir  [800],
    szClRenameFrom [800],
    szClReplyBuf   [1024];
-
-int
-   clXTimeout;
-num
-   clXRunStart;
-char
-   szClXCmdBuf    [1000+20],
-   szClXDataBuf   [4000+20];
-char
-   *aClXCmdParms  [100];
 
 int  iClVDir;
 char aClVDirSrc[MAX_FTP_VDIR+2][100];
@@ -2682,6 +2718,7 @@ public:
 
    void  setpix   (uint x, uint y, uint c);
    uint  getpix   (uint x, uint y);
+   void  drawrect (int x1, int y1, int x2, int y2, uint c, int bfill);
    void  copyFrom (SFKPic *pSrc, uint x1dst, uint y1dst, uint wdst, uint hdst, uint x1src, uint y1src, uint wsrc, uint hsrc);
 
    int   getErrNum   ( );

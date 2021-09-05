@@ -25,7 +25,7 @@
 #define mymin(a,b) ((a<b)?(a):(b))
 
 #ifdef SFKVAR
-int sfksetvar(char *pname, uchar *pdata, int idata);
+int sfksetvar(char *pname, uchar *pdata, int idata, int nadd=0);
 uchar *sfkgetvar(char *pname, int *plen);
 #endif
 

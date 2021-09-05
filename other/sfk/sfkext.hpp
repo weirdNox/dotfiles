@@ -433,13 +433,13 @@ private:
 
    TCPCon   *pClCurCon; // current i/o connection
 
-   char      aClURLBuf[500];  // current hostname, path
-   char     *pClCurPath;      // within URLBuf
+   char      aClURLBuf[1000];  // current hostname, path
+   char     *pClCurPath;       // within URLBuf
 
-   char      aClHeadBuf[200]; // current header line
-   char     *pClCurVal;       // within HeadBuf
+   char      aClHeadBuf[200];  // current header line
+   char     *pClCurVal;        // within HeadBuf
 
-   char      aClJoinBuf[500]; // join: recombined url
+   char      aClJoinBuf[1000]; // join: recombined url
 
    char      aClIOBuf[4096];
 

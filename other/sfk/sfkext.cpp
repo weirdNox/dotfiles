@@ -82,6 +82,7 @@ int sfkmemcmp2(uchar *psrc1, uchar *psrc2, num nlen, bool bGlobalCase, uchar *pF
 void myfgets_init    ( );
 int myfgets         (char *pszOutBuf, int nOutBufLen, FILE *fin, bool *rpBinary=0, char *pAttrBuf=0);
 extern char *ipAsString(struct sockaddr_in *pAddr, char *pszBuffer, int iBufferSize, uint uiFlags=0);
+extern char *ipAsString(uint ip, int iport=0);
 int encode64(uchar *psrc, int nsrc, uchar *pdst, int nmaxdst, int nlinechars);
 void printCopyCompleted(char *pszName, uint nflags);
 FILE *myfopen(char *pszName, cchar *pszMode);
@@ -138,6 +139,7 @@ bool isEmpty(char *psz);
 bool  strbeg(char *pszStr, cchar *pszPat);
 bool  stribeg(char *psz, cchar *pstart);
 void setSystemSlashes(char *pdst);
+bool isUniPathChar(char c);
 int makeServerSocket(
    uint  &nNewPort,                 // i/o parm
    struct sockaddr_in &ServerAdr,   // i/o parm
@@ -148,6 +150,11 @@ int makeServerSocket(
 num getCurrentTicks();
 void initRandom(char *penv[]);
 bool isEmptyDir(char *pszIn);
+int termHexdump(uchar *pBuf, uint nBufSize);
+int callLabel(char *pScript, int argc, char *argx[], char *penv[],
+   char *pszLabel, int iLocalParm, int nLocalParm,
+   int &lRC, bool &bFatal);
+void setNetSlashes(char *pdst);
 
 static const char aenc64loc[] =
    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
@@ -229,6 +236,7 @@ extern char szAttrBuf3[MAX_LINE_LEN+10];
 extern char szRefNameBuf[MAX_LINE_LEN+10];
 extern char szRefNameBuf2[MAX_LINE_LEN+10];
 extern char szTopURLBuf[MAX_LINE_LEN+10];
+extern char szOutNameBuf[MAX_LINE_LEN+10];
 
 // sfk1972 FROM HERE ON, ALL fread() and fwrite() calls are MAPPED to SAFE versions
 // to work around Windows runtime bugs (60 MB I/O bug, stdin joined lines etc.)
@@ -270,6 +278,7 @@ bool isvarnamechar(char c, bool bforset)
 // sfk1922 addtovar support
 //   nadd bit 0: append
 //   nadd bit 1: without lf
+//   nadd bit 2: allow internal names like run.x
 int sfksetvar(char *pname, uchar *pDataIn, int iDataIn, int nadd)
 {
    if (pDataIn == 0) return 9+perr("int. #2171132");
@@ -277,7 +286,9 @@ int sfksetvar(char *pname, uchar *pDataIn, int iDataIn, int nadd)
 
    bool badd    = (nadd & 1) ? 1 : 0;
    bool bwithlf = (nadd & 2) ? 0 : 1; // sfk1934
+   bool bintnam = (nadd & 4) ? 1 : 0; // sfk1973
 
+   if (!bintnam)
    for (char *psz=pname; *psz; psz++)
    {
       if (isalpha(*psz)) // varname
@@ -2675,16 +2686,17 @@ int HTTPClient::splitURL(char *purl)
 
    if (!strncmp(purl, "https://", 8)) {
       #ifndef WITH_SSL
-      perr("SFK does not support SSL encryption (HTTPS).");
+      perr("SFK Base does not support SSL encryption (HTTPS).");
       static bool bfirst=1;
       if (bfirst) {
          bfirst=0;
          #ifdef _WIN32
-         pinf("if you need https support, download curl, then:\n");
+         pinf("You may buy SFK Plus for HTTPS web access.\n");
+         pinf("Find more infos on www.stahlworks.com\n");
          #else
          pinf("if you need https support, install curl, then:\n");
-         #endif
          pinf("curl -k -o outfile.dat https://website/in.dat\n");
+         #endif
       }
       return 9;
       #endif
@@ -4418,8 +4430,8 @@ int HTTPClient::sendReq
    char szAuth2[200];
    szAuth1[0] = '\0';
    szAuth2[0] = '\0';
-   if (cs.puser && cs.ppass) {
-      snprintf(szAuth1,sizeof(szAuth1)-10, "%s:%s", cs.puser, cs.ppass);
+   if (cs.pwebuser && cs.pwebpass) { // sfk198 web access user/pw support
+      snprintf(szAuth1,sizeof(szAuth1)-10, "%s:%s", cs.pwebuser, cs.pwebpass);
       encode64((uchar*)szAuth1,strlen(szAuth1),(uchar*)szAuth2,sizeof(szAuth2)-10,10000);
       // encode64 adds CRLF already!
       snprintf(szAuth1,sizeof(szAuth1)-10, "Authorization: Basic %s", szAuth2);
@@ -4480,23 +4492,25 @@ int HTTPClient::sendReq
          mystrcatf(aClIOBuf, nmaxbuf, "%s", phdrs+1);
    
       if (szAuth1[0] && !mystrstri(phdrs, "\nAuthorization:"))
-         mystrcatf(aClIOBuf, nmaxbuf, "%s\r\n", szAuth1);
-   
+         mystrcatf(aClIOBuf, nmaxbuf, "%s", szAuth1); // has CRLF already
+
       if (!mystrstri(phdrs, "\nUser-Agent:"))
          mystrcatf(aClIOBuf, nmaxbuf, "User-Agent: %s\r\n", getHTTPUserAgent());
-   
+
       if (!mystrstri(phdrs, "\nAccept:"))
          mystrcatf(aClIOBuf, nmaxbuf, "Accept: text/html;q=0.9,*/*;q=0.8\r\n");
    
       if (!mystrstri(phdrs, "\nAccept-Language:"))
          mystrcatf(aClIOBuf, nmaxbuf, "Accept-Language: en-us,en;q=0.8\r\n");
-   
-      if (szClProxyHost[0]) {
-         if (!mystrstri(phdrs, "\nProxy-Connection:"))
-            mystrcatf(aClIOBuf, nmaxbuf, "Proxy-Connection: close\r\n");
-      } else {
-         if (!mystrstri(phdrs, "\nConnection:"))
-            mystrcatf(aClIOBuf, nmaxbuf, "Connection: close\r\n");
+
+      if (!cs.webnoclose) { // sfk198 option
+         if (szClProxyHost[0]) {
+            if (!mystrstri(phdrs, "\nProxy-Connection:"))
+               mystrcatf(aClIOBuf, nmaxbuf, "Proxy-Connection: close\r\n");
+         } else {
+            if (!mystrstri(phdrs, "\nConnection:"))
+               mystrcatf(aClIOBuf, nmaxbuf, "Connection: close\r\n");
+         }
       }
    
       mystrcatf(aClIOBuf, nmaxbuf, "\r\n");
@@ -5856,6 +5870,7 @@ int UDPIO::initSendReceive
    bClMulticast = (uiFlags & 1) ? 1 : 0;
    bool bReuse  = (uiFlags & 2) ? 1 : 0;
    bool bRetry  = (uiFlags & 4) ? 1 : 0;
+   bool bBroadcast = (uiFlags & 8) ? 1 : 0;
 
    if (pszTargetAddress && strchr(pszTargetAddress, '.'))
    {
@@ -5878,6 +5893,11 @@ int UDPIO::initSendReceive
    {
       int nOnVal = 1;
       setsockopt(fdTmp, SOL_SOCKET, SO_REUSEADDR, (const char *)&nOnVal, sizeof(nOnVal));
+   }
+   if (bBroadcast)
+   {
+      int nOnVal = 1;
+      setsockopt(fdTmp, SOL_SOCKET, SO_BROADCAST, (const char*)&nOnVal, sizeof(nOnVal));
    }
 
    if (iOwnReceivePort >= 0)
@@ -13145,7 +13165,7 @@ void UDPCore::shutdown( )
 int UDPCore::makeSocket(int iMode, char *pszHost, int nportin)
 {__
    if (nClCon >= MAX_UDP_CON-2)
-      return 9+perr("too many sockets, cannot connect more");
+      return 9+perr("too many sockets, cannot connect more than %d",(MAX_UDP_CON-2));
 
    mclear(aClCon[nClCon]);
    aClCon[nClCon].sock = INVALID_SOCKET;
@@ -13170,7 +13190,7 @@ int UDPCore::makeSocket(int iMode, char *pszHost, int nportin)
    if (setaddr(&pcon->addr,pszHost))
    {
       closesocket(hSock);
-      return 9+perr("cannot get host\n");
+      return 9+perr("cannot get host: %s\n",pszHost);
    }
 
    char szBuf[100];
@@ -14822,6 +14842,123 @@ void printSamp(int nlang, char *pszOutFile, char *pszClassName, int bWriteFile, 
 "\n"
 );
          break;
+
+         case 22: // proxy.bat and proxy.sh
+         if (iSystem==1)
+         chain.print(
+            "@echo off\n"
+            "sfk script \"%%~f0\" -from begin %%*\n"
+            "GOTO xend\n"
+            "\n");
+         else
+         chain.print(
+            "#!/bin/bash\n"
+            "sfk script \"$0\" -from begin $@\n"
+            "function skip_block\n"
+            "{\n");
+
+         chain.print(
+"sfk label begin -var\n"
+"\n"
+"   +proxy\n"
+"\n"
+"      from http 80 -verbose -maxdump=512\n"
+"        to http 192.168.1.100:80\n"
+"      // open 127.0.0.1 in your web browser to access\n"
+"      // a http server on ip .100, and show traffic in console.\n"
+"\n"
+"      from http 8080 -verbose -maxdump=512\n"
+"        call pertcp\n"
+"        to http 127.0.0.1:8100\n"
+"      // run in a separate cmd window: sfk webserv -port=8100\n"
+"      // then type in your browser: 127.0.0.1:8080\n"
+"      // to get an instant http traffic dump in the console.\n"
+"\n"
+"      from udp 224.0.0.251:5353 call perudp\n"
+"      // listen for mDNS bonjour traffic, call label per packet\n"
+"      // to print only packets containing text \"_raop\"\n"
+"      // meaning AirPlay input announcements.\n"
+"\n"
+"   +end\n"
+"\n"
+"sfk label perudp\n"
+"\n"
+"   +getvar data\n"
+"      +xex -justrc \"/_raop/\"\n"
+"      +if \"rc=0\" stop 0\n"
+"\n"
+"   +tell \"Got packet from #(fromip) with #(size(data)) bytes:\"\n"
+"   +getvar data\n"
+"      +hexdump -maxdump=128\n"
+"\n"
+"   +end\n"
+"\n"
+"sfk label pertcp\n"
+"\n"
+"   // disable gzip encoding to allow content dump\n"
+"   +getvar data\n"
+"      +xed \"_accept-encoding:*[eol]__\"\n"
+"         +setvar data\n"
+"\n"
+"   +end\n"
+            );
+
+         if (iSystem==1)
+         chain.print(
+            ":xend\n");
+         else
+         chain.print(
+            "}\n");
+
+         break;
+
+         case 23: // webreq.bat and webreq.sh
+         if (iSystem==1)
+         chain.print(
+            "@echo off\n"
+            "sfk script \"%%~f0\" -from begin %%*\n"
+            "GOTO xend\n"
+            "\n");
+         else
+         chain.print(
+            "#!/bin/bash\n"
+            "sfk script \"$0\" -from begin $@\n"
+            "function skip_block\n"
+            "{\n");
+
+         chain.print(
+"sfk label begin -var\n"
+"\n"
+"   // example how to fully formulate a web request\n"
+"   // to test different header lines on an url.\n"
+"\n"
+"   +web -headers\n"
+" \n"
+"      http://localhost/index.html\n"
+" \n"
+"   -request\n"
+"\n"
+"      \"GET / HTTP/1.1\n"
+"       Host: localhost\n"
+"       Accept: text/html;q=0.9,*/*;q=0.8\n"
+"       Accept-Language: en-us,en;q=0.8\n"
+"       Connection: close\n"
+" \n"
+"      \"\n"
+"\n"
+"   +end\n"
+"\n"
+            );
+
+         if (iSystem==1)
+         chain.print(
+            ":xend\n");
+         else
+         chain.print(
+            "}\n");
+
+         break;
+
       }
 }
 
@@ -15360,13 +15497,16 @@ int SFKPic::load(uchar *pPacked, int nPacked)
    return ppix ? 0 : 9;
 }
 
+// .
 int SFKPic::save(char *pszFile)
 {
    if (endsWithExt(pszFile,str(".png")))  octl.fileformat=1;
    if (endsWithExt(pszFile,str(".jpg")))  octl.fileformat=2;
    if (endsWithExt(pszFile,str(".jpeg"))) octl.fileformat=2;
 
-   uint   nPack = octl.width*octl.height*4+100;
+   // allow 4 kb of meta data around pixels,
+   // like palette, zip dictionaries etc.
+   uint   nPack = octl.width*octl.height*4 + 4096;
    uchar *pPack = new uchar[nPack+100];
    if (!pPack)
       return 10+perr("outofmem\n");
@@ -15407,6 +15547,21 @@ uint SFKPic::getpix(uint x, uint y)
       return 0;
    }
    return octl.ppix[ioff];
+}
+
+void SFKPic::drawrect(int x1, int y1, int x2, int y2, uint c, int bfill)
+{
+   for (int y=y1; y<y2; y++)
+   {
+      for (int x=x1; x<x2; x++)
+      {
+         if (bfill == 0
+             && (y > y1+1 && y+2 < y2)
+             && (x > x1+1 && x+2 < x2))
+            continue;
+         setpix(x,y,c);
+      }
+   }
 }
 
 void SFKPic::copyFrom(SFKPic *pSrc, uint x1dst, uint y1dst, uint wdst, uint hdst, uint x1src, uint y1src, uint wsrc, uint hsrc)
@@ -16796,6 +16951,7 @@ char *OfficeFilter::filter(char *pin, int ilen, int &routlen, char *pSharedStrin
    char *pFilename)
 {
    char sztag[300];
+   char szsubhead[500];
 
    bool bxlsx = pSharedStrings ? 1 : 0;
 
@@ -16932,6 +17088,21 @@ char *OfficeFilter::filter(char *pin, int ilen, int &routlen, char *pSharedStrin
       uint nchar=0;
       nbadconv=0;
 
+      // sfk198: insert subfile headers on .xlsx
+      if (bxlsx && cs.subnames)
+      {
+         char *psz = pFilename+strlen(pFilename);
+         while (psz>pFilename && psz[-1]!=glblPathChar && psz[-1]!=glblWrongPChar)
+            psz--;
+         snprintf(szsubhead, sizeof(szsubhead)-10,
+            "\n----- :file: %s -----\n"
+            , psz);
+         int nsubhead = strlen(szsubhead);
+         if (ipass)
+            memcpy(pout+iout, szsubhead, nsubhead);
+         iout += nsubhead;
+      }
+
       while (utf.hasChar() == 1)
       {
          if (bGlblEscape)
@@ -16951,7 +17122,6 @@ char *OfficeFilter::filter(char *pin, int ilen, int &routlen, char *pSharedStrin
          if (c==0)
          {
             // . utf does not map into our codepage.
-            #if 1
             if (istate==0)
             {
                // visible text: copy thru even if it breaks encoding.
@@ -16964,7 +17134,6 @@ char *OfficeFilter::filter(char *pin, int ilen, int &routlen, char *pSharedStrin
                continue;
             }
             else
-            #endif
             {
                // in xml: don't care
                c = '?'; nbadconv++;
@@ -17954,6 +18123,9 @@ int execUnzip(char *pszInFile, char *pszSubFile, int iOffice,
          }
          continue;
       }
+
+      // note: cs.pOutCoi ist set while .xlsx coi reads it's zip subfile
+      // into internal cache. while doing so nothing should be printed.
       if (iout == 2 && cs.nonames == 0 && cs.pOutCoi == 0) {
          if (!chain.colany())
             printx("%s<file>%s\n", pszFileFeed, ocoi.name());
@@ -18325,6 +18497,309 @@ int execUnzip(char *pszInFile, char *pszSubFile, int iOffice,
 }
 
 #endif // SFKPACK
+
+#ifdef SFKPIC
+ #ifndef USE_SFK_BASE
+int execPic(Coi *pcoi, char *pszOutFile)
+{
+   char szPwdBuf[SFK_MAX_PATH+100];
+   char szAbsNameBuf[SFK_MAX_PATH+100];
+
+   SFKPic opic,opic2;
+   SFKPicData &opicd = opic.octl;
+   char *pszFilename = pcoi->name();
+
+   info.setAddInfo("%u images", cs.filesScanned);
+   info.setStatus("scan ", pcoi->name(), 0, eKeepAdd);
+
+   // can it be an image file at all?
+   if (!cs.deeppic)
+   {
+      if (endsWithExt(pszFilename, str(".jpg"))
+          || endsWithExt(pszFilename, str(".jpeg"))
+          || endsWithExt(pszFilename, str(".png"))
+         )
+         { }
+      else {
+         cs.nopicfiles++;
+         if (cs.verbose)
+            info.print("no image: %s\n", pcoi->name());
+         return 5;
+      }
+   }
+   else
+   {
+      uchar abData[100];
+      memset(abData, 0, sizeof(abData));
+   
+      if (pcoi->open("rb")) {
+         cs.nopicfiles++;
+         if (cs.verbose)
+            info.print("cannot open: %s\n", pcoi->name());
+         return 5;
+      }
+      pcoi->read(abData, 32);
+      pcoi->close();
+   
+      if (abData[0]==0xFF && abData[1]==0xD8)
+         { }
+      else
+      if (abData[0]==0x89 && abData[1]==0x50
+          && abData[2]==0x4E && abData[3]==0x47)
+         { }
+      else {
+         cs.nopicfiles++;
+         if (cs.verbose)
+            info.print("no image: %s\n", pcoi->name());
+         return 5;
+      }
+   }
+
+   // is it too large to load?
+   num nFileSize = pcoi->getSize();
+   if (nFileSize > nGlblMemLimit) {
+      if (!cs.quiet) {
+         if (cs.verbose)
+            pinf("file too large to load: %s, %s mbytes\n",
+               pcoi->name(), numtoa(nFileSize/1000000));
+         tellMemLimitInfo();
+      }
+      return 5;
+   }
+
+   opicd.loadflags = cs.picloadflags;
+
+   // try to load
+   if (opic.load(pcoi->name())) {
+      cs.nopicfiles++;
+      if (cs.verbose)
+         info.print("cannot load: %s\n", pcoi->name());
+      return 5;
+   }
+
+   if (cs.minwidth > 0 && opic.width() < cs.minwidth) {
+      if (cs.verbose) info.print("too small: %s\n", pcoi->name());
+      return 1;
+   }
+   if (cs.minheight > 0 && opic.height() < cs.minheight) {
+      if (cs.verbose) info.print("too small: %s\n", pcoi->name());
+      return 1;
+   }
+
+   cchar *pform = "?";
+   switch (opicd.fileformat) {
+      case 0: pform = "---"; break;
+      case 1: pform = "png"; cs.pnginfiles++; break;
+      case 2: pform = "jpg"; cs.jpginfiles++; break;
+   }
+
+   if (!cs.pszgallery) info.clear();
+
+   char *pext = "";
+   switch (opicd.fileformat) {
+      case 1: pext = "png"; break;
+      case 2: pext = "jpg"; break;
+   }
+   mystrcopy(pcoi->szClOutExt, pext, sizeof(pcoi->szClOutExt)-2);
+
+   if (cs.todir)
+   {
+      cs.procpic = 1;
+      int nrc = renderOutMask(szRefNameBuf, pcoi, "$relpath-$base.$outext", cs.curcmd); // [f]pic
+      if (nrc >= 9) {
+         if (cs.verbose) info.print("cannot render output filename, rc=%d\n", nrc);
+         return nrc;
+      }
+      for (char *psz=szRefNameBuf; *psz; psz++)
+         if (isUniPathChar(*psz))
+            *psz = '-';
+      joinPath(szOutNameBuf, sizeof(szOutNameBuf)-10, cs.todir, szRefNameBuf);
+      pszOutFile = szOutNameBuf;
+   }
+   else
+   if (cs.tomask && !cs.tomaskfile)
+   {
+      cs.procpic = 1;
+      int nrc = renderOutMask(szOutNameBuf, pcoi, cs.tomask, cs.curcmd); // [f]pic
+      if (nrc >= 9) {
+         if (cs.verbose) info.print("cannot render output filename, rc=%d\n", nrc);
+         return nrc;
+      }
+      pszOutFile = szOutNameBuf;
+   }
+
+   cs.filesScanned++;
+
+   if (!cs.dumppix && !cs.yes)
+   {
+      char *pname = pcoi->name();
+      if (cs.listTargets && pszOutFile)
+            pname = pszOutFile;
+      printx("$%s<def> #%4u %4u %u<def><nocol> %s\n",
+         pform,
+         opic.octl.width, opic.octl.height, opic.octl.filecomp,
+         pname);
+      return 0;
+   }
+
+   // ----- process image -----
+
+   SFKPic *pout = &opic;
+
+   if (cs.dstpicwidth || cs.dstpicheight)
+   {
+      int targw = cs.dstpicwidth;
+      int targh = cs.dstpicheight;
+
+      if (cs.pszgallery != 0)
+      {
+         if (targh > 0 && opic.octl.height < targh)
+             targh = opic.octl.height;
+         if (targw > 0 && opic.octl.width < targw)
+             targw = opic.octl.width;
+      }
+
+      if (targw && !targh)
+         targh = ((num)opic.octl.height * (num)targw) / opic.octl.width;
+      else
+      if (targh && !targw)
+         targw = ((num)opic.octl.width * (num)targh) / opic.octl.height;
+      else
+      if (!targw && !targh) {
+         targw = opic.width();
+         targh = opic.height();
+      }
+
+      if (opic2.allocpix(targw,targh))
+         return 9+perr("cannot allocate %ux%u image",targw,targh);
+
+      pout = &opic2;
+      pout->copyFrom(&opic,0,0,targw,targh,0,0,opic.width(),opic.height());
+   }
+
+   // convert and write output
+   cs.filesChg++;
+
+   if (cs.pszgallery)
+   {
+      if (!cs.pfgallery)
+      {
+         if (!(cs.pfgallery = fopen(cs.pszgallery, "wb")))
+            return 19+perr("cannot write: %s\n",cs.pszgallery);
+         fprintf(cs.pfgallery, "<html><body style=\"background-color:#dddddd;\">\n");
+      }
+
+      // . pack as jpeg
+      uint   nOutSize = pout->width()*pout->height()*4+4096;
+      uchar *pOutPack = new uchar[nOutSize+100];
+      if (!pOutPack)
+         return 19+perr("outofmem\n");
+   
+      pout->octl.fileformat  = 1;
+      // pout->octl.outcomp     = 3;
+      // pout->octl.filequality = 90;
+   
+      uint rc = packpic(pout->octl.ppix, &pout->octl, &pOutPack, &nOutSize);
+
+      int    nmax64  = nOutSize*2;
+      uchar *pdump64 = new uchar[nmax64+100];
+      if(!pdump64)
+         return 19+perr("outofmem");
+
+      // convert to base64
+      if (encode64(pOutPack,nOutSize, pdump64,nmax64, 512))
+         return 19+perr("output encoding failed\n");
+
+      char *pf = pcoi->name();
+      if (cs.forceabsname) {
+         if (!isAbsolutePath(pcoi->name())) {
+            szPwdBuf[0] = szAbsNameBuf[0] = '\0';
+            if (getcwd(szPwdBuf,SFK_MAX_PATH)) { }
+            joinPath(szAbsNameBuf, SFK_MAX_PATH, szPwdBuf, pcoi->name());
+            pf = szAbsNameBuf;
+         }
+      }
+
+      fprintf(cs.pfgallery, "<a href=\"%s\">",pf);
+      fprintf(cs.pfgallery, "<img src=\"data:image/png;base64,");
+      fwrite(pdump64,1,strlen((char*)pdump64),cs.pfgallery);
+      fprintf(cs.pfgallery, "\"></a>\n");
+
+      cs.jpgoutfiles++;
+
+      // add to pfgallery
+   }
+   else
+   if (pszOutFile)
+   {
+      if (   endsWithExt(pszOutFile, str(".jpg"))
+          || endsWithExt(pszOutFile, str(".jpeg"))
+         )
+      {
+         cs.jpgoutfiles++;
+         pout->octl.outcomp = 3;
+         pout->octl.filequality = 90;
+         if (cs.dstpicquality)
+            pout->octl.filequality = cs.dstpicquality;
+         // jpeg to png: always reduce channels
+         if (opic.octl.filecomp == 4) {
+            pout->octl.mixonpack = 1;
+            pout->octl.backcolor = cs.backcol;
+         }
+      }
+      else if (endsWithExt(pszOutFile, str(".png")))
+      {
+         cs.pngoutfiles++;
+         // png to png: reduce on demand
+         if (pout->octl.filecomp == 4) {
+            if (cs.notrans) {
+               pout->octl.outcomp = 3;
+               pout->octl.mixonpack = 1;
+               pout->octl.backcolor = cs.backcol;
+            }
+         } else {
+            pout->octl.outcomp=3;
+         }
+      }
+      else
+         cs.rgboutfiles++;
+
+      // if (cs.dstchan > 0)
+      //    pout->octl.outcomp = cs.dstchan;
+
+      printx("$save #%4u %4u %u<def> <nocol>%s\n",
+         pout->octl.width,
+         pout->octl.height,
+         pout->octl.outcomp ? pout->octl.outcomp : pout->octl.filecomp,
+         pszOutFile
+         );
+
+      if (pout->save(pszOutFile)) {
+         opic2.freepix();
+         return 9+perr("cannot save: %s",pszOutFile);
+      }
+   }
+   else if (cs.dumppix)
+   {
+      int nbytes = pout->octl.width * pout->octl.height*4;
+      if (chain.coldata && chain.colbinary)
+      {
+         chain.addBinary((uchar*)pout->octl.ppix,nbytes);
+      }
+      else
+      {
+         printx("$%s\n", pcoi->name());
+         // termHexdump((uchar*)pout->octl.ppix,nbytes);
+         dumpOutput((uchar*)pout->octl.ppix, 0, nbytes, 1);
+      }
+   }
+
+   opic2.freepix();
+
+   return 0;
+}
+ #endif
+#endif // SFKPIC
 
 size_t myfread(uchar *pBuf, size_t nBytes, FILE *fin , num nMaxInfo=0, num nCur=0, SFKMD5 *pmd5=0);
 char getYNAchar();
@@ -21844,6 +22319,460 @@ fprintf(fGlblOut,
    return 0;
 }
 
+cchar *szGlblXXEncode =
+   "+-0123456789"
+   "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+   "abcdefghijklmnopqrstuvwxyz";
+
+static int uuenc(int c, int bxx)
+{
+   if (bxx)
+      return szGlblXXEncode[c & 0x3F];
+
+   return ((c) ? ((c) & 0x3F) + ' ': 0x60);
+}
+
+int execUUEncode(Coi *pcoi)
+{
+   num nFileTime = 0;
+   num nFileSize = 0;
+   uint nFileMode=0644;
+   SFKMD5 md5;
+
+   bool b64 = 0;
+   bool buu = b64 ? 0 : 1;
+   int  bxx = cs.xxencode;
+
+   if (!cs.pure)
+   {
+      // force full status read
+      pcoi->nClStatus = 0;
+      pcoi->readStat('u');
+      nFileTime = pcoi->getTime();
+      nFileSize = pcoi->getSize();
+      getFileMD5(pcoi, md5, 1, 0);
+      #ifndef _WIN32
+      nFileMode = pcoi->getAttr() & 0777;
+      #endif
+   }
+
+   if (cs.sim) {
+      info.print("add: %s\n", pcoi->name());
+      cs.filesChg++;
+      cs.totalinbytes += nFileSize;
+      return 0;
+   }
+
+   if (pcoi->open("rb"))
+      return 9+pferr(pcoi->name(), "cannot read: %s", pcoi->name());
+
+   if (!cs.quiet && !cs.nonames && cs.overallOutFilename)
+      info.print("add: %s\n", pcoi->name());
+
+   if (!cs.pure) {
+      uchar *p=md5.digest();
+      char cform = bxx ? 'x' : 'u';
+      if (b64) cform = 'b';
+      chain.print("meta s%s t%s c%02x%02x%02x%02x f%c\n",
+         numtoa(nFileSize, 1, szLineBuf),
+         timeAsString(nFileTime, 1),
+         p[0],p[1],p[2],p[3], cform);
+   }
+
+   strcopy(szLineBuf, pcoi->name());
+
+   if (cs.outpathchar != 0)
+      for (int i=0; szLineBuf[i]; i++)
+         if (szLineBuf[i]=='\\' || szLineBuf[i]=='/')
+            szLineBuf[i] = cs.outpathchar;
+
+   chain.print("begin%s %o %s\n", b64?"-base64":"", nFileMode, szLineBuf);
+
+   int    c=0, n=0, iDst=0;
+   uchar *p=0;
+
+   while ((n = pcoi->read(szLineBuf, 45)))
+   {
+      szLineBuf[n] = '\0';
+      iDst=0;
+
+      if (buu)
+         szLineBuf2[iDst++] = uuenc(n, bxx);
+
+      for (p=(uchar*)szLineBuf; n>0; n-=3, p+=3)
+      {
+         if (n < 3) {
+            p[2] = '\0';
+            if (n < 2)
+               p[1] = '\0';
+         }
+
+         if (b64) {
+            encodeSub64(p, (uchar*)szLineBuf2+iDst, n);
+            iDst += 4;
+         } else {
+            c = uuenc(*p >> 2, bxx);
+             szLineBuf2[iDst++] = c;
+            c = uuenc(((*p << 4) & 0x30) | ((p[1] >> 4) & 0x0F), bxx);
+             szLineBuf2[iDst++] = c;
+            c = uuenc(((p[1] << 2) & 0x3C) | ((p[2] >> 6) & 0x03), bxx);
+             szLineBuf2[iDst++] = c;
+            c = uuenc(p[2] & 0x3F, bxx);
+             szLineBuf2[iDst++] = c;
+         }
+      }
+
+      szLineBuf2[iDst] = '\0';
+      chain.print("%s\n",szLineBuf2);
+   }
+
+   if (b64) {
+      chain.print("====\n\n");
+   } else {
+      if (bxx==0 || bxx==2)
+         chain.print("%c\n", uuenc('\0', bxx));
+      chain.print("end\n\n");
+   }
+
+   pcoi->close();
+
+   cs.filesChg++;
+
+   return 0;
+}
+
+static int uudec(int c, int bxx)
+{
+   if (bxx) {
+      cchar *p = strchr(szGlblXXEncode, c);
+      if (!p) return 0;
+      int ival = (int)(p - szGlblXXEncode);
+      return ival;
+   }
+
+   return (((c) - 32) & 0x3F);
+}
+
+static int uuisdec(int c, int bxx)
+{
+   if (bxx)
+      return strchr(szGlblXXEncode, c) ? 1 : 0;
+
+   return ((((c) - 32) >= 0) && (((c) - 32) <= 0x3F + 1)); 
+}
+
+int execUUDecode(char *pszInFile, char *pszToDir, int bxx)
+{
+   char szOutFile[SFK_MAX_PATH+100];
+   char szInBuf[1024+100];
+   char szPreBuf[1024+110];
+   FILE *fout=0;
+
+   int  istate=0, i=0, c=0, iLine=0, iend=0;
+   char *p=0, *pszLine=0;
+   bool b64=0,buu=1;
+
+   num nOutBytes=0;
+   num nMetaSize=0;
+   char szTime[50];
+   num nMetaTime=0;
+   uchar abMetaMD[16]; mclear(abMetaMD);
+   uchar abOwnMD[16]; mclear(abOwnMD);
+   int imdlen=0, iexists=0;
+   uint nFileMode=0644;
+
+   szInBuf[0] = '\0';
+   szPreBuf[0] = '\0';
+
+   Coi *pcoi = 0;
+   if (pszInFile)
+      pcoi = new Coi(pszInFile, 0);
+   CoiAutoDelete odel(pcoi, 0);
+   if (pcoi && pcoi->open("rb"))
+      return 9+pferr(pszInFile,"cannot read: %s",pszInFile);
+
+   if (!cs.yes) printx("$[simulating:]\n");
+
+   while (1)
+   {
+      strcopy(szPreBuf, szInBuf);
+      if (pcoi) {
+         if (pcoi->readLine(szInBuf, sizeof(szInBuf)-100) <= 0)
+            break;
+         pszLine = szInBuf;
+      } else {
+         if (iLine>=chain.indata->numberOfEntries())
+            break;
+         pszLine = chain.indata->getEntry(iLine, __LINE__);
+         iLine++;
+      }
+      removeCRLF(pszLine);
+
+      if (istate==0) {
+         if (strBegins(pszLine, "meta ")) {
+            char *psz=pszLine+5;
+            while (isspace(*psz)) psz++;
+            if (*psz!='s') // size
+               continue;
+             nMetaSize=atonum(psz+1);
+            while (*psz && !isspace(*psz)) psz++;
+            while (isspace(*psz)) psz++;
+            if (*psz!='t') // time
+               continue;
+             strcopy(szTime,psz+1); szTime[14]='\0';
+             timeFromString(szTime,nMetaTime,1); // local or UTC?
+            while (*psz && !isspace(*psz)) psz++;
+            while (isspace(*psz)) psz++;
+            if (*psz!='c') // checksum
+               continue;
+            psz++;
+            if (strlen(psz) >= 8) {
+             for (int i=0;i<4 && isxdigit(psz[i*2]);i++) {
+                abMetaMD[i]=(uchar)getTwoDigitHex(psz+i*2);
+                imdlen=i+1;
+             }
+            }
+            continue;
+         }
+         char *psz=0;
+         if (strBegins(pszLine, "begin-base64 ")) // internal
+            { b64=1; buu=0; psz=pszLine+13; }
+         else if (strBegins(pszLine, "begin "))
+            { b64=0; buu=1; psz=pszLine+6; }
+         else
+            continue;
+         nFileMode=strtol(psz,0,8);
+         while (*psz!=0 && isspace(*psz)==0) psz++;
+         while (isspace(*psz)) psz++;
+         strcopy(szOutFile, psz);
+         fixPathChars(szOutFile);
+         if (isPathTraversal(szOutFile, 1)) {
+            pferr(szOutFile, "forbidden output path: %s", szOutFile);
+            istate=0;
+            continue;
+         }
+
+         int iMasks = glblUnzipMask.numberOfEntries();
+         // ----- filter by masks -----
+         int iPosMasks=0, iPosMatch=0, bskip=0;
+         for (int imask=0; imask<iMasks; imask++)
+         {
+            // TEMPORARY use of szLineBuf3 to build /mask/
+            snprintf(szLineBuf3, MAX_LINE_LEN, "%c%s%c", glblPathChar, szOutFile, glblPathChar);
+            char *pmask = glblUnzipMask.getString(imask);
+            int n1=0, n2=0;
+            bool bneg   = 0;
+            if (*pmask==glblNotChar)
+               { bneg=1; pmask++; }
+            bool bmatch = matchstr(szLineBuf3, pmask, 0, n1, n2);
+            if (bneg) {
+               // apply blacklisting: -pat .h !.html
+               if (bmatch)
+                  { iPosMasks=0; iPosMatch=0; bskip=1; break; }
+            } else {
+               // prepare whitelisting
+               iPosMasks++;
+               if (bmatch)
+                  iPosMatch++;
+            }
+         }
+         if (bskip)
+            continue;
+         if (iPosMasks>0 && iPosMatch==0)
+            continue;
+
+         if (pszToDir) {
+            joinPath(szLineBuf3, MAX_LINE_LEN, pszToDir, szOutFile);
+            if (strlen(szLineBuf3)+10 >= SFK_MAX_PATH)
+               return 9+perr("output name too long: %s\n", szLineBuf3);
+            strcopy(szOutFile, szLineBuf3);
+         }
+         if (!cs.yes && fileExists(szOutFile,1)) {
+            printx("<warn>would overwrite: %s\n",szOutFile);
+            iexists++;
+         } else {
+            printf("%swrite: %s\n",cs.yes?"":"would ",szOutFile);
+         }
+         if (cs.yes) {
+            createOutDirTree(szOutFile);
+            fout=fopen(szOutFile, "wb");
+            if (!fout)
+               return 9+pferr(szOutFile, "cannot write: %s", szOutFile);
+            cs.filesChg++;
+         }
+         istate=1;
+         iend=0;
+         continue;
+      }
+
+      p = pszLine;
+
+      /*
+         xxencode format: every encoded line has at least 5 chars,
+            so "end" is a safe end marker. no null record needed.
+
+         uuencode format: can be detected by null record: \x60{eol}
+      */
+
+      if (strcmp(p, "end")==0)
+         iend=1;
+
+      if (   (b64 && strBegins(p, "===="))
+          || (buu && ((i = uudec(*p, bxx)) <= 0))
+          || (bxx==1 && strcmp(p, "end")==0)
+         )
+      {
+         if (fout) {
+            fclose(fout);
+            #ifndef _WIN32
+            chmod(szOutFile, nFileMode | S_IREAD | S_IWRITE);
+            #endif
+            fout=0;
+            if (imdlen==4) {
+               getFileMD5(szOutFile, abOwnMD);
+               if (memcmp(abMetaMD,abOwnMD,4)==0) {
+                  if (cs.verbose) printf("... sum checked, ok\n");
+               } else {
+                  perr("checksum mismatch: %s",szOutFile);
+                  pinf("%02x%02x%02x%02x / %02x%02x%02x%02x\n",
+                     abOwnMD[0],abOwnMD[1],abOwnMD[2],abOwnMD[3],
+                     abMetaMD[0],abMetaMD[1],abMetaMD[2],abMetaMD[3]);
+               }
+            }
+            if (nMetaSize) {
+               num nOwnSize=getFileSize(szOutFile);
+               if (nOwnSize!=nMetaSize)
+                  perr("filesize mismatch: %s / %s",
+                     numtoa(nOwnSize,1,szLineBuf),
+                     numtoa(nMetaSize,1,szLineBuf2));
+            }
+            if (nMetaTime) {
+               FileStat ofdst;
+               ofdst.readFrom(szOutFile);
+               #ifdef _WIN32
+               ofdst.src.nHaveWFT=0;
+               #endif
+               ofdst.src.nMTime=nMetaTime;
+               ofdst.writeTo(szOutFile, __LINE__, 1);
+               if (cs.verbose) printf("... set filetime: %s %s\n",timeAsString(nMetaTime,0),szOutFile);
+            }
+            nMetaSize=0;
+            nMetaTime=0;
+            imdlen=0;
+         }
+         if (bxx==1 && iend==0) {
+            perr("missing end record.\n");
+            istate=4;
+            break;
+         }
+         istate=0;
+         continue;
+      }
+
+      if (b64) {
+         uchar *psrc = (uchar*)pszLine;
+         uchar *pmaxsrc = psrc + strlen(pszLine);
+         uchar in[4], out[3], v;
+         int i=0, nlen=0;
+         mclear(in); mclear(out);
+         while (psrc < pmaxsrc) {
+            for (nlen=0, i=0; i < 4 && (psrc < pmaxsrc); i++ ) {
+               v = 0;
+               while ((psrc < pmaxsrc) && v == 0) {
+                  v = *psrc++;
+                  v = mapchar(v);
+               }
+               if (psrc <= pmaxsrc) {
+                  if (v) {
+                     nlen++;
+                     in[i] = v - 1;
+                  } else {
+                     in[i] = 0;
+                  }
+               } else {
+                  in[i] = 0;
+               }
+            }
+            if (nlen) {
+               decodeSub64(in, out);
+               for (i=0; i<nlen-1; i++) {
+                  if (fout)
+                     fputc(out[i], fout);
+                  nOutBytes++;
+               }
+            }
+         }
+      }
+      else for (++p; i > 0; p += 4, i -= 3) // .
+      {
+         if (i >= 3) {
+            if (!(uuisdec(*p, bxx) && uuisdec(*(p + 1), bxx) &&
+                 uuisdec(*(p + 2), bxx) && uuisdec(*(p + 3), bxx)))
+               { istate=4; break; }
+            c = uudec(p[0], bxx) << 2 | uudec(p[1], bxx) >> 4;
+            if (fout) fputc(c, fout);
+            nOutBytes++;
+            c = uudec(p[1], bxx) << 4 | uudec(p[2], bxx) >> 2;
+            if (fout) fputc(c, fout);
+            nOutBytes++;
+            c = uudec(p[2], bxx) << 6 | uudec(p[3], bxx);
+            if (fout) fputc(c, fout);
+            nOutBytes++;
+         }
+         else {
+            if (i >= 1) {
+               if (!(uuisdec(*p, bxx) && uuisdec(*(p + 1), bxx)))
+                  { istate=5; break; }
+               c = uudec(p[0], bxx) << 2 | uudec(p[1], bxx) >> 4;
+               if (fout) fputc(c, fout);
+               nOutBytes++;
+            }
+            if (i >= 2) {
+               if (!(uuisdec(*(p + 1), bxx) &&
+                   uuisdec(*(p + 2), bxx)))
+                  { istate=6; break; }
+               c = uudec(p[1], bxx) << 4 | uudec(p[2], bxx) >> 2;
+               if (fout) fputc(c, fout);
+               nOutBytes++;
+            }
+            if (i >= 3) {
+               if (!(uuisdec(*(p + 2), bxx) &&
+                   uuisdec(*(p + 3), bxx)))
+                  { istate=7; break; }
+               c = uudec(p[2], bxx) << 6 | uudec(p[3], bxx);
+               if (fout) fputc(c, fout);
+               nOutBytes++;
+            }
+         }
+      }
+
+      if (istate >= 3)
+         break;
+   }
+
+   if (fout)
+      fclose(fout);
+
+   if (pcoi)
+      pcoi->close();
+
+   if (istate >= 4) {
+      perr("invalid encoding found.\n");
+      if (bxx)
+         pinf("try uudecode instead of xxdecode.\n");
+      else
+         pinf("try xxdecode instead of uudecode.\n");
+      return 9;
+   }
+
+   if (iexists)
+      printx("<warn>%d existing output files would be overwritten.\n",iexists);
+
+   if (!cs.yes) printx("$[add -yes to execute.]\n");
+
+   return 0;
+}
+
 void printSearchReplaceCommands(bool bNoBlankLine)
 {
 printx("   $see also\n"
@@ -22978,8 +23907,11 @@ void printHelpText(cchar *pszSub, bool bhelp, int bext)
              "         reorder three tab separated columns, creating tabbed output\n"
              "         using 's'lash patterns like \\t\n"
              #ifdef _WIN32
+             "      -utabform \"##col1 mytext ...\"\n"
+             "         same as -tabform but using unix style syntax, to create scripts\n"
+             "         that run without changes on Windows and Linux.\n"
              "      -uform \"##40col1 ##-3.5col2 ##05qline\"\n"
-             "         the same as -form but using unix style syntax. short for filter -upat.\n"
+             "         same as -form but using unix style syntax. short for filter -upat.\n"
              #endif
              );
       printx("      -trim  removes blanks and tab characters at line start and end.\n"
@@ -23066,6 +23998,7 @@ void printHelpText(cchar *pszSub, bool bhelp, int bext)
              "      -snap           detect snapfiles and list subfile names having text matches.\n"
              "      -snapwithnames  same as -snap, but include subfile names in filtering.\n"
              "      -nofile[names]  do not list filenames, do not indent text lines.\n"
+             "      -subnames       with ofilter: insert .xlsx sheet subfile names.\n"
              "      -count, -cnt    preceed all result lines by output line counter\n"
              "      -lnum           preceed all result lines by input  line number\n"
              #ifdef _WIN32
@@ -23523,7 +24456,7 @@ void printHelpText(cchar *pszSub, bool bhelp, int bext)
          "   $-tofile x<def>   specify a single output filename, which is taken as is\n"
          "               and not checked for any <run> patterns.\n"
          "   $-to mask<def>    specify where to write output files with some commands.\n"
-         "               mask supports <run>file, <run>path, <run>base, <run>ext and more,\n"
+         "               mask supports <run>file, <run>path, <run>relpath, <run>base, <run>ext and more,\n"
          "               like -to outdir<sla><run>base-modified.<run>ext\n"
          "               say \"sfk run\" for a list of possible keywords.\n"
          "   $-tmpdir x<def>   set directory x as temporary file directory. default is\n"
@@ -23589,7 +24522,10 @@ void printHelpText(cchar *pszSub, bool bhelp, int bext)
          "                  functions like sfk web, filter, xex. default is 100 mb.\n"
          "                  you may also <exp> SFK_CONFIG=weblimit:30\n"
          "   $-webtimeout=n<def>  web access timeout in msec. default is 10000.\n" // wto.general
-         "                  you may also <exp> SFK_CONFIG=webtimeout:3000\n");
+         "                  you may also <exp> SFK_CONFIG=webtimeout:3000\n"
+         "   $-webuser=u<def>     together with -webpw=p set HTTP basic authentication\n"
+         "                  with diverse commands supporting http:// web access.\n"
+         );
   printx("   $-memlimit=n<def> set the caching memory limit to n mbytes (default=%d).\n"
          "               used if a function needs to load whole files into memory.\n"
          ,(int)(nGlblMemLimit / 1048576));
@@ -24152,6 +25088,8 @@ void printHelpText(cchar *pszSub, bool bhelp, int bext)
          "                              fast case sensitive search\n"
          "      #begins(v,'word')<def>        check if string starts with word.\n"
          "                              returns 1 (yes) or 0 (no).\n"
+         "      #ends(v,'word')<def>          check if string ends with word.\n"
+         "                              returns 1 (yes) or 0 (no).\n"
          "      #substr(v,o[,l])<def>         substring from offset o length l\n"
          "                              which can be variables themselves.\n"
          "                              offset 0 is first char. negative o\n"
@@ -24162,7 +25100,9 @@ void printHelpText(cchar *pszSub, bool bhelp, int bext)
       // "      #lpad(v,n)<def>               fill left side up to n chars\n"
       // "      #rpad(v,n)<def>               fill right side up to n chars\n"
          "      #isset(v)<def>                tells 1 if v is set, else 0\n"
-         "      #strlen(v)<def>               number of characters in v\n"
+         "      #size(v)<def>                 number of bytes in v\n"
+         "      #strlen(v)<def>               number of characters in v,\n"
+         "                              if it contains just plain text\n"
          "      #numlines(v)<def>             number of lines in v\n"
          "\n");
       /*
@@ -24703,6 +25643,81 @@ void printHelpText(cchar *pszSub, bool bhelp, int bext)
          );
    }
 
+   if (!strcmp(pszSub, "knxdump"))
+   {
+   printx("<help>$sfk knxdump\n"
+          "\n"
+          "   show incoming knx messages send by knx/ip router.\n"
+          "   does not support secure knx, or knx interfaces.\n"
+          "\n"
+          "   $please note\n"
+          "      because this uses multicast I/O it may\n"
+          "      or may not work, depending on many factors.\n"
+          "      see \"sfk udpdump\" for details.\n"
+          "\n"
+          "   $options\n"
+          "      -full  show detail data\n"
+          "\n"
+          "   $see also\n"
+          "      #sfk knxsend<def>   send knx messages.\n"
+          "\n");
+   printx("   $examples\n"
+          "      #sfk knxdump\n"
+          "          print messages on the default group 224.0.23.12\n"
+          "          in a minimum single line format\n"
+          "      #sfk knxdump -full 224.0.23.13\n"
+          "          print full messages from an alternative IP group\n"
+          "      #sfk knxdump -text \" 1/*/3 \" -from=100\n"
+          "          print only messages having GA's starting 1 and\n"
+          "          ending 3 in their knx header info text, coming from\n"
+          "          an IP like 192.168.1.100 in the local network\n"
+          "      #sfk knxdump -verbose\n"
+          "          print a hex dump of search request responses\n"
+          );
+   }
+
+   if (!strcmp(pszSub, "knxsend"))
+   {
+  printx("<help>$sfk knxsend cmdstring\n"
+          "\n"
+          "   send knx messages to a knx/ip router.\n"
+          "   does not support secure knx, or knx interfaces.\n"
+          "\n"
+          "   $please note\n"
+          "      because this uses multicast I/O it may\n"
+          "      or may not work, depending on many factors.\n"
+          "      see \"sfk udpdump\" for details.\n"
+          "\n"
+          "   $see also\n"
+          "      #sfk knxdump<def>   show incoming knx messages.\n"
+          "\n");
+   printx("   $examples\n"
+          "      #sfk knxsend \"1 2 3 1 0\"\n"
+          "          send to group address 1/2/3 a 1 bit value \"0\".\n"
+          "      #sfk knxsend \"1 2 3 8 255\"\n"
+          "          send to group address 1/2/3 an 8 bit value \"255\".\n"
+          "      #sfk knxsend \"1 2 3 16 0x0cb0\"\n"
+          "          send to GA 1/2/3 the 16 bit (2 bytes) raw data\n"
+          "          given as hex values. no conversion is done.\n"
+          "      #sfk knxsend \"1 2 3 16 2400\"\n"
+          "          send 16-bit decimal value which is converted to\n"
+          "          knx mantissa/exponent value 0x0cb0. this example\n"
+          "          could be a temperature of 24.00 degrees.\n"
+          "      #sfk knxsend \"1 2 3 14 my test text\"\n"
+          "          send a 14 bytes text message\n"
+          "      #sfk knxsend 224.0.23.13 \"1 2 3 8 255\"\n"
+          "          send on alternative IP group\n"
+          "      #sfk knxsend 127.0.0.1:3671 \"31 7 255 1 1\"\n"
+          "          send to unicast localhost address port 3671\n"
+          "      #sfk knxsend \"1 2 3 4 1\"\n"
+          "          send to address 1/2/3 a 4 bit dimm down start.\n"
+          "      #sfk knxsend \"1 2 3 4 0\"\n"
+          "          send to address 1/2/3 a 4 bit dimm stop.\n"
+          "      #sfk knxsend search\n"
+          "          sends an IP router search request.\n"
+          );
+   }
+
    if (!strcmp(pszSub, "faq"))
    {
       printx(
@@ -25104,7 +26119,8 @@ char *SFKMapArgs::eval(char *pszExp)
    char csep = *pnext; // , or )
    *pnext++ = '\0';
 
-   char *pvart = (char*)sfkgetvar(pvarn, 0);
+   int   nvart = 0;
+   char *pvart = (char*)sfkgetvar(pvarn, &nvart);
    if (!pvart && strcmp(pfunc,"isset"))
    {
       pinf("undefined variable: %s\n", pvarn);
@@ -25131,7 +26147,19 @@ char *SFKMapArgs::eval(char *pszExp)
          bdone = 1;
          break;
       }
-   
+
+      // size(foo)
+      if (!strcmp(pfunc, "size"))
+      {
+         if (csep != ')') return 0;
+ 
+         snprintf(szClEvalOut, sizeof(szClEvalOut)-10,
+            "%lu", (unsigned long)nvart);
+ 
+         bdone = 1;
+         break;
+      }
+
       // strlen(foo)
       if (!strcmp(pfunc, "strlen"))
       {
@@ -25172,6 +26200,7 @@ char *SFKMapArgs::eval(char *pszExp)
           || !strcmp(pfunc, "strrpos")
           || !strcmp(pfunc, "contains") // sfk1889
           || !strcmp(pfunc, "begins")   // sfk193
+          || !strcmp(pfunc, "ends")     // sfk1973
          )
       {
          if (csep != ',') return 0;
@@ -25181,6 +26210,7 @@ char *SFKMapArgs::eval(char *pszExp)
          bool brite = strcmp(pfunc, "strrpos") ? 0 : 1;
          bool bcont = strcmp(pfunc, "contains") ? 0 : 1;
          bool bbeg  = strcmp(pfunc, "begins") ? 0 : 1;
+         bool bend  = strcmp(pfunc, "ends") ? 0 : 1;
    
          while (1)
          {
@@ -25230,6 +26260,8 @@ char *SFKMapArgs::eval(char *pszExp)
          if (bbeg) {
             // sfk193: begins with result 1 or 0
             ipos = bcase ? strbeg(pvart, plitst) : stribeg(pvart, plitst);
+         } else if (bend) {
+            ipos = bcase ? strEnds(pvart, plitst) : striEnds(pvart, plitst);
          } else {
             // strpos, strrpos, contains
             if (brite)
@@ -25787,7 +26819,2072 @@ int reformatjson(char *pinbuf, char *poutbuf, char *poutatt, int ioutmax)
    return 0;
 }
 
-// -----------------------------------------------------
+int wouldBlock(int ibytes)
+{
+   #ifdef _WIN32
+   if (ibytes == -1 || WSAGetLastError() == WSAEWOULDBLOCK)
+      return 1;
+   #else
+   if (ibytes == -1 || errno == EWOULDBLOCK)
+      return 1;
+   #endif
+   return 0;
+}
+
+// --- sfkproxy.begin ---
+
+extern bool isws(char c,bool bext=1); // default for proxy ff
+
+#define MAX_IODEF       100
+#define MAX_CONDEF      100
+#define MAX_CONNECTIONS 4096
+#define MAX_BUFFER      10000
+#define MAX_HOSTLEN     100
+
+struct IODef {
+   char *pszdef;  // copy of "tcp 80 server 3000 call udp3k to udp ... to file"
+   char *psztarg; // points into pszdef's first target
+   int  iwebmode;
+        // 1: http header rewrite
+        // 3: http proxy mode (to any)
+   char szfromip[MAX_HOSTLEN]; // with tcp, from reverse
+   int  ifromport;
+   char sztoip[MAX_HOSTLEN];   // with tcp, from reverse
+   int  itoport;               // with tcp, from reverse
+   int  iprefix;
+   int  iverbose;
+   int  imaxdump; // -1 = dump all
+};
+
+enum eConType {
+   eTcpAccept  = 1,
+   eTcpClient,
+   eTcpForward,
+   eRevAccept,
+   eRevClient,
+   eUdpListen,
+   eRevGetPassive,
+   eRevGetPending,
+   eRevGetConnected
+};
+
+struct Connection
+{
+   int  id;
+   int  icondef;  // == iodef
+   int  itype;    // eConType
+   int  isocket;
+   int  ioutsocket; // for udp forward
+   int  iport;
+   int  ilink;
+   int  iwebstate;
+
+   uint8_t *pdata;   // pending for send
+   int      ioffs;   // offset in pdata
+   int      iremain; // remaining for send
+
+   int      bwait; // waits for reply
+   int      bconpend;
+   unum     tlastio;
+   unum     tlastcon;
+   int      ioutport;
+   uint     inip;
+   int      inport;
+
+   char szouthost[200];
+};
+
+class Proxy
+{
+public:
+      Proxy ( );
+
+static Proxy *pClCurrent;
+static Proxy &cur( );
+
+   int   addiodef    (char *psz);
+   int   addcondef   (char *psz);
+   int   prepare     ( );
+   int   run         ( );
+   int   step        ( );
+   int   process     (int s, int iwhat);
+   int   numopen     ( ); // requires updateStats()
+   int   numpend     ( );
+   int   numwait     ( );
+   void  listdef     ( );
+   void  updateStats ( );
+   int   processHttpRequest  (int bytes, int icondef);
+   int   processHttpReply    (int bytes, int icon);
+   void  closecon    (int i, int ifrom);
+   void  closeall    (int i, int ifrom);
+   int   getipandport(char **ppsz);
+   void  gotin       (int icon, int ibytes);
+   void  sentout     (int icon, int ibytes);
+   char *dumpData    (uchar *pbuf, int ilen, int icon, cchar *pprefix);
+   int   setiodefopt (char **ppcur,int idef);
+   void  setInfoStatus  ( );
+   int   newcon      (int bWithNewID);
+   int   setAddr     (struct sockaddr_in *pAddr, char *pszHost, int iPort);
+   void  setNonblocking(int fd, bool b);
+   int   call        (int icur, char *szlabel, uchar **pppata, int *pndata,
+                      uint &nFromAddr, uint &nFromPort);
+
+   int   niodef, ncondef, ncon, blocking;
+   int   iClOutPort, inextconid;
+   int   iclopen, iclpend, iclwait, iclrevcon;
+   int   icldebug, iclverbose, iclmaxdump;
+   int   iClInPackets, iClOutPackets;
+   unum  iClInBytes, iClOutBytes;
+
+   char  **pclenv;
+
+struct IODef      aiodef   [MAX_IODEF];
+struct Connection acon     [MAX_CONNECTIONS];
+
+char     szClOutHost[200];
+uint8_t  abClBuf1[MAX_BUFFER+1000],
+         abClBuf2[MAX_BUFFER+1000],
+         abClDumpBuf[20000+100];
+};
+
+#define glblproxy Proxy::cur()
+
+Proxy *Proxy::pClCurrent = 0;
+
+Proxy &Proxy::cur( ) {
+   if (!pClCurrent)
+      pClCurrent = new Proxy();
+   return *pClCurrent;
+}
+
+Proxy::Proxy( )
+{
+   memset(this, 0, sizeof(*this));
+}
+
+void Proxy::setNonblocking(int fd, bool b)
+{
+   if (blocking)
+      return;
+
+#ifdef _WIN32
+    unsigned long ul = b;
+    ioctlsocket(fd, FIONBIO, &ul);
+#else
+   if (b)
+      fcntl(fd, F_SETFL, (fcntl(fd,F_GETFL) | O_NONBLOCK));
+   else
+      fcntl(fd, F_SETFL, (fcntl(fd,F_GETFL) & ~O_NONBLOCK));
+#endif
+}
+
+void Proxy::setInfoStatus( )
+{
+   char szstatus[100],szin[100],szout[100];
+
+   numtoa(iClInBytes/1000000,1,szin);
+   numtoa(iClOutBytes/1000000,1,szout);
+   int idelta = iClOutBytes-iClInBytes;
+
+   if (iclrevcon)
+      sprintf(szstatus, ">%05u <%05u c=%u r=%u",
+         iClInPackets, iClOutPackets, numopen(), iclrevcon);
+   else
+   if (numopen())
+      sprintf(szstatus, ">%05u <%05u c=%u",
+         iClInPackets, iClOutPackets, numopen());
+   else
+      sprintf(szstatus, ">%05u <%05u",
+         iClInPackets, iClOutPackets);
+
+   info.setStatus("proxy", szstatus);
+}
+
+void Proxy::gotin(int icon, int ibytes) {
+   iClInPackets++;
+   iClInBytes += ibytes;
+   if (icon>=0 && icon<MAX_CONNECTIONS)
+      acon[icon].tlastio = getCurrentTime();
+}
+void Proxy::sentout(int icon, int ibytes) {
+   iClOutPackets++;
+   iClOutBytes += ibytes;
+   if (icon>=0 && icon<MAX_CONNECTIONS)
+      acon[icon].tlastio = getCurrentTime();
+}
+
+char *Proxy::dumpData(uchar *pAnyData, int iDataSize, int icon, cchar *pprefix) 
+{
+   if (iDataSize == -1)
+       iDataSize = strlen((char*)pAnyData);
+
+   int idef = acon[icon].icondef;
+   int imaxdump = aiodef[idef].imaxdump;
+
+   char *pszBuf = (char*)abClDumpBuf;
+   int iMaxBuf  = sizeof(abClDumpBuf)-100;
+
+   if (imaxdump == 0) imaxdump = 128;
+   if (imaxdump == -1) imaxdump = iMaxBuf;
+
+   // look for binary
+   bool bbinary = 0;
+   for (int i=0; i<iDataSize; i++)
+      if (!pAnyData[i])
+         { bbinary=1; break; }
+   if (bbinary==1 && acon[icon].iwebstate>0 && imaxdump>0)
+      iMaxBuf = mymin(imaxdump,iMaxBuf);
+
+   // look for header
+   int iheadlen=0;
+   if (strbeg((char*)pAnyData,str("HTTP/"))
+       || strbeg((char*)pAnyData,str("GET "))
+       || strbeg((char*)pAnyData,str("POST "))
+       || strbeg((char*)pAnyData,str("CONNECT ")))
+   {
+      char *pend=strstr((char*)pAnyData,"\r\n\r\n");
+      if (pend) {
+         iheadlen=(pend-(char*)pAnyData)+4;
+         iMaxBuf = mymin(iheadlen+imaxdump,iMaxBuf);
+      }
+   }
+   else {
+      iMaxBuf = mymin(imaxdump,iMaxBuf);
+   }
+
+   uchar *pSrcCur = (uchar *)pAnyData;
+   uchar *pSrcMax = pSrcCur + iDataSize;
+ 
+   char *pszDstCur = pszBuf;
+   char *pszDstMax = pszBuf + iMaxBuf - 20;
+ 
+   while (pSrcCur < pSrcMax && pszDstCur < pszDstMax)
+   {
+      int irelpos = pSrcCur-(uchar*)pAnyData;
+
+      uchar uc = *pSrcCur++;
+ 
+      if (isprint((char)uc))
+      {
+         *pszDstCur++ = (char)uc;
+         continue;
+      }
+
+      // if (irelpos<iheadlen && uc=='\r')
+      //    continue;
+      // if (irelpos<iheadlen && uc=='\n')
+      //    { *pszDstCur++ = '\n'; continue; }
+
+      sprintf(pszDstCur, "{%02X}", uc);
+      pszDstCur += 4;
+   }
+ 
+   *pszDstCur = '\0';
+
+   // --- dump ---
+
+   char *pdata = pszBuf;
+   while (*pdata)
+   {
+      char *peol = strstr(pdata,"{0D}{0A}");
+      if (peol) {
+         int ilen=peol-pdata;
+         if (ilen>0)
+            printf("%s%.*s\n",pprefix,ilen,pdata);
+         else {
+            // printf("%s[eol]\n",pprefix);
+            printf("%s\n",pprefix);
+         }
+         pdata += ilen+8;
+      } else {
+         printf("%s%.110s\n",pprefix,pdata);
+         if (strlen(pdata) <= 110)
+            break;
+         pdata += 110;
+      }
+   }
+ 
+   return pszBuf;
+}
+
+// in: "pat." means "pat:" or "pat " or "pat{null}"
+static int strmatch(char **ppsz, const char *pat, int &rtoken, int itoken)
+{
+   char *psz = *ppsz;
+   int  nlen = strlen(pat);
+   bool bfuzz= 0;
+   if (nlen>0 && pat[nlen-1]=='.')
+       { nlen--; bfuzz=1; }
+   if (!strncmp(psz, pat, nlen)) {
+      psz += nlen;
+      if (bfuzz==1 && *psz!=0 && *psz!=':' && isws(*psz)==0)
+         return 0;
+      if (*psz==':') psz++;
+      while (isws(*psz)) psz++;
+      *ppsz = psz;
+      rtoken = itoken;
+      return 1;
+   }
+   return 0;
+}
+
+int Proxy::addiodef(char *pszdefin)
+{
+   if (niodef >= MAX_IODEF)
+      return 9+perr("too many from definitions");
+
+   struct IODef *pdef = &aiodef[niodef];
+   pdef->pszdef = strdup(pszdefin);
+   pdef->iverbose = iclverbose;
+   pdef->imaxdump = iclmaxdump;
+
+   char *pcur = pszdefin;
+
+   int itoken = 0;
+
+   if (strmatch(&pcur, "tcp.", itoken, 1)
+       || strmatch(&pcur, "http.", itoken, 2)
+      )
+   {
+      if (itoken==2)
+         pdef->iwebmode = 1;
+
+      // seek "to tcp ip:port" single target
+      // seek "to http ip:port" single target
+      for (; *pcur!=0; pcur++) 
+      {
+         char *pold=pcur;
+         if (
+                strmatch(&pcur, "to tcp.", itoken, 1)
+             || strmatch(&pcur, "to http.", itoken, 2)
+            )
+         {
+            char *pend=pcur;
+            while (*pend!=0 && *pend!=':' && *pend!=' ') pend++;
+            int ilen=pend-pcur;
+            if (ilen+4>sizeof(pdef->sztoip)) return 11;
+            memcpy(pdef->sztoip,pcur,ilen);
+            pdef->sztoip[ilen]='\0';
+            switch (itoken) {
+               case 2: pdef->itoport=80; break;
+            }
+            if (*pend==':')
+               pdef->itoport=atoi(pend+1);
+            if (!pdef->itoport)
+               return 9+perr("missing target port: %s",pszdefin);
+            break;
+         }
+         else
+         if (strmatch(&pcur, "to any", itoken, 0)) {
+            if (pdef->iwebmode<1)
+               return 9+perr("'to any' requires http");
+            pdef->iwebmode |= 2;
+            break;            
+         }
+         else
+         if (strmatch(&pcur, "to ", itoken, 0)) {
+            perr("invalid 'to' target: %s",pszdefin);
+            pinf("use to http, to tcp or to udp.\n");
+            return 9;
+         }
+      }
+   }
+   else
+   if (strmatch(&pcur, "udp.", itoken, 1))
+      { } // all done in prepare
+   else
+   if (strmatch(&pcur, "reverse.", itoken, 1)) // FROM reverse
+   {
+      // from reverse sourcehostip port
+      char *pend=pcur;
+      while (*pend!=0 && *pend!=':' && *pend!=' ') pend++;
+      int ilen=pend-pcur;
+      if (ilen+4>sizeof(pdef->sztoip)) return 11;
+      memcpy(pdef->sztoip,pcur,ilen);
+      pdef->sztoip[ilen]='\0';
+      if (*pend==':') pend++;
+      while (isws(*pend)) pend++;
+      if (!isdigit(*pend))
+         return 19+perr("missing port: %s",pszdefin);
+      pdef->itoport=atoi(pend+1);
+   }
+   else
+   {
+      perr("unknown from: %s", pszdefin);
+      pinf("supply protocol: udp tcp http\n");
+      return 9;
+   }
+
+   niodef++;
+
+   return 0;
+}
+
+void Proxy::listdef()
+{
+   for (int i=0; i<niodef; i++)
+   {
+      IODef *pdef = &aiodef[i];
+
+      if (pdef->sztoip[0])
+         printf("Def #%d tcp target %s:%d from %.32s...\n",
+            i+1, pdef->sztoip, pdef->itoport, pdef->pszdef);
+      else
+         printf("Def #%d from %.64s ...\n",
+            i+1, pdef->pszdef);
+   }
+}
+
+int Proxy::setiodefopt(char **ppcur,int idef)
+{
+   char *pcur=*ppcur;
+
+   IODef *pdef = &aiodef[idef];
+   int itoken = 0;
+   
+   while (*pcur=='-') {
+      if (strmatch(&pcur, "-verbose", itoken, 0))
+         { pdef->iverbose=1; continue; }
+      if (strmatch(&pcur, "-maxdump=", itoken, 0)) {
+         pdef->imaxdump=atoi(pcur);
+         while (isdigit(*pcur)) pcur++;
+         while (isws(*pcur)) pcur++;
+         continue;
+      }
+      if (strmatch(&pcur, "-fulldump", itoken, 0)) {
+         pdef->imaxdump=-1;
+         continue;
+      }
+      return 9+perr("option not supported here: %s",pcur);
+   }
+
+   *ppcur=pcur;
+   return 0;
+}
+
+// .
+int Proxy::prepare( )
+{
+   prepareTCP();
+
+   socklen_t fromlen;
+   struct sockaddr_in saOwnAddr, outAddr;
+   fromlen = (int)sizeof(outAddr);
+
+   for (int i=0; i<niodef; i++)
+   {
+      if (ncon >= MAX_CONNECTIONS)
+         return 9;
+
+      /*
+         tcp 80 to tcp 192.168.1.100:80
+         http 80 to http 192.168.1.100:80
+         http 80 to any
+         udp 224.0.23.12:5671
+            server 3000
+            to udp 192.168.1.101:3000
+            to udp 192.168.1.102:3000
+         server 192.168.1.100:3000
+            to udp 224.0.23.12:5671 -prefix
+      */
+
+      IODef *pdef = &aiodef[i];
+      char *pcur = pdef->pszdef;
+
+      if (!pcur) break;
+
+      Connection *pcon = &acon[ncon];
+
+      int itoken = 0;
+
+      if (strmatch(&pcur, "tcp.", itoken, 1)
+          || strmatch(&pcur, "http.", itoken, 2)
+         )
+      {
+         int iport = 0;
+         switch (itoken) {
+            case 2: iport=80; break;
+            case 3: iport=443; break;
+         }
+         if (isdigit(*pcur)) {
+            iport=atoi(pcur);
+            while (isdigit(*pcur)) pcur++;
+            while (isws(*pcur)) pcur++;
+         }
+         if (setiodefopt(&pcur,i))
+            return 9;
+         if (!pdef->psztarg)
+            pdef->psztarg = pcur;
+         pdef->ifromport = iport;
+
+         pcon->icondef = i;
+         pcon->itype   = eTcpAccept;
+         pcon->iport   = iport;
+         pcon->isocket = socket(AF_INET, SOCK_STREAM, 0);
+         if (pcon->isocket < 0)
+            return 10;
+         memset((char *)&saOwnAddr, 0,sizeof(saOwnAddr));
+
+         saOwnAddr.sin_family      = AF_INET;
+         saOwnAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+         saOwnAddr.sin_port        = htons(pcon->iport);
+ 
+         int on = 1;
+         setsockopt(pcon->isocket, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on));
+         on = 1;
+         setsockopt(pcon->isocket, SOL_SOCKET, SO_REUSEPORT, (const char *)&on, sizeof(on));
+ 
+         setNonblocking(pcon->isocket, true);
+ 
+         if (bind(pcon->isocket, (struct sockaddr *)&saOwnAddr, sizeof(saOwnAddr)) != 0)
+            return 11+perr("cannot bind on port %d. %s",pcon->iport,(pcon->iport<1024)?"(missing admin rights?)":"");
+ 
+         if (listen(pcon->isocket, 50))
+            return 12;
+
+         if (!cs.quiet)
+            printf("Con #%d listens on tcp port %d with target(s): \"%s\"\n",
+               ncon+1, pcon->iport, pdef->psztarg);
+
+         ncon++;
+
+         continue;
+      }
+
+      if (strmatch(&pcur, "udp.", itoken, 1))
+      {
+         char szgroup[100];
+         szgroup[0] = '\0';
+         int iport = 0;
+
+         if (strmatch(&pcur, "-bonjour", itoken, 2)
+             || strmatch(&pcur, "-bon", itoken, 2)) {
+            strcpy(szgroup, "224.0.0.251");
+            iport=5353;
+         }
+         else if (strmatch(&pcur, "-knx", itoken, 3)) {
+            strcpy(szgroup, "224.0.23.12");
+            iport=3671;
+         } else {
+            char *pend=pcur;
+            while (*pend!=0 && *pend!='.' && *pend!=':' && *pend!=' ')
+               pend++;
+            if (*pend=='.') {
+               while (*pend!=0 && *pend!=':' && *pend!=' ')
+                  pend++;
+               int ilen=pend-pcur;
+               if (ilen+10>sizeof(szgroup))
+                  return 13;
+               memcpy(szgroup,pcur,ilen);
+               szgroup[ilen]='\0';
+               if (*pend==':') pend++;
+               while (isws(*pend)) pend++;
+               pcur=pend;
+            }
+            if (isdigit(*pcur)) {
+               iport=atoi(pcur);
+               while (isdigit(*pcur)) pcur++;
+               while (isws(*pcur)) pcur++;
+            }
+         }
+         if (setiodefopt(&pcur,i))
+            return 9;
+         if (!pdef->psztarg)
+            pdef->psztarg = pcur;
+
+         // udp listen socket
+         pcon->icondef = i;
+         pcon->itype   = eUdpListen;
+         pcon->iport   = iport;
+         pcon->isocket = socket(AF_INET, SOCK_DGRAM, 0);
+         if (pcon->isocket < 0)
+            return 14;
+         memset((char *)&saOwnAddr, 0,sizeof(saOwnAddr));
+
+         saOwnAddr.sin_family      = AF_INET;
+         saOwnAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+         saOwnAddr.sin_port        = htons(pcon->iport);
+ 
+         int on = 1;
+         setsockopt(pcon->isocket, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on));
+         on = 1;
+         setsockopt(pcon->isocket, SOL_SOCKET, SO_REUSEPORT, (const char *)&on, sizeof(on));
+ 
+         if (bind(pcon->isocket, (struct sockaddr *)&saOwnAddr, sizeof(saOwnAddr)) != 0)
+            return 15+perr("cannot bind on port %d. %s",pcon->iport,(pcon->iport<1024)?"(missing admin rights?)":"");
+
+         if (szgroup[0])
+         {
+            // multicast receive
+            struct ip_mreq mreq;
+            memset(&mreq, 0, sizeof(mreq));
+            mreq.imr_interface.s_addr = htonl(INADDR_ANY);
+ 
+            #if defined(MAC_OS_X) || defined(SOLARIS)
+               #define SOL_IP IPPROTO_IP
+            #endif
+ 
+            #ifdef _WIN32
+ 
+            char name[512];
+            PHOSTENT hostinfo;
+            mclear(name);
+            mclear(hostinfo);
+ 
+            if (gethostname(name, sizeof(name)))
+               { perr("gethostname failed\n"); break; }
+ 
+            if (!(hostinfo = sfkhostbyname(name)))
+               { perr("get ownhost failed (%s) (1)\n", name); break; }
+ 
+            int iRC = 0;
+            int ndone = 0;
+            for (int i=0; hostinfo->h_addr_list[i]; i++) // sfk1962 mcast receive
+            {
+               struct in_addr *pin_addr = (struct in_addr *)hostinfo->h_addr_list[i];
+ 
+               mreq.imr_interface.s_addr = pin_addr->s_addr;
+               mreq.imr_multiaddr.s_addr = inet_addr(szgroup);
+ 
+               // force IP_ADD_MEMBERSHIP of ws2tcpip.h
+               #define MY_IP_ADD_MEMBERSHIP 12
+ 
+               if (iRC = setsockopt(pcon->isocket, IPPROTO_IP, MY_IP_ADD_MEMBERSHIP, (char *)&mreq, sizeof(mreq))) {
+                  perr("cannot join multicast: rc=%d %s", iRC, netErrno());
+                  perr("host=%s sock=%d group=%s",name,pcon->isocket,szgroup);
+                  break;
+                  // in case of error 10042 see
+                  //    http://support.microsoft.com/kb/257460
+                  // wrong winsock header, runtime linkage etc.
+               }
+               ndone++;
+            }
+            if (iRC) break;
+ 
+            #else
+ 
+            if (inet_aton(szgroup, &mreq.imr_multiaddr) == 0)
+               { perr("bad address: %s", szgroup); break; }
+ 
+            if (setsockopt(pcon->isocket, SOL_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) != 0 ) {
+               perr("no default route to support multicast.");
+               perr("try 'route add -net 224.000 netmask 240.000 eth0'");
+               break;
+            }
+ 
+            #endif
+         }
+
+         // optional reverse proxy socket
+         //    within psztarg: to reverse 3000
+         if (strmatch(&pcur, "to reverse.", itoken, 1)) // TO reverse
+         {
+            int iport = atoi(pcur);
+            if (iport < 1 || iport > 65535)
+               { perr("invalid reverse port in %s",pdef->pszdef); exit(9); }
+            while (isdigit(*pcur)) pcur++;
+            while (isws(*pcur)) pcur++;
+
+            Connection *pudp = pcon;
+
+            ncon++;
+
+            // add tcp accept socket
+            pcon = &acon[ncon];
+
+            pcon->icondef = i;
+            pcon->itype   = eRevAccept;
+            pcon->iport   = iport;
+            pcon->isocket = socket(AF_INET, SOCK_STREAM, 0);
+            if (pcon->isocket < 0)
+               return 16;
+            memset((char *)&saOwnAddr, 0,sizeof(saOwnAddr));
+ 
+            saOwnAddr.sin_family      = AF_INET;
+            saOwnAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+            saOwnAddr.sin_port        = htons(pcon->iport);
+ 
+            int on = 1;
+            setsockopt(pcon->isocket, SOL_SOCKET, SO_REUSEADDR, (const char *)&on, sizeof(on));
+            on = 1;
+            setsockopt(pcon->isocket, SOL_SOCKET, SO_REUSEPORT, (const char *)&on, sizeof(on));
+ 
+            setNonblocking(pcon->isocket, true);
+ 
+            if (bind(pcon->isocket, (struct sockaddr *)&saOwnAddr, sizeof(saOwnAddr)) != 0)
+               return 17+perr("cannot bind on port %d. %s",pcon->iport,(pcon->iport<1024)?"(missing admin rights?)":"");
+ 
+            if (listen(pcon->isocket, 50))
+               return 18;
+ 
+            if (!cs.quiet) {
+               printf("Con #%d listens on udp '%s' %d target(s): %s\n",
+                  ncon, szgroup, pudp->iport, pdef->psztarg);
+   
+               printf("Con #%d listens on tcp port %d for reverse connects\n",
+                  ncon+1, pcon->iport);
+            }
+
+            ncon++;
+         }
+         else
+         {
+            if (!cs.quiet)
+               printf("Con #%d listens on udp '%s' %d with target(s): \"%s\"\n",
+                  ncon+1, szgroup, pcon->iport, pdef->psztarg);
+            ncon++;
+         }
+
+         continue;
+      }
+
+      if (strmatch(&pcur, "reverse.", itoken, 1))
+      {
+         char szhost[100];
+         szhost[0] = '\0';
+         int iport = 0;
+
+         char *pend=pcur;
+         while (*pend!=0 && *pend!=':' && *pend!=' ')
+            pend++;
+         if (*pend!=0) {
+            int ilen=pend-pcur;
+            if (ilen+10>sizeof(szhost))
+               return 19;
+            memcpy(szhost,pcur,ilen);
+            szhost[ilen]='\0';
+            if (*pend==':') pend++;
+            while (isws(*pend)) pend++;
+            pcur=pend;
+         }
+         if (isdigit(*pcur)) {
+            iport=atoi(pcur);
+            while (isdigit(*pcur)) pcur++;
+            while (isws(*pcur)) pcur++;
+         }
+         if (!pdef->psztarg)
+            pdef->psztarg = pcur;
+
+         strcopy(pdef->szfromip, szhost);
+         pdef->ifromport=iport;
+
+         // tcp client socket
+         pcon->icondef = i;
+         pcon->itype   = eRevGetPassive;
+         pcon->iport   = iport;
+         pcon->isocket = socket(AF_INET, SOCK_STREAM, 0);
+         if (pcon->isocket < 0)
+            return 20;
+         pcon->ioutsocket = socket(AF_INET, SOCK_DGRAM, 0);
+         if (pcon->ioutsocket < 0)
+            return 21;
+
+         // setNonblocking(pcon->isocket, true);
+
+         /*
+         struct hostent *ph = sfkhostbyname(szhost);
+         if (!ph)
+            return 22+perr("cannot get hostname: %s", szhost);
+         memset(&outAddr, 0, (int)sizeof(outAddr));
+         memcpy(&outAddr.sin_addr.s_addr, ph->h_addr, ph->h_length);
+         outAddr.sin_family = AF_INET;
+         outAddr.sin_port = htons(iport);
+
+         // check NOW if connect works, else STOP.
+         int rc = connect(pcon->isocket, (struct sockaddr *)&outAddr, sizeof(outAddr));
+         if (rc)
+            return 23+perr("connect failed to: %s:%d", szhost, iport);
+
+         if (icldebug)
+            printf("c#%04d > fcon s%03d revserver %s:%d errno=%d\n",
+               ncon+1,pcon->isocket,szhost,iport,netErrno());
+         */
+
+         ncon++;
+
+         continue;
+      }
+   }
+
+   return 0;
+}
+
+int Proxy::step( )
+{
+   for (int icur=0; icur<ncon; icur++) 
+   {
+      if (acon[icur].isocket <= 0)
+         continue;
+
+      Connection *pcur = &acon[icur];
+      Connection *ppeer = 0;
+      int icondef = acon[icur].icondef;
+      IODef *pdef = &aiodef[icondef];
+      int ipeer = pcur->ilink;
+      if (ipeer >= 0 && ipeer < MAX_CONNECTIONS)
+         ppeer = &acon[ipeer];
+      int iverbose = pdef->iverbose;
+
+      if ((pcur->itype == eTcpClient
+           || pcur->itype == eTcpForward)
+          && pcur->bconpend == 0
+          && pcur->pdata != 0)
+      {
+         // send (part of) pending data
+         uchar *pdata = pcur->pdata+pcur->ioffs;
+         int    ndata = pcur->iremain;
+
+         int n = 0;
+         cchar *pextinf = "";
+
+            n = send(pcur->isocket, (char*)pdata, ndata, MSG_NOSIGNAL);
+
+         if (n>0 && iverbose>0) {
+            printf("c#%04d < send %d %s%serno=%d: \n",
+               pcur->id,n,pextinf,(n<1)?"wouldblock ":"",netErrno());
+            dumpData(pdata,ndata,icur,"   ");
+         }
+
+         if (n>0) {
+            sentout(ipeer,n);
+            pcur->ioffs += n;
+            pcur->iremain -= n;
+            if (pcur->iremain < 1) {
+               delete [] pcur->pdata;
+               pcur->pdata = 0;
+            }
+            if (pcur->iwebstate == 1)
+               pcur->iwebstate = 2;
+         } else {
+            if (icldebug) {
+               printf("send would block, waiting\n");
+               doSleep(500);
+            }
+            doSleep(20);
+         }
+
+         // else wouldblock, try again later
+         continue;
+      }
+
+      if (pcur->itype == eRevClient)
+      {
+         if (pcur->tlastio==0
+             || getCurrentTime()-pcur->tlastio>=5000)
+         {
+            pcur->tlastio=getCurrentTime();
+
+            // send keepalive
+            uchar ablen[2];
+            memset(ablen, 0, sizeof(ablen));
+            int n = send(pcur->isocket,(char*)ablen,2,MSG_NOSIGNAL);
+            if (n != 2)
+               Proxy::closecon(icur,101);
+         }
+         continue;
+      }
+
+      if (pcur->itype == eRevGetConnected)
+      {
+         if (pcur->tlastio > 0
+             && getCurrentTime()-pcur->tlastio>=10000)
+         {
+            // timeout
+            if (icldebug)
+               printf("c#%04d > timeout to revserver\n",ncon+1);
+            closecon(icur,102);
+
+            // back to passive
+            pcur->isocket = socket(AF_INET, SOCK_STREAM, 0);
+            if (pcur->isocket < 0)
+               return 20;
+            pcur->itype = eRevGetPassive;
+         }
+         continue;
+      }
+
+      if (pcur->itype == eRevGetPassive)
+      {
+         int icondef = pcur->icondef;
+         if (icondef<0 || icondef>=MAX_CONDEF)
+            continue;
+         IODef *pdef=&aiodef[icondef];
+   
+         if (pcur->tlastcon==0
+             || getCurrentTime()-pcur->tlastcon>=5000)
+         {
+            pcur->tlastcon=getCurrentTime();
+   
+            socklen_t fromlen;
+            struct sockaddr_in outAddr;
+            fromlen = (int)sizeof(outAddr);
+   
+            struct hostent *ph = sfkhostbyname(pdef->szfromip);
+            if (!ph)
+               return 22+perr("cannot get hostname: %s", pdef->szfromip);
+   
+            memset(&outAddr, 0, (int)sizeof(outAddr));
+            memcpy(&outAddr.sin_addr.s_addr, ph->h_addr, ph->h_length);
+            outAddr.sin_family = AF_INET;
+            outAddr.sin_port = htons(pdef->ifromport);
+   
+            setNonblocking(pcur->isocket, true);
+   
+            // start connect
+            int rc = connect(pcur->isocket, (struct sockaddr *)&outAddr, sizeof(outAddr));
+   
+            if (icldebug)
+               printf("c#%04d > startcon s%03d revserver %s:%d errno=%d\n",
+                  ncon+1,pcur->isocket,pdef->szfromip,pdef->ifromport,netErrno());
+   
+            pcur->itype = eRevGetPending;
+            pcur->bconpend = 1;
+
+            continue;
+         }
+      }
+   }
+
+   return 0;
+}
+
+int Proxy::run( )
+{
+   int rc = prepare();
+   if (rc)
+      return 9+perr("prepare failed, rc=%d\n", rc);
+
+   int fd, i, s, icycle1=0,icycle2=0;
+
+   struct sockaddr_in inAddr;
+   memset(&inAddr, 0, (int)sizeof(inAddr));
+   socklen_t fromlen = (int)sizeof(inAddr);
+
+   fd_set fdread;
+   fd_set fdwrite;
+   fd_set fdexcept;
+   int iMaxFD = -1;
+   struct timeval tv;
+   tv.tv_sec  = 0;
+   tv.tv_usec = (uint32_t)5*1000 + 1000;
+
+   while (1)
+   {
+      FD_ZERO(&fdread);
+      FD_ZERO(&fdwrite);
+      FD_ZERO(&fdexcept);
+
+      iMaxFD = -1;
+      for (int i=0; i<ncon; i++) {
+         if (acon[i].isocket <= 0)
+            continue;
+         if (acon[i].itype == eRevGetPassive)
+            continue;
+         FD_SET(acon[i].isocket, &fdread);
+         if (acon[i].bconpend)
+         {
+            FD_SET(acon[i].isocket, &fdwrite);
+         }
+         if (acon[i].isocket > iMaxFD)
+            iMaxFD = acon[i].isocket;
+      }
+
+      rc = select(iMaxFD+1, &fdread, &fdwrite, &fdexcept, &tv);
+
+      if (rc == 0) {
+         doSleep(10); // avoid full cpu load
+         if (((icycle1++) % 20) == 0)
+            setInfoStatus();
+         step();
+         continue;
+      }
+
+      for (int i=0; i<ncon; i++) {
+         if (acon[i].isocket <= 0)
+            continue;
+         if (acon[i].itype == eRevGetPassive)
+            continue;
+         s = acon[i].isocket;
+         int iwhat=0;
+         if (FD_ISSET(s, &fdread)) iwhat |= 1;
+         if (FD_ISSET(s, &fdwrite)) iwhat |= 2;
+         if (FD_ISSET(s, &fdexcept)) iwhat |= 4;
+         if (iwhat)
+         {
+            // if (icldebug>=2) printf("process s=%d begin\n",s);
+            rc = process(s,iwhat);
+            // if (icldebug>=2) printf("process s=%d done\n",s);
+            if (rc == 5)
+               break;
+         }
+      }
+
+      doYield();
+
+      step();
+
+      if (((icycle1++) % 20) == 0)
+         setInfoStatus();
+   }
+
+   return 0;
+}
+
+void Proxy::updateStats( )
+{
+   iclopen=0;
+   iclpend=0;
+   iclwait=0;
+   iclrevcon=0;
+   for (int l=0; l<ncon; l++) {
+      if (acon[l].pdata != 0) // yes, no matter if socket
+         iclpend++;
+      if (acon[l].isocket <= 0)
+         continue;
+      switch (acon[l].itype) {
+         case eTcpClient:
+         case eTcpForward:
+         case eRevClient:
+            iclopen++;
+            break;
+         case eRevGetConnected:
+            iclrevcon++;
+            break;
+      }
+      if (acon[l].bwait)
+         iclwait++;
+   }
+}
+
+int Proxy::numopen( ) { return iclopen; } // requires updateStats() 
+int Proxy::numpend( ) { return iclpend; }
+int Proxy::numwait( ) { return iclwait; }
+
+// in:  abClBuf1
+// out: abClBuf1 (edited)
+//      rc=bytes (edited)
+//      szClOutHost, iClOutPort
+int Proxy::processHttpRequest(int bytes, int icon)
+{
+   char *psrccur = (char*)abClBuf1;
+   char *psrcmax = psrccur+bytes;
+   char *psrcnex = 0;
+   char *pdstcur = (char*)abClBuf2;
+   char *pdstmax = pdstcur+MAX_BUFFER;
+
+   bool bfirst=true;
+   while (1)
+   {
+      char *psrcnex = psrccur;
+      while (*psrcnex!=0 && *psrcnex!='\r' && *psrcnex!='\n')
+         psrcnex++;
+      char *pprot = psrcnex; // just for first line
+      if (*psrcnex=='\r') *psrcnex++='\0';
+      if (*psrcnex=='\n') *psrcnex++='\0';
+
+      if (bfirst)
+      {
+         bfirst=false;
+         // rewrite GET line
+         while (pprot>psrccur && mystrnicmp(pprot, " HTTP/", 6)!=0)
+            pprot--;
+         if (mystrnicmp(pprot, " HTTP/", 6)!=0)
+            return -1;
+         *pprot++ = '\0';
+         // host:port/path is now zero terminated.
+         char *pcmd = psrccur;
+         char *ppath = pcmd;
+         while (*ppath!=0 && *ppath!=' ') ppath++;
+         if (*ppath) *ppath++ = '\0';
+         while (*ppath!=0 && *ppath==' ') ppath++;
+         // path now on http: or host or path
+         bool bonhost=1;
+         if (!mystrnicmp(ppath, "http://", 7))
+            { ppath+=7; iClOutPort=80; }
+         else
+         if (!mystrnicmp(ppath, "https://", 8))
+            { ppath+=8; iClOutPort=443; }
+         else
+         if (!strchr(ppath, ':')) // not CONNECT host:port
+            bonhost=0;
+         char *phost=szClOutHost;
+         if (bonhost) {
+            phost=ppath;
+            while (*ppath!=0 && *ppath!=':' && *ppath!='/') ppath++;
+            int ilen=ppath-phost;
+            if (ilen+4 > sizeof(szClOutHost)) return -2;
+            memcpy(szClOutHost,phost,ilen);
+            szClOutHost[ilen]='\0';
+            if (*ppath==':') {
+               ppath++;
+               iClOutPort=atoi(ppath);
+               while (*ppath!=0 && isdigit(*ppath)) ppath++;
+            }
+            if (*ppath!='/') return -3;
+            bonhost=0;
+         }
+         // rebuild GET line
+         if (mystrnicmp(pcmd, "CONNECT", 7)) {
+            // make GET/POST/DEL /path HTTP/1.1
+            snprintf(pdstcur, MAX_BUFFER, "%s %s %s\r\n", pcmd, ppath, pprot);
+         } else {
+            // make CONNECT host:port HTTP/1.1
+            snprintf(pdstcur, MAX_BUFFER, "%s %s %s\r\n", pcmd, phost, pprot);
+         }
+         pdstcur += strlen(pdstcur);
+      }
+      else do
+      {
+         // header line. relevant is:
+         //    Host: foo.com
+         if (!mystrnicmp(psrccur, "host:", 5)) {
+            // no matter what client sends, replace it by sane target host
+            if (pdstcur+strlen(szClOutHost)+10 > pdstmax) return -4;
+            // NEVER write port in the host header
+            sprintf(pdstcur, "Host: %s\r\n", szClOutHost);
+            if (icldebug)
+               printf("EDIT-Host: %s\n", szClOutHost);
+            pdstcur += strlen(pdstcur);
+            break;
+         }
+
+         if (pdstcur + strlen(psrccur) + 4 > pdstmax) return -5;
+         sprintf(pdstcur, "%s\r\n", psrccur);
+         pdstcur += strlen(pdstcur);
+      }
+      while (0);
+
+      if (*psrcnex==0)
+         return -6;
+
+      if (*psrcnex!='\r' && *psrcnex!='\n') {
+         psrccur = psrcnex;
+         continue;
+      }
+
+      // end of header reached, POST payload may follow
+      int ilen=psrcmax-psrcnex;
+      if (pdstcur+ilen > pdstmax) return -7;
+      memcpy(pdstcur, psrcnex, ilen);
+      pdstcur += ilen;
+      *pdstcur='\0';
+
+      int irc = pdstcur-(char*)abClBuf2;
+
+      if (icldebug) {
+         int i=0;
+         while (abClBuf2[i]!=0 && abClBuf2[i]!='\r' && abClBuf2[i]!='\n') i++;
+         printf("EDIT-Reqs: %04d %.*s\n",irc,i,(char*)abClBuf2);
+      }
+
+      memcpy(abClBuf1, abClBuf2, irc);
+      abClBuf1[irc] = '\0';
+
+      return irc;
+   }
+
+   return 0;
+}
+
+int Proxy::processHttpReply(int bytes, int icon)
+{
+   int icondef = acon[icon].icondef;
+   if (icondef<0 || icondef>=MAX_CONDEF)
+      return -1+perr("invalid condef");
+
+   char *psrccur = (char*)abClBuf1;
+   char *psrcmax = psrccur+bytes;
+   char *psrcnex = 0;
+   char *pdstcur = (char*)abClBuf2;
+   char *pdstmax = pdstcur+MAX_BUFFER;
+
+   bool bfirst=true;
+   while (1)
+   {
+      char *psrcnex = psrccur;
+      while (*psrcnex!=0 && *psrcnex!='\r' && *psrcnex!='\n')
+         psrcnex++;
+      char *pprot = psrcnex; // just for first line
+      if (*psrcnex=='\r') *psrcnex++='\0';
+      if (*psrcnex=='\n') *psrcnex++='\0';
+
+      if (bfirst)
+      {
+         bfirst=false;
+         // HTTP/1.1 200 OK
+         if (pdstcur + strlen(psrccur) + 4 > pdstmax) return -5;
+         sprintf(pdstcur, "%s\r\n", psrccur);
+         pdstcur += strlen(pdstcur);
+      }
+      else do
+      {
+         // reply header line
+         // pass-thru all other
+         if (pdstcur + strlen(psrccur) + 4 > pdstmax) return -5;
+         sprintf(pdstcur, "%s\r\n", psrccur);
+         pdstcur += strlen(pdstcur);
+      }
+      while (0);
+
+      if (*psrcnex==0)
+         return -6;
+
+      if (*psrcnex!='\r' && *psrcnex!='\n') {
+         psrccur = psrcnex;
+         continue;
+      }
+
+      // end of header reached, payload follows
+      int ilen=psrcmax-psrcnex;
+      if (pdstcur+ilen > pdstmax) return -7;
+      memcpy(pdstcur, psrcnex, ilen);
+      pdstcur += ilen;
+      *pdstcur='\0';
+
+      int irc = pdstcur-(char*)abClBuf2;
+
+      if (icldebug) {
+         int i=0;
+         while (abClBuf2[i]!=0 && abClBuf2[i]!='\r' && abClBuf2[i]!='\n') i++;
+         printf("\nEDIT-Rep: %04d %.*s\n",irc,i,(char*)abClBuf2);
+      }
+
+      memcpy(abClBuf1, abClBuf2, irc);
+      abClBuf1[irc] = '\0';
+
+      return irc;
+   }
+
+   return 0;
+}
+
+void Proxy::closecon(int i, int ifrom)
+{
+
+   int s = acon[i].isocket;
+   int n = numopen();
+
+   if (acon[i].isocket > 0)
+      closesocket(acon[i].isocket); // clear done below
+
+   if (acon[i].ioutsocket > 0)
+      closesocket(acon[i].ioutsocket); // clear done below
+
+   if (acon[i].pdata)
+      delete [] acon[i].pdata;
+
+   memset(&acon[i], 0, sizeof(acon[i]));
+
+   updateStats();
+
+   if (icldebug)
+      printf("c#%04d - clsd s%03d. open=%d pend=%d wait=%d. from=%d\n",
+         acon[i].id, s, numopen(), numpend(), numwait(), ifrom);
+}
+
+void Proxy::closeall(int i, int ifrom)
+{
+   int ilink = acon[i].ilink;
+   if (ilink >= 0 && ilink < MAX_CONNECTIONS)
+      closecon(ilink, ifrom);
+   closecon(i, ifrom);
+}
+
+int Proxy::getipandport(char **ppsz)
+{
+   char *psz=*ppsz;
+
+   char *pcur=psz;
+   char *pend=pcur;
+   while (*pend!=0 && *pend!=':' && *pend!=' ') pend++;
+   if (!*pend)
+      return 9+perr("invalid ip:port: '%s'",psz);
+   int ilen=pend-pcur;
+   if (ilen+4>sizeof(szClOutHost))
+      return 9+perr("invalid ip:port: '%s'",psz);
+   memcpy(szClOutHost,pcur,ilen);
+   szClOutHost[ilen]='\0';
+   pcur=pend;
+   while (*pcur!=0 && (*pcur==':' || isws(*pcur)!=0)) pcur++;
+   iClOutPort=atoi(pcur);
+   if (!iClOutPort)
+      return 9+perr("invalid ip:port: '%s'",psz);
+
+   while (isdigit(*pcur)) pcur++;
+   while (isws(*pcur)) pcur++;
+ 
+   *ppsz=pcur;
+
+   return 0;
+}
+
+uint IPFromString(char *psz) {
+   uint n=0;
+   while (*psz) {
+      n <<= 8;
+      n |= atoi(psz);
+      while (*psz!=0 && *psz!='.') psz++;
+      if (*psz=='.') psz++;
+   }
+   return n;
+}
+
+int Proxy::newcon(int bWithNewID) {
+   int k=0;
+   for (; k<MAX_CONNECTIONS; k++)
+      if (acon[k].isocket <= 0)
+         break;
+   if (k >= MAX_CONNECTIONS)
+      return -1+perr("Connection overflow\n");
+   memset(&acon[k], 0, sizeof(acon[k]));
+   if (bWithNewID)
+      acon[k].id = ++inextconid; // may be changed
+   if (ncon < k+1)
+      ncon = k+1;
+   return k;
+}
+
+int Proxy::setAddr(struct sockaddr_in *pAddr,
+   char *pszHost, int iPort)
+{
+   struct hostent *ph = sfkhostbyname(pszHost);
+   if (!ph)
+      return 11+perr("cannot get hostname: %s", pszHost);
+   memset(pAddr, 0, (int)sizeof(struct sockaddr_in));
+   pAddr->sin_family = AF_INET;
+   memcpy(&pAddr->sin_addr.s_addr, ph->h_addr, ph->h_length);
+   pAddr->sin_port = htons(iPort);
+   return 0;
+}
+
+int Proxy::call(int icur, char *szlabel, uchar **ppdata, int *pndata,
+   uint &nFromAddr, uint &nFromPort
+   )
+{
+   uchar *pData = *ppdata;
+   int nData = *pndata;
+
+   char szaddr[100],szport[100],sztoport[100];
+
+   Connection *pcur = &acon[icur];
+   int icondef = acon[icur].icondef;
+   IODef *pdef = &aiodef[icondef];
+
+   // --- proxy call label begin ---
+   num tstart=getCurrentTime();
+   char *pScript = strdup(pGlblCurrentScript);
+   if (!pScript)
+      return 31+perr("outofmem on call %s",szlabel);
+   // input data
+   sprintf(szaddr, "%u.%u.%u.%u",
+      (nFromAddr>>24)&0xFFU,(nFromAddr>>16)&0xFFU,
+      (nFromAddr>> 8)&0xFFU,(nFromAddr>> 0)&0xFFU);
+   sprintf(szport, "%u", nFromPort);
+   sfksetvar(str("fromip"),(uchar*)szaddr,strlen(szaddr));
+   sfksetvar(str("fromport"),(uchar*)szport,strlen(szport));
+   sfksetvar(str("toip"),(uchar*)pdef->sztoip,strlen(pdef->sztoip));
+   sprintf(sztoport,"%u",pdef->itoport);
+   sfksetvar(str("toport"),(uchar*)sztoport,strlen(sztoport));
+   sfksetvar(str("data"),pData,nData);
+   // iLocalParm==-1 will ignore argc, argv
+   int lRC=0; bool bFatal=0;
+   int iExecRC = callLabel(pScript, 0, 0, pclenv, // proxy
+         szlabel, -1, 0, lRC, bFatal);
+   delete [] pScript; // was modified with zero terms
+   if (iExecRC) // fatal errors that stop chaining
+      return iExecRC;
+   if (lRC >= 9) return lRC;
+   // output data
+   int    nOutLen = 0;
+   uchar *pOutData = sfkgetvar(str("data"),&nOutLen);
+   if (pOutData) {
+      pData=pOutData;
+      nData=nOutLen; // can be NULL length to drop packet
+   }
+   char *fromip2 = (char*)sfkgetvar(str("fromip"),&nOutLen);
+   if (fromip2 && strcmp(fromip2,szaddr))
+      nFromAddr = IPFromString(fromip2);
+   char *fromport2 = (char*)sfkgetvar(str("fromport"),&nOutLen);
+   if (fromport2 && strcmp(fromport2,szport))
+      nFromPort = atoi(fromport2);
+   // call done
+   int ielapsed=(int)(getCurrentTime()-tstart);
+   if (icldebug>0 && ielapsed>0)
+      printf("call %s done in %d msec\n",szlabel,ielapsed);
+   // --- proxy call label end ---
+
+   *ppdata = pData;
+   *pndata = nData;
+
+   return 0;
+}
+
+// .
+int Proxy::process(int scur, int iwhat)
+{
+   int fd, rc, itoken;
+   struct sockaddr_in inAddr, outAddr;
+   socklen_t fromlen = (int)sizeof(inAddr);
+   char szlabel[100],szaddr[100],szport[100];
+
+   int bReadEvent = (iwhat&1) ? 1 : 0;
+   int bWriteEvent = (iwhat&2) ? 1 : 0;
+   int bExceptEvent = (iwhat&4) ? 1 : 0;
+
+   int icur=0,icln=0,ipeer=0;
+
+   if (scur <= 0) return 9;
+
+   for (icur=0; icur<ncon; icur++)
+   {
+      if (acon[icur].isocket != scur)
+         continue;
+
+      Connection *pcur = &acon[icur];
+      int icondef = acon[icur].icondef;
+      IODef *pdef = &aiodef[icondef];
+
+      int ipeer = pcur->ilink;
+      if (ipeer < 0 || ipeer >= MAX_CONNECTIONS)
+          ipeer = -1;
+      int npeerremain = 0;
+      if (ipeer >= 0)
+          npeerremain = acon[ipeer].iremain;
+
+      int iverbose = pdef->iverbose;
+      static int icnt = 0;
+
+      if (icldebug>=2)
+         printf("process s=%d type=%d what=%u conpend=%d premain=%u - %u\n",
+            scur,acon[icur].itype,iwhat,acon[icur].bconpend,npeerremain,icnt++);
+
+      if (pcur->itype == eTcpAccept
+          || pcur->itype == eRevAccept)
+      {
+         // accept incoming back connection
+         memset(&inAddr, 0, (int)sizeof(inAddr));
+         int fd = accept(scur, (struct sockaddr *)&inAddr, &fromlen);
+         if (fd <= 0)
+            return 9+perr("Failed to accept socket errno=%u '%s'\n", errno, strerror(errno));
+         int icln = newcon(1);
+         if (icln<0) return 10;
+         acon[icln].icondef = icondef;
+         if (pcur->itype == eTcpAccept)
+            acon[icln].itype   = eTcpClient;
+         else
+            acon[icln].itype   = eRevClient;
+         acon[icln].isocket = fd;
+         acon[icln].ilink   = -1; // done on first message
+         acon[icln].bwait   = 0;
+         acon[icln].inip    = ntohl(inAddr.sin_addr.s_addr);
+         acon[icln].inport  = pdef->ifromport;
+         if (icldebug)
+            printf("c#%04d > acp %s s%03d -> s%03d ncon=%d idef=%d iwhat=%d\n",
+               acon[icln].id,ipAsString(acon[icln].inip,acon[icln].inport),
+               scur,fd,ncon,icondef,iwhat);
+
+         if (pdef->iwebmode)
+         {
+            // http: first message is always from back
+            //    and may contain the target to connect to.
+            acon[icln].iwebstate = 1;
+            return 5;
+         }
+
+         // plain tcp: instant connect to front,
+         //    because first message may be sent by front.
+         if (pdef->psztarg && strlen(pdef->psztarg))
+         {
+            char *pOutHost = pdef->sztoip;
+            int   iOutPort = pdef->itoport;
+            if (setAddr(&outAddr,pOutHost,iOutPort))
+               return 11;
+
+            // !!! ipeer is changed !!!
+
+            ipeer = newcon(0);
+
+            if (ipeer<0) return 10;
+
+            int fdpeer = socket(AF_INET, SOCK_STREAM, 0);
+            if (fdpeer < 0)
+               return 10+perr("out of sockets\n");
+            setNonblocking(fdpeer, true);
+
+            int rc = connect(fdpeer, (struct sockaddr *)&outAddr, sizeof(outAddr));
+            if (iverbose>=2)
+               printf("c#%04d > fcon s%03d target %s:%d erno=%d.\n",
+                  pcur->id,fdpeer,pOutHost,iOutPort,netErrno());
+
+            // add forward connection
+            acon[ipeer].id      = pcur->id;
+            acon[ipeer].icondef = icondef;
+            acon[ipeer].itype   = eTcpForward;
+            acon[ipeer].isocket = fdpeer;
+            acon[ipeer].ilink   = icln;
+            acon[ipeer].bwait   = 0;
+            acon[icln].ilink = ipeer;
+            acon[ipeer].tlastio = getCurrentTime();
+            // WAIT for connect confirm.
+         }
+         return 5;
+      }
+
+      if (pcur->itype == eTcpForward && pcur->bconpend == 1)
+      {
+         // connect confirmed
+         if (icldebug)
+            printf("fw.con.confirmed\n");
+         pcur->bconpend = 0;
+         // may send pending data now, in step()
+         return 0;
+      }
+
+      if ((pcur->itype == eTcpClient || pcur->itype == eTcpForward)
+          && bExceptEvent == 1)
+      {
+         if (!cs.quiet)
+            printf("except/close on s=%d\n",scur);
+         closeall(icur, 100);
+         return 5;
+      }
+
+      if (pcur->itype == eTcpClient && bReadEvent == 1)
+      do
+      {
+         // printf("c#%04d - read event\n",pcur->id);
+
+         if (ipeer >= 0 && acon[ipeer].pdata != 0) {
+            if (icldebug)
+               printf("c#%04d - peer would block (%d)\n",
+                  pcur->id, acon[ipeer].iremain);
+            doSleep(20);
+            return 0;
+         }
+
+         // read message from back
+         int bytes = 0;
+            bytes = (int)recv(scur, (char*)abClBuf1, MAX_BUFFER, 0);
+         if (wouldBlock(bytes)) {
+            if (icldebug) {
+               printf("c#%04d - would block\n",pcur->id);
+               doSleep(500);
+            }
+            doSleep(20);
+            return 0; // avoid further action below
+         }
+         if (bytes <= 0) {
+            if (icldebug)
+               printf("c#%04d - closing\n",pcur->id);
+            closeall(icur, 301);
+            return 5;
+         }
+         abClBuf1[bytes] = '\0';
+         gotin(icur,bytes);
+
+         // forward at all?
+         if (!pdef->psztarg || !strlen(pdef->psztarg)) {
+            if (iverbose) {
+               printf("c#%04d > tcp %s b=%04d. no target, closing connection.\n",
+                  pcur->id,ipAsString(pcur->inip,pcur->inport),bytes);
+               dumpData(abClBuf1,bytes,icur,"   ");
+            }
+            closeall(icur, 302);
+            return 5;
+         }
+
+         // set default target host, if any.
+         // - http req edit may take over this host
+         // - or szClOutHost may be changed by proxy header
+         strcopy(szClOutHost,pdef->sztoip);
+         iClOutPort = pdef->itoport;
+         if (pcur->iwebstate) {
+            // pcur->iwebstate = 2;
+            bytes = processHttpRequest(bytes, icur); // reqfromback.first
+            if (bytes <= 0) {
+               printf("ERROR: header error %d from s=%d\n",bytes,scur);
+               closeall(icur, 5);
+               return 5;
+            }
+         }
+
+         uchar *pData = abClBuf1;
+         int    nData = bytes;
+         uint   nFromAddr=0, nFromPort=0;
+
+         char *pszcur = pdef->psztarg;
+         if (strmatch(&pszcur, "call ", itoken, 1))
+         {
+            char *plabel = pszcur;
+            while (*pszcur && !isws(*pszcur)) pszcur++;
+            int ilen=pszcur-plabel;
+            if (ilen<1 || ilen+4 >= sizeof(szlabel))
+               return 30+perr("invalid label name: %s",plabel);
+            memcpy(szlabel,plabel,ilen);
+            szlabel[ilen]='\0';
+            while (isws(*pszcur,1)) pszcur++;
+
+            call(icur, szlabel, &pData, &nData, nFromAddr, nFromPort);
+            // pData may have changed
+         }
+
+         rc = 0;
+
+         // forward-connect now? (http)
+         if (ipeer == -1)
+         {
+            // define front
+            char *pOutHost = pdef->sztoip;
+            int   iOutPort = pdef->itoport;
+            if (szClOutHost[0]) pOutHost = szClOutHost;
+            if (iClOutPort) iOutPort = iClOutPort;
+            if (setAddr(&outAddr,pOutHost,iOutPort))
+               return 11+perr("cannot forward-connect to: %s port %d",pOutHost,iOutPort);
+   
+            // connect to front
+            int fdpeer = socket(AF_INET, SOCK_STREAM, 0);
+            if (fdpeer < 0)
+               return 10+perr("out of sockets\n");
+            setNonblocking(fdpeer, true);
+
+            // !!! ipeer is now changed !!!
+   
+            ipeer = newcon(0);
+
+            if (ipeer<0) return 11;
+   
+            connect(fdpeer, (struct sockaddr *)&outAddr, sizeof(outAddr));
+            // must be wouldblock
+            if (iverbose>=2) {
+               printf("c#%04d > fcon s%03d target %s:%d erno=%d. store %d bytes:\n",
+                  pcur->id,fdpeer,pOutHost,iOutPort,netErrno(),nData);
+               dumpData(pData,nData,ipeer," - ");
+            }
+            // add forward connection
+            acon[ipeer].id      = pcur->id;
+            acon[ipeer].icondef = icondef;
+            acon[ipeer].itype   = eTcpForward;
+            acon[ipeer].isocket = fdpeer;
+            acon[ipeer].ilink   = icur;
+            acon[ipeer].bwait   = 0;
+            acon[ipeer].bconpend = 1;
+            acon[ipeer].iwebstate = 1;
+            strcopy(acon[ipeer].szouthost, pOutHost);
+            acon[ipeer].ioutport = iOutPort;
+            // forward-connection links to backcon.
+            // backcon links to forward-connection:
+            pcur->ilink = ipeer;
+            acon[ipeer].tlastio = pcur->tlastio = getCurrentTime();
+
+            rc = 5;
+         }
+
+         // store data as PENDING FOR SEND.
+         acon[ipeer].pdata = new uint8_t[nData+4];
+         if (acon[ipeer].pdata == 0)
+            return 12+perr("outofmem\n");
+         memcpy(acon[ipeer].pdata, pData, nData);
+         acon[ipeer].pdata[nData] = '\0';
+         acon[ipeer].ioffs = 0;
+         acon[ipeer].iremain = nData;
+
+         return rc;
+      }
+      while (0);
+
+      if (pcur->itype == eTcpClient || acon[icur].itype == eTcpForward)
+      {
+         // 2nd ff message from back or front.
+         // there must be a linked connection.
+         if (ipeer == -1)
+            return 12+perr("missing linked connection\n");
+
+         if (ipeer >= 0 && acon[ipeer].pdata != 0) {
+            if (icldebug)
+               printf("c#%04d - peer would block (%d)\n",
+                  pcur->id, acon[ipeer].iremain);
+            doSleep(20);
+            return 0;
+         }
+
+         int fdpeer = acon[ipeer].isocket;
+         if (fdpeer <= 0) {
+            perr("invalid linked connection\n");
+            return 13;
+         }
+         // receive from back OR front
+         if (icldebug>=2) printf("proc.read.begin s=%d\n",scur);
+         int bytes = 0;
+            bytes = (int)recv(scur, (char*)abClBuf1, MAX_BUFFER, 0);
+         if (wouldBlock(bytes))
+            return 0;
+         if (bytes <= 0) {
+            closeall(icur,10);
+            return 5;
+         }
+         abClBuf1[bytes] = '\0';
+         gotin(icur,bytes);
+
+         if (pcur->itype == eTcpClient
+             && pcur->iwebstate > 0) {
+            // http request from back to front
+            strcopy(szClOutHost,pdef->sztoip);
+            iClOutPort = pdef->itoport;
+            bytes = processHttpRequest(bytes, icur); // reqfromback.next
+         }
+
+         uchar *pData = abClBuf1;
+         int    nData = bytes;
+         uint   nFromAddr=0, nFromPort=0;
+
+         char *pszcur = pdef->psztarg;
+         if (strmatch(&pszcur, "call ", itoken, 1))
+         {
+            char *plabel = pszcur;
+            while (*pszcur && !isws(*pszcur)) pszcur++;
+            int ilen=pszcur-plabel;
+            if (ilen<1 || ilen+4 >= sizeof(szlabel))
+               return 30+perr("invalid label name: %s",plabel);
+            memcpy(szlabel,plabel,ilen);
+            szlabel[ilen]='\0';
+            while (isws(*pszcur,1)) pszcur++;
+
+            call(icur, szlabel, &pData, &nData, nFromAddr, nFromPort);
+            // pData may have changed
+         }
+
+         int itodump=0;
+         if (acon[ipeer].itype == eTcpForward) {
+            // send to front
+            acon[ipeer].bwait = 1;
+            updateStats();
+            if (iverbose)
+               printf("c#%04d > send %05d bytes s%03d -> s%03d. open=%d pend=%d wait=%d\n",
+                  acon[ipeer].id, nData, scur, fdpeer, numopen(), numpend(), numwait());
+            itodump=ipeer;
+            if (iverbose)
+               dumpData(pData,nData,itodump,"   ");
+         } else {
+            // send to back
+            pcur->bwait = 0;
+            acon[ipeer].bwait = 0;
+            updateStats();
+            if (iverbose) {
+               cchar *pextinf = "";
+               printf("c#%04d > recv %05d bytes s%03d%s -> s%03d. open=%d pend=%d wait=%d\n",
+                  acon[ipeer].id, nData, scur, pextinf,
+                  fdpeer, numopen(), numpend(), numwait());
+            }
+            itodump=icur;
+            if (iverbose)
+               dumpData(pData,nData,itodump,"   ");
+         }
+
+         // store data as PENDING FOR SEND.
+         acon[ipeer].pdata = new uint8_t[nData+4];
+         if (acon[ipeer].pdata == 0)
+            return 12+perr("outofmem\n");
+         memcpy(acon[ipeer].pdata, pData, nData);
+         acon[ipeer].pdata[nData] = '\0';
+         acon[ipeer].ioffs = 0;
+         acon[ipeer].iremain = nData;
+
+         if (icldebug>=2) printf("proc.read.done s=%d store %d bytes\n",scur,nData);
+
+         return 0;
+      }
+
+      // --------------------- UDP --------------------
+
+      if (pcur->itype == eUdpListen || pcur->itype == eRevGetConnected)
+      {
+         // receive udp or revserver udp
+         struct sockaddr_in inAddr;
+         socklen_t nadrlen = sizeof(inAddr);
+         memset(&inAddr,0,sizeof(inAddr));
+         int bytes=0;
+         int bkeepalive=0;
+         if (pcur->itype == eRevGetConnected) {
+            uchar ablen[2];
+            bytes = recv(scur, (char*)ablen, 2, 0);
+            if (wouldBlock(bytes))
+               return 0;
+            uint nLen = ((uint)ablen[0]) << 8;
+            nLen |= (uint)ablen[1];
+            if (bytes==0) {
+               gotin(icur,bytes);
+               return 0; // keepalive
+            }
+            if (bytes<2 || nLen>MAX_BUFFER) {
+               perr("wrong length from reverse connection: %02x %02x", ablen[0], ablen[1]);
+               closeall(icur, 20);
+               return 5;
+            }
+            // for now, do a BLOCKING READ LOOP.
+            // proxy.todo: read timeout
+            bytes=0;
+            int iremain=nLen;
+            while (iremain > 0) {
+               int ipart = (int)recv(scur, (char*)abClBuf1+bytes, iremain, 0);
+               if (ipart > 0) {
+                  bytes   += ipart;
+                  iremain -= ipart;
+               }
+               if (iremain > 0)
+                  doSleep(10);
+            }
+            abClBuf1[bytes] = '\0';
+            if (bytes==0)
+               bkeepalive=1;
+            else
+               gotin(icur,bytes);
+         } else {
+            bytes = recvfrom(scur, (char*)abClBuf1, MAX_BUFFER, 0, (struct sockaddr *)&inAddr, &nadrlen);
+            if (wouldBlock(bytes))
+               return 0;
+            if (bytes <= 0) {
+               // close own
+               closeall(icur, 303);
+               return 5;
+            }
+            abClBuf1[bytes] = '\0';
+            gotin(icur,bytes);
+         }
+
+         // source ip prefix handling
+         uchar *pData  = abClBuf1;
+         int    nData  = bytes;
+         int    nRead  = bytes;
+         uchar *pData2 = abClBuf2;
+         int    nData2 = bytes;
+         uint   nSrcAddr = 0;
+         uint   nSrcPort = 0;
+         uint  nFromAddr = htonl(inAddr.sin_addr.s_addr);
+         uint  nFromPort = htons(inAddr.sin_port);
+
+         // if (pcur->itype == eUdpListen)
+         //      nFromPort = pcur->iport;
+
+         int iPrefixMode = pdef->iprefix;
+         memset(abClBuf2, 0, nData2);
+
+         // read prefix if present
+         if (   nData >= 14
+             && memcmp(pData, "SFK\0FW4", 7) == 0
+            )
+         {
+            uint nHeader = pData[7];
+            if (nHeader >= 6) {
+               nSrcAddr =     (((uint)pData[8])  << 24)
+                           |  (((uint)pData[9])  << 16)
+                           |  (((uint)pData[10]) <<  8)
+                           |  (((uint)pData[11]) <<  0);
+               nSrcPort =     (((uint)pData[12]) <<  8)
+                           |  (((uint)pData[13]) <<  0);
+               nFromAddr = nSrcAddr;
+               nFromPort = nSrcPort;
+            }
+            if (iPrefixMode == 0) {
+               // drop prefix in source
+               uint  nhead = 8+nHeader;
+               uchar *psrc = pData+nhead;
+               uchar *pmax = pData+nRead;
+               uchar *pdst = pData;
+               uint  ncopy = nRead-nhead;
+               if (psrc+ncopy <= pmax)
+               {
+                  memmove(pdst,psrc,ncopy);
+                  nRead -= nhead;
+                  nData -= nhead;
+               }
+            }
+         }
+
+         if (iverbose && !bkeepalive) {
+            printf("c#%04d > udp %s b=%04d:\n",
+               pcur->id,ipAsString(nFromAddr,nFromPort),bytes);
+            int ntodump=bytes;
+            if (cs.maxdump) ntodump = mymin(cs.maxdump,ntodump);
+            termHexdump(abClBuf1,ntodump);
+         }
+
+         // for prefixed output
+         memcpy(abClBuf2, abClBuf1, nData);
+         nData2 = nData;
+
+         bool bDonePrefix = 0;
+
+         // send udp to all given targets
+         char *pszcur = pdef->psztarg;
+         while (*pszcur)
+         {
+            // packet filter, dump, or edit
+            if (strmatch(&pszcur, "call ", itoken, 1))
+            {
+               char *plabel = pszcur;
+               while (*pszcur && !isws(*pszcur)) pszcur++;
+               int ilen=pszcur-plabel;
+               if (ilen<1 || ilen+4 >= sizeof(szlabel))
+                  return 30+perr("invalid label name: %s",plabel);
+               memcpy(szlabel,plabel,ilen);
+               szlabel[ilen]='\0';
+               while (isws(*pszcur,1)) pszcur++;
+
+               call(icur, szlabel, &pData, &nData, nFromAddr, nFromPort);
+               // pData may have changed
+
+               continue;
+            }
+
+            // prepare prefixed output after possible call
+            if (bDonePrefix==0 && nData>0 && nData<MAX_BUFFER
+                && memcmp(pData, "SFK\0FW4", 7) != 0)
+            {
+               bDonePrefix = 1;
+               uint nPrefixPort = nFromPort;
+               abClBuf2[0] = 0; // length field high
+               abClBuf2[1] = 0; // length field low
+               uchar *pExt = (uchar *)abClBuf2+2;
+               memcpy(pExt, "SFK\0FW4", 7);
+               pExt[7] = 6;
+               pExt[8]  = (nFromAddr >> 24);
+               pExt[9]  = (nFromAddr >> 16);
+               pExt[10] = (nFromAddr >>  8);
+               pExt[11] = (nFromAddr >>  0);
+               pExt[12] = (nPrefixPort >>  8);
+               pExt[13] = (nPrefixPort >>  0);
+               memcpy(pExt+14, pData, nData);
+               pData2 = pExt;
+               nData2 = nData + 14;
+               // abClBuf1 contains original (unprefixed) data
+               // abClBuf2 contains prefixed data
+            }
+
+            // to udp [opts] ip:port [opts] to ...
+            if (strmatch(&pszcur, "to udp.", itoken, 1))
+            {
+               int iprefixed=0;
+
+               while (*pszcur!=0) 
+               {
+                  if (!strncmp(pszcur, "to ", 3))
+                     break;
+
+                  if (strmatch(&pszcur, "-prefixed", itoken, 1) // proxy.process.1
+                      || strmatch(&pszcur, "-prefix", itoken, 1))
+                     { iprefixed=1; continue; }
+
+                  if (*pszcur=='-')
+                     { perr("unknown option: %s",pszcur); exit(9); }
+
+                  if (getipandport(&pszcur))
+                     exit(9);
+               }
+
+               if (nData == 0)
+                  continue;
+
+               char *pdstip = szClOutHost;
+               int ndstport = iClOutPort;
+ 
+               struct sockaddr_in oAddr;
+               socklen_t iAddrLen = sizeof(oAddr);
+ 
+               memset((char *)&oAddr, 0,sizeof(oAddr));
+               oAddr.sin_family      = AF_INET;
+               oAddr.sin_port        = htons(ndstport);
+               oAddr.sin_addr.s_addr = inet_addr(pdstip);
+
+               int sout = scur;
+               if (pcur->ioutsocket > 0)
+                   sout = pcur->ioutsocket;
+
+               if (iprefixed == 1) {
+                  if (icldebug)
+                     printf("Con #%d passes %03u bytes to %s:%d pinip=%08x poutip=%08x\n",
+                        icur+1,nData2,pdstip,ndstport,nSrcAddr,nFromAddr);
+                  sendto(sout, (char*)pData2, nData2, 0, (struct sockaddr *)&oAddr, iAddrLen);
+               } else {
+                  if (icldebug)
+                     printf("Con #%d passes %03u bytes to %s:%d\n",icur+1,nData,pdstip,ndstport);
+                  sendto(sout, (char*)pData, nData, 0, (struct sockaddr *)&oAddr, iAddrLen);
+               }
+               sentout(icur,nData);
+               continue;
+            }
+
+            // reverse: always prefixed
+            if (strmatch(&pszcur, "to reverse.", itoken, 1))
+            {
+               while (isdigit(*pszcur)) pszcur++;
+               while (isws(*pszcur)) pszcur++;
+
+               if (nData == 0)
+                  continue;
+
+               // send to reverse clients
+               for (int k=0; k<MAX_CONNECTIONS; k++)
+               {
+                  if (acon[k].itype != eRevClient) continue;
+                  if (acon[k].isocket <= 0) continue;
+
+                  if (icldebug)
+                     printf("Con #%d passes %03u prefixed bytes to reverse s=%d (2)\n",icur+1,nData2,acon[k].isocket);
+
+                  // combine with length prefix and send
+                  abClBuf2[0] = (uchar)(nData2 >> 8);
+                  abClBuf2[1] = (uchar)(nData2 >> 0);
+
+                  int rc = send(acon[k].isocket, (char*)abClBuf2, nData2+2, MSG_NOSIGNAL);
+                  if (rc != nData2+2) {
+                     // connection probably closed
+                     printf("failed to send to s=%d errno=%d\n", acon[k].isocket, netErrno());
+                     closeall(k, 6);
+                     return 5;
+                  }
+                  sentout(k,rc);
+               }
+ 
+               continue;
+            }
+
+            perr("unknown target: '%s' (from %s)", pszcur, pdef->pszdef);
+            pinf("supply protocol: udp tcp http\n");
+            exit(9);
+         }
+      }
+      else
+      if (pcur->itype == eRevGetPending)
+      {
+         if (iwhat==2) {
+            if (icldebug)
+               printf("Con #%d connected to %s:%d\n",icur+1,
+                  pdef->szfromip,
+                  pdef->ifromport);
+            pcur->itype = eRevGetConnected;
+            pcur->bconpend = 0;
+            updateStats();
+            continue;
+         }
+         if (iwhat==4) {
+            if (icldebug)
+               printf("Con #%d failed to connect to %s:%d\n",icur+1,
+                  pdef->szfromip,
+                  pdef->ifromport);
+            pcur->itype = eRevGetPassive;
+            pcur->bconpend = 0;
+            pcur->tlastcon = getCurrentTime();
+            updateStats();
+            continue;
+         }
+      }
+
+   }
+
+   return 1;
+}
+
+// --- sfkproxy.end ---
 
 bool haveParmOption(char *argv[], int argc, int &iDir, cchar *pszOptBase, char **pszOutParm);
 bool isDirParm(char *psz);
@@ -29712,10 +32809,12 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
       bool bnet = bnetdump = btcp || budp;
 
       ifhelp (    (argc >= 3 && isHelpOpt(argv[2]))
-              || (!bknx && (argc < 3) && (bnet || !chain.usefiles))
+              || (bknx==0 && (argc < 3) && (bnet || !chain.usefiles))
              )
-
-    // if dumping all help text, run two passes
+      
+    if (bknx)
+       printHelpText("knxdump", bhelp, 0);
+    else
     for (int ihelp=1; ihelp<3; ihelp++) 
     {
 
@@ -29782,6 +32881,7 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
              "               with command chaining, default is -stop=1.\n"
              "      -sep[arator] prints detailed separator between packages\n"
              "               with message number, source IP and time.\n"
+             "      -broad   listen for broadcast on given port.\n"
             );
       }
       else
@@ -30079,6 +33179,8 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
             cs.nodump=1;
             continue;
          }
+         if (strbeg(pszArg, "-broad"))
+            { nFlags |= 4; continue; }
          if (haveParmOption(argx, argc, iDir, "-timeout", &pszParm)) { // tcpdump
             if (!pszParm) return 9;
             cs.timeOutMSec = atol(pszParm);
@@ -31429,9 +34531,10 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
 
    #ifdef WITH_TCP
 
+   // large ping ranges are done in sub slices.
+   // one slice has this size:
    int iPingRangeLimit = 100;
 
-   // .
    ifcmd (!strcmp(pszCmd, "ping")) // +var
    {
       if (!bhelp && blockChain(pszCmd, iDir, argc, argv)) return 9; // not yet supported
@@ -31441,20 +34544,22 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
              "\n"
              "   check if machine(s) on given ip(s) reply to pings.\n"
              "\n"
-             #ifdef _WIN32
-             "   REQUIRES ADMIN RIGHTS. right click on cmd.exe\n"
-             "   and select \"run as admin\" to enable sfk ping.\n"
-             #else
-             "   REQUIRES ADMIN RIGHTS. if (and only if) you are\n"
-             "   admin then use \"sudo su\" or \"su username\"\n"
-             "   to enable sfk ping.\n"
-             #endif
              "   default with only a few target adresses is\n"
              "   to show a graphical display of replies.\n"
              "   with many addresses a list of replies is shown.\n"
              "\n"
              "   experimental command. may not always list all\n"
              "   available machines, especially on embedded linux.\n"
+             "\n"
+             #ifdef _WIN32
+             "   may require admin rights with Windows 7.\n"
+             "   if you get an error, right click on cmd.exe\n"
+             "   and select \"run as admin\" to enable sfk ping.\n"
+             #else
+             "   REQUIRES ADMIN RIGHTS. if (and only if) you are\n"
+             "   admin then use \"sudo su\" or \"su username\"\n"
+             "   to enable sfk ping.\n"
+             #endif
              "\n"
              "   $graphical reply output\n"
              "            .         no   reply\n"
@@ -31485,8 +34590,14 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
              "      -pure           print just replying ip's\n"
              "      -quiet          print less infos\n"
              "      -quiet=2        show no OK etc. with -stop\n"
-             "\n");
+             "\n"
+             , iPingRangeLimit
+             );
       webref("ping");
+      printx("   $see also\n"
+             "      #sfk pingdiff<def>  find new devices in the network\n"
+             "      #sfk tcping<def>    check if a server accepts connections\n"
+             "\n");
       printx("   $examples\n"
              "      #sfk ping 192.168.1.200 -stop -maxwait 600s\n"
              "       #+sleep 1000 +then run \"install.sh\" -yes\n"
@@ -31516,7 +34627,6 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
              "         if my computer has an IP 192.168.178.20\n"
              "         then this pings 192.168.178.1 to .254\n"
              "\n"
-             , iPingRangeLimit
              );
       ehelp;
 
@@ -32050,6 +35160,10 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
    {
       bool bknx = !strcmp(pszCmd, "knxsend");
       ifhelp (nparm < 1)
+      if (bknx)
+         printHelpText("knxsend", bhelp, 0);
+      else
+      {
       printx("<help>$sfk udpsend host[:| ]port [options] [data] [data2] [...]\n"
              "\n"
              "   send an UDP message and optionally receive replies.\n"
@@ -32066,6 +35180,8 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
              "                     for details, type \"sfk hexdump\"\n"
              "      -flat          print messages as plain text.\n"
              "      -showip        show target ip in [sent ...] info.\n"
+             "      -broad         send broadcast. this option is normally\n"
+             "                     used with address 255.255.255.255\n"
              "\n"
              "   $input data format:\n"
              "      0x123456       a hex string which is converted to binary\n"
@@ -32116,6 +35232,7 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
              "         the same but strips (CR)LF line ending.\n"
              "         use \"sfk udpdump 5000 -text\" to receive.\n"
              );
+      }
       ehelp;
 
       sfkarg;
@@ -32133,6 +35250,7 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
       bool  bknx = strcmp(pszCmd, "knxsend") ? 0 : 1;
       bool  bRaw = 0;
       bool  bempty = 0;
+      uint  uiFlags = 0;
 
       mclear(szDstIP);
       mclear(abMsg);
@@ -32197,6 +35315,7 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
          if (!strcmp(pszArg, "-flat")) { nGlblHexDumpForm=4; continue; }
          if (strBegins(pszArg, "-multi")) { cs.multicast=1; continue; }
          if (!strcmp(pszArg, "-mcast")) { cs.multicast=1; continue; }
+         if (strbeg(pszArg,  "-broad")) { uiFlags |= 4; continue; }
          if (!strcmp(pszArg, "-raw")) { bRaw=1; continue; }
          if (!strcmp(pszArg, "-knx")) {
             cs.multicast=1;
@@ -32285,12 +35404,19 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
          }
       }
 
-      if (ndstport == -1)
-         return 9+perr("no port specified.\n");
+      if (ndstport == -1) {
+         perr("no port specified.\n");
+         if ((uiFlags & 4))
+            pinf("try -broad 255.255.255.255 portnumber\n");
+         return 9;
+      }
 
       if (chain.useany()) {
-         if (nMsg)
-            return 9+perr("conflicting input, found chain input data and text parameter.");
+         if (nMsg) {
+            perr("conflicting input, found chain input data and text parameter.");
+            pinf("use +then %s to ignore chain input.\n", pszCmd);
+            return 9;
+         }
          uchar *pInText = 0;
          num    nInSize = 0;
          if (loadInput(&pInText, 0, &nInSize, 0,0,0))
@@ -32305,7 +35431,7 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
          delete [] pInText;
       }
 
-      if (!nMsg && !cs.force) {
+      if (!bTCP && !nMsg && !cs.force) {
          if (cs.knx)
             return 9+perr("missing data to send. type \"sfk help knx\" for examples.");
          return 9+perr("no data given to send.\n");
@@ -32342,7 +35468,7 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
          */
          tcpClient(szDstIP, ndstport, nlisten, nownport, abMsg, nMsg, nTimeout);
       } else {
-         udpSend(szDstIP, ndstport, nlisten, nownport, abMsg, nMsg, nTimeout, 0);
+         udpSend(szDstIP, ndstport, nlisten, nownport, abMsg, nMsg, nTimeout, uiFlags);
       }
 
       STEP_CHAIN(iChainNext, 1);
@@ -33854,6 +36980,10 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
              "   sfk ... +tweb gets the url(s) from a previous command.\n"
              "\n"
              "   $options\n"
+             "      -user=u      and -pw=p set http basic authentication.\n"
+             "                   you may also use global options -webuser, -webpw.\n"
+             "                   note that passwords are not encrypted on transfer,\n"
+             "                   except when using SFK Plus with HTTPS connections.\n"
              "      -nodump      do not print reply data.\n"
              "      -proxy       hostname:port of a proxy server. from within a company\n"
              "                   network, it is often required to connect through proxies.\n"
@@ -33890,10 +37020,13 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
              "                         var1=123&var2=456\n"
              "                         \"\n"
              "                   this can only be used within a script file.\n"
+             "                   to create an example script for editing, type:\n"
+             "                      #sfk batch webreq.<shext>\n"
              "      -reqfromvar a  take request from variable a. must contain exact\n"
              "                   data, like empty CRLF line after GET header.\n"
              "      -showreq     print full URL, may also use -status\n"
              "      -verbose     tell current proxy settings, if any\n"
+             "      -noclose     do not send \"Connection: close\" header.\n"
              "\n"
              "   $automatic name expansions\n"
              "      http:// is added automatically. short ip's like .100 are\n"
@@ -34022,6 +37155,16 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
       {
          char *pszArg = argx[iDir];
          char *pszParm = 0;
+         if (haveParmOption(argx, argc, iDir, "-user", &pszParm)) { // sfk198
+            if (!pszParm) return 9;
+            cs.pwebuser = pszParm;
+            continue;
+         }
+         if (haveParmOption(argx, argc, iDir, "-pw", &pszParm)) { // sfk198
+            if (!pszParm) return 9;
+            cs.pwebpass = pszParm;
+            continue;
+         }
          if (!strncmp(pszArg,"-timeout=",9)) { // wto.web
             cs.maxwebwait = atol(pszArg+9);
             continue;
@@ -34058,10 +37201,10 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
             bstatus = 1;
             continue;
          }
-         if (!strcmp(pszArg, "-rawterm")) {
-            cs.rawterm = 1;
-            continue;
-         }
+         if (!strcmp(pszArg, "-rawterm"))
+            { cs.rawterm = 1; continue; }
+         if (!strcmp(pszArg, "-noclose")) // web
+            { cs.webnoclose = 1; continue; }
          if (haveParmOption(argx, argc, iDir, "-request", &pszParm)
              || haveParmOption(argx, argc, iDir, "-req", &pszParm))
          {
@@ -35359,7 +38502,7 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
    }
 
    #ifdef SFKPIC
-   if (!strcmp(pszCmd, "pic"))
+   if (!strcmp(pszCmd, "picold"))
    {
       ifhelp (nparm < 1)
       printx("<help>$sfk pic infile [opts] [outfile]\n"
@@ -35373,6 +38516,7 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
              "      -q n         set jpeg output quality\n"
              "      -w[idth] n   set width n\n"
              "      -h[eight] n  set height n\n"
+             "      -chan n      set output channels (1,3,4)\n"
              "      -inwidth n   set raw image input width\n"
              "      -inchan n    set raw image input channels\n"
              "\n"
@@ -35395,7 +38539,7 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
       bool  btrans=0;
       uint  backcol=0xffffff,q=90;
       bool  bbackcol=0;
-      uint  targw=0,targh=0;
+      uint  targw=0,targh=0,outchan=0;
 
       int iChainNext = 0;
       for (; iDir<argc; iDir++)
@@ -35445,6 +38589,11 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
             cs.srcpicchan=atoi(pszParm);
             continue;
          }
+         if (haveParmOption(argx, argc, iDir, "-chan", &pszParm)) {
+            if (!pszParm) return 9;
+            outchan=atoi(pszParm);
+            continue;
+         }
          if (!strcmp(pszArg, "-trans"))
             {  btrans=1; continue; }
          if (!strcmp(pszArg, "-notrans"))
@@ -35466,12 +38615,6 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
             { pszOutFile=pszArg; continue; }
          return 9+perr("unexpected: %s",pszArg);
       }
-
-      #ifdef SFKPLUS
-       #ifdef SFKCHECKLIC
-       checkLicense(); // pic
-       #endif // SFKCHECKLIC
-      #endif // SFKPLUS
 
       SFKPic opic,opic2;
 
@@ -35520,12 +38663,21 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
             pout->octl.outcomp=3;
             pout->octl.filequality=90;
          }
+         else if (endsWithExt(pszOutFile, str(".png")))
+         {
+            if (pout->octl.filecomp == 4)
+               { }
+            else
+               pout->octl.outcomp=3;
+         }
          else if (bnotrans)
          {
             pout->octl.mixonpack=1;
             pout->octl.outcomp=3;
             pout->octl.backcolor=backcol;
          }
+         if (outchan > 0)
+            pout->octl.outcomp = outchan;
 
          if (bnotrans) {
             printf("save: %u x %u x %u back %06x\n",
@@ -35561,6 +38713,323 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
          } else {
             STEP_CHAIN(iChainNext, 0);
          }
+      }
+
+      bDone = 1;
+   }
+
+   if (!strcmp(pszCmd, "pic")
+       || !strcmp(pszCmd, "fpic")
+       || !strcmp(pszCmd, "gallery")
+      )
+   {
+      ifhelp (nparm < 1)
+      if (!strcmp(pszCmd, "gallery")) {
+      SFTmpFile tmp(".html", 0, 1);
+      printx("<help>$sfk gallery outfile|-tmp mydir\n"
+             "\n"
+             "   collect all images from a folder,\n"
+             "   and write thumbnails into an html file.\n"
+             "\n"
+             "   $options\n"
+             "      -tmp   create an output file in the temporary folder:\n"
+             "             %s\n"
+             "             note that this file stays there after use\n"
+             "             and is not deleted.\n"
+             "      -yes   really write the file. default is to list\n"
+             "             the found images files.\n"
+             #ifdef _WIN32
+             "      -x     same as -yes, but open the output file\n"
+             "             immediately in a web browser.\n"
+             #endif
+             , tmp.name()
+             );
+      }
+      else
+      printx("<help>$sfk pic [opts] [dirs]\n"
+             "\n"
+             "   simple image conversion between jpeg and png.\n"
+             "\n"
+             "   $input options\n"
+             "      -peek         detect image files by content, ignoring their\n"
+             "                    file extension. finds images not ending .jpg etc.\n"
+             "      -minwidth n   select only images with a width >= n pixels\n"
+             "      -minheight n  select only images with a height >= n pixels\n"
+             "\n"
+             "   $processing options\n"
+             "      -width n      set output width\n"
+             "      -height n     set output height\n"
+             "      -notrans      drop transparency when writing png.\n"
+             "                    default when writing jpeg.\n"
+             "      -backcol n    use background color like 00ff00 for green\n"
+             "                    when removing transparency. default is white.\n"
+             "\n"
+             "   $output options\n"
+             "      -quality       set jpeg output quality from 10 to 100 percent.\n"
+             "                     default is 90 percent.\n"
+             "      -to outdir\\$$relpath\\$$base.$$ext\n"
+             "                     write images to folder outdir, keeping the\n"
+             "                     original sub folder structure.\n"
+             "                     use $$outext instead of $$ext if some input files\n"
+             "                     have no or a wrong file extension.\n"
+             "      -todir outdir  same as above. uses $$outext if prefixed\n"
+             "                     by option -peek.\n"
+             "      -collect out   collect images in a single folder, with long\n"
+             "                     filenames derived from their relative path.\n"
+         //  "      -getpix        get pixel data from image(s) and dump them\n"
+         //  "                     to terminal, or pass to next command\n"
+         //  "      -ltarg         show target filenames in preview\n"
+             "\n"
+             "   $image format limits\n"
+             "      sfk pic can only read the most common png and jpeg formats,\n"
+             "      and always writes files with rgb color, with or without\n"
+             "      transparency. any kind of palette or greyscale input is\n"
+             "      not supported.\n"
+             "\n"
+             "   $examples\n"
+             "      #sfk pic in.png\n"
+             "         check image width, height and number of color channels.\n"
+             "         4 channels means rgb plus transparency.\n"
+             "      #sfk pic in.png out.jpg\n"
+             "         convert a single png image to jpeg\n"
+             "      #sfk pic -peek -dir c:\\users\\myuser\\appdata\\local\n"
+             "       #-file <not>.png <not>.jpg <not>.jpeg\n"
+             "         find hidden image files (without .jpg etc extension)\n"
+             "         like in web browser cache folders under appdata\\local\n"
+             "      #sfk pic -peek -dir c:\\users\\myuser\\appdata\\local\n"
+             "       #-todir out -ltarg\n"
+             "         find all images in appdata\\local and write them\n"
+             "         to folder out, keeping the relative folder structure.\n"
+             "         by -ltarg the output filename is shown in preview.\n"
+             );
+      ehelp;
+
+      sfkarg;
+
+      sfkPicAllocCallback = sfkPicAllocFunc;
+
+      bool bfpic = strcmp(pszCmd, "fpic") ? 0 : 1;
+      bool bvpic = strcmp(pszCmd, "gallery") ? 0 : 1;
+      bool bopenvpic = 0;
+
+      bool bsingledir = 0, bprocess = 0;
+      char *pszInFile=0,*pszOutFile=0;
+      cs.backcol = 0xffffffUL;
+      cs.forceabsname = 1;
+      char sztodirbuf[SFK_MAX_PATH+10];
+
+      SFTmpFile tmp(".html", 0, 1);
+
+      int iChainNext=0,iDirNext=0;
+      for (; iDir<argc; iDir++)
+      {
+         char *pszArg  = argx[iDir];
+         char *pszParm = 0;
+         // printf("parm %d %s\n",iDir,pszArg);
+         if (haveParmOption(argx, argc, iDir, "-width", &pszParm)) {
+            if (!pszParm) return 9;
+            cs.dstpicwidth = atoi(pszParm);
+            continue;
+         }
+         if (haveParmOption(argx, argc, iDir, "-height", &pszParm)) {
+            if (!pszParm) return 9;
+            cs.dstpicheight = atoi(pszParm);
+            continue;
+         }
+         if (!strcmp(pszArg, "-noabs"))
+            { cs.forceabsname = 0; continue; }
+         if (!strcmp(pszArg, "-peek"))
+            { cs.deeppic = 1; continue; }
+         if (!strcmp(pszArg, "-notrans"))
+            { cs.notrans = 1; continue; }
+         if (!strcmp(pszArg, "-getpix") || !strcmp(pszArg, "-dump")) {
+            cs.dumppix = 1;
+            if (bGlblConsColumnsSet && (nGlblConsColumns >= 120))
+               bGlblHexDumpWide = 1;
+            continue; 
+         }
+         if (!strcmp(pszArg, "-flat")) {
+            cs.flat = 1;
+            cs.cflatpat = '-';
+            cs.listTargets = 1;
+            continue;
+         }
+         if (haveParmOption(argx, argc, iDir, "-gallery", &pszParm)) { // pic
+            if (!pszParm) return 9;
+            cs.pszgallery = pszParm;
+            continue;
+         }
+         if (bvpic && !strcmp(pszArg, "-tmp")) {
+            cs.pszgallery = tmp.name();
+            continue;
+         }
+         if (bvpic
+             && (!strcmp(pszArg, "-tmpx") || !strcmp(pszArg, "-tmp."))
+            )
+         {
+            cs.pszgallery = tmp.name();
+            cs.yes=1; bopenvpic=1;
+            continue;
+         }
+         if (!strcmp(pszArg, "-x"))
+            { cs.yes=1; bopenvpic=1; continue; }
+         if (haveParmOption(argx, argc, iDir, "-todir", &pszParm)) { // pic
+            if (!pszParm) return 9;
+            snprintf(sztodirbuf, SFK_MAX_PATH,
+               "%s%c$relpath%c$base.$outext",
+               pszParm, glblPathChar, glblPathChar,
+               cs.deeppic ? "outext":"ext"
+               );
+            cs.tomask = sztodirbuf;
+            continue;
+         }
+         if (haveParmOption(argx, argc, iDir, "-collect", &pszParm)) { // pic
+            if (!pszParm) return 9;
+            cs.todir = pszParm;
+            cs.listTargets = 1;
+            continue;
+         }
+         if (haveParmOption(argx, argc, iDir, "-minwidth", &pszParm)) {
+            if (!pszParm) return 9;
+            cs.minwidth = atoi(pszParm);
+            continue;
+         }
+         if (haveParmOption(argx, argc, iDir, "-minheight", &pszParm)) {
+            if (!pszParm) return 9;
+            cs.minheight = atoi(pszParm);
+            continue;
+         }
+         if (haveParmOption(argx, argc, iDir, "-quality", &pszParm)) {
+            if (!pszParm) return 9;
+            cs.dstpicquality = atoi(pszParm);
+            if (cs.dstpicquality < 10
+                || cs.dstpicquality > 100)
+               return 9+perr("quality must be from 10 to 100\n");
+            continue;
+         }
+         // --- passive ---
+         if (!strcmp(pszArg, "-expand"))
+            { cs.picloadflags |= 1; continue; }
+         if (!strcmp(pszArg, "-detrans"))
+            { cs.detrans = 1; continue; }
+         if (haveParmOption(argx, argc, iDir, "-back", &pszParm)
+             || haveParmOption(argx, argc, iDir, "-backcol", &pszParm)
+             || haveParmOption(argx, argc, iDir, "-backcolor", &pszParm))
+         {
+            if (!pszParm) return 9;
+            cs.backcol = (uint)strtoul(pszParm,0,0x10);
+            continue;
+         }
+         if (haveParmOption(argx, argc, iDir, "-chan", &pszParm)) {
+            if (!pszParm) return 9;
+            cs.dstchan = atoi(pszParm);
+            continue;
+         }
+         if (sfkisopt(pszArg)) {
+            if (isDirParm(pszArg)) {
+               if ((lRC = processDirParms(pszCmd, argc, argx, iDir, 15, &iDirNext)))
+                  return lRC;
+               if (iDirNext == 0)
+                  iDirNext = argc;
+               iDir = iDirNext-1; // due to iDir++
+               continue;
+            }
+            if (setGeneralOption(argx, argc, iDir))
+               continue;
+            else
+               return 9+perr("unknown option: %s\n", pszArg);
+         }
+         if (isChainStart(pszCmd, argx, argc, iDir, &iChainNext))
+            break;
+         // process non-option keywords:
+         if (bvpic && !cs.pszgallery) {
+            cs.pszgallery = pszArg;
+            continue;
+         }
+         if (!bfpic && !bsingledir) 
+         {
+            Coi ocoi(pszArg, 0);
+            if (ocoi.isTravelDir()) {
+               bsingledir = 1;
+               if ((lRC = setProcessSingleDir(pszArg)))
+                 return lRC;
+               continue;
+            }
+            if (!pszInFile)
+               { pszInFile = pszArg; continue; }
+            if (!pszOutFile)
+               { pszOutFile = pszArg; continue; }
+         }
+         return 9+perr("unexpected: %s",pszArg);
+      }
+      if (cs.pszgallery && !cs.dstpicwidth && !cs.dstpicheight)
+         cs.dstpicheight = 160;
+      if (cs.tomask)
+         cs.listTargets = 1;
+      if (cs.tomask || pszOutFile || cs.pszgallery)
+         bprocess = 1;
+
+      if (cs.pfgallery) {
+         fprintf(cs.pfgallery, "</body></html>\n");
+         fclose(cs.pfgallery);
+      }
+
+      if (pszInFile) 
+      {
+         if (pszOutFile) {
+            cs.yes = 1;
+            cs.listTargets = 1;
+         }
+         Coi ocoi(pszInFile, 0);
+         int nFiles=1, nDirs=0;
+         execPic(&ocoi, pszOutFile); // single image
+         info.clear();
+      }
+      else 
+      {
+         cs.sim = !cs.yes;
+         if (bprocess && cs.sim && !cs.nohead)
+            printx("$[simulating:]\n");
+
+         lRC = walkAllTrees(eFunc_Pic, lFiles, lDirs, nBytes);
+ 
+         info.clear();
+   
+         if (bprocess && cs.sim && !cs.nohead) {
+            if (bvpic) {
+               printx("$[add -yes to write gallery file:]\n");
+               printf("%s\n", cs.pszgallery);
+               #ifdef _WIN32
+               printx("$[add -x to write and open it in a browser.]\n");
+               #endif
+            } else {
+               printx("$[add -yes to write output files.]\n");
+            }
+         }
+
+         if (cs.yes) {
+            if (cs.pszgallery) {
+               num nsize = getFileSize(cs.pszgallery);
+               printx("$collected %d images into %d mb %s\n",
+                  cs.jpgoutfiles, (int)(nsize/1000000), cs.pszgallery);
+            } else {
+               printx("$wrote %d jpg, %d png files.\n",
+                  cs.jpgoutfiles, cs.pngoutfiles);
+            }
+            if (bvpic && bopenvpic) {
+               #ifdef _WIN32
+               printx("$opening :<def> %s\n", cs.pszgallery);
+               ShellExecute(NULL, "open", cs.pszgallery, NULL, NULL, SW_SHOWNORMAL);
+               #endif
+            }
+         } else {
+            printx("$found %d jpg, %d png, %d non-image files.\n",
+               cs.jpginfiles, cs.pnginfiles, cs.nopicfiles);
+         }
+      }
+
+      if (iChainNext) {
+         STEP_CHAIN(iChainNext, 1);
       }
 
       bDone = 1;
@@ -35921,7 +39390,6 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
       bDone = 1;
    }
 
-   // .
    if (strBegins(pszCmd, "recol")
        || strBegins(pszCmd, "frecol")
       )
@@ -36115,7 +39583,6 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
       char *pszInFile   = 0;
       char *pszOutFile  = 0;
 
-      // .
       int iChainNext = 0;
       for (; iDir<argc; iDir++)
       {
@@ -37767,6 +41234,7 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
              "   $options\n"
              "     -codes       print character codes\n"
              "     -be          big endian output\n"
+             "     -nobom       write no BOM header\n"
              "     -i           read from stdin\n"
              "     -codepage=n  change codepage.\n"
              "                  more under: sfk listcodes\n"
@@ -37797,6 +41265,7 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
              "   $options\n"
              "     -codes   print character codes\n"
              "     -be      big endian output\n"
+             "     -nobom   write no BOM header\n"
              "     -i       read from stdin\n"
              "\n"
              "   $command chaining support\n"
@@ -37834,6 +41303,7 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
       int   nshift2 = 8; // le default
       bool  bofansi = bcmdatow;
       uint  nbadconv = 0;
+      bool  bbom = 1;
 
       uchar  aansi[50]; mclear(aansi);
       ushort awide[50]; mclear(awide);
@@ -37846,6 +41316,8 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
             bstdin = 1;
             continue;
          }
+         if (!strcmp(argx[iDir], "-nobom"))
+            { bbom = 0; continue; }
          if (!strcmp(argx[iDir], "-be")) {
             nshift1=8; nshift2=0;
             continue;
@@ -37919,11 +41391,12 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
          nSize -= 3;
       }
 
-      // write UCS BE Bom
-      nchar = 0xFEFF;
-
-      *pdst++ = (uchar)(nchar >> nshift1);
-      *pdst++ = (uchar)(nchar >> nshift2);
+      if (bbom) {
+         // write UCS BE Bom
+         nchar = 0xFEFF;
+         *pdst++ = (uchar)(nchar >> nshift1);
+         *pdst++ = (uchar)(nchar >> nshift2);
+      }
 
       if (bofansi)
       {
@@ -38309,6 +41782,285 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
       bDone = 1;
    }
 
+   ifcmd (strbeg(pszCmd, "uuenc")  // sfk198
+       || strbeg(pszCmd, "xxenc")) // sfk198
+   {
+      ifhelp (chain.usefiles == 0 && nparm < 1)
+      char sz[10];
+      sz[0]=pszCmd[0]; sz[1]=pszCmd[1]; sz[2]='\0';
+      printx("<help>$sfk %sencode fileOrDirParms\n"
+             "$sfk sel ... +%sencode\n"
+             "\n",sz,sz);
+      printx("   encode (binary) files as plain ascii text,\n"
+             "   for embedding in other text like email,\n"
+             "   or terminal output copied by clipboard.\n"
+             "\n"
+             "   $options\n"
+             "      -tofile f  write output to file f.\n"
+             "      -quiet     print no 'wrote file' info at end.\n"
+             "      -pure      create no meta records. by default\n"
+             "                 meta records with size, time and\n"
+             "                 the crc32 checksum are written.\n"
+             "      -bslash    use backslashes \\ in filenames,\n"
+             "                 do not change them to '/'.\n"
+             "\n"
+             "   $command chaining\n"
+             "      accepts filenames from previous commands,\n"
+             "      allowing to encode multiple files in one go.\n"
+             "\n"
+             "   $limitations\n"
+             "      embeds filename characters as is, without any\n"
+             "      codepage or utf-8 conversion. accent or unicode\n"
+             "      characters in filenames may appear wrong on\n"
+             "      target systems.\n"
+             "\n"
+             "   $aliases\n"
+             "      #sfk %senc<def>      same as %sencode\n"
+             ,sz,sz);
+      printx("      #sfk uuencode<def>   use uuencode format\n"
+             "      #sfk xxencode<def>   use xxencode format\n"
+             "         xxencode format is recommended over uuencode\n"
+             "         as it is less likely broken by email transfer.\n"
+             "         use uuencode if the receiver only has uudecode.\n"
+             "\n"
+             "   $see also\n"
+             "      #sfk %sdecode<def>   extract encoded files\n"
+             "\n",sz);
+      if (sz[0]=='u')
+      printx("   $please note\n"
+             "      the standard uudecode command on linux/mac may only\n"
+             "      extract the first file of uuencoded text, ignoring\n"
+             "      the rest. if linux/mac is the target system consider\n"
+             "      encoding a single tar or zip file, or get sfk on\n"
+             "      that system as well.\n"
+             "\n");
+      printx("   $examples\n"
+             "      #sfk %sencode in.txt -tofile out.txt\n"
+             "         encode in.txt and write to out.txt\n"
+             #ifdef _WIN32
+             "      #sfk %sencode in.txt in2.txt +toclip\n"
+             "         encode two files and put into clipboard\n"
+             #else
+             "      #sfk %sencode in.txt in2.txt -tofile out.txt\n"
+             "         encode two files and write to out.txt\n"
+             #endif
+             "      #sfk %sencode mydir\n"
+             "         encode all files in mydir\n"
+             "      #sfk %sencode mydir .png\n"
+             "         encode only .png files in mydir\n"
+             "      #sfk dir mydir .png +%sencode\n"
+             "         same as above, but in two steps:\n"
+             "         first make a list of files to encode,\n"
+             "         and when done, append +%sencode\n"
+             "      #sfk sel mydir .txt <not>old <not>save +%sencode\n"
+             "         encode all .txt files from mydir except\n"
+             "         files having old or save in their name\n"
+             ,sz,sz,sz,sz,sz,sz,sz
+             );
+      ehelp;
+
+      sfkarg;
+
+      bool  b64 = 0;
+
+      cs.crcmd5 = 1;
+      cs.xxencode = strbeg(pszCmd, "xxenc");
+      cs.outpathchar = '/';
+
+      int iChainNext = 0;
+      for (; iDir<argc; iDir++)
+      {
+         char *pszArg = argx[iDir];
+         char *pszParm = 0;
+         // if (!strcmp(argx[iDir], "-base64")) // internal
+         //   { b64 = 1; continue; }
+         if (!strcmp(argx[iDir], "-pure"))
+            { cs.pure = 1; continue; }
+         if (!strcmp(argx[iDir], "-bslash"))
+            { cs.outpathchar = '\\'; continue; }
+         // accept -tofile anywhere via generic options
+         if (sfkisopt(pszArg)) {
+            if (isDirParm(pszArg))
+               break; // fall through
+            if (setGeneralOption(argx, argc, iDir))
+               continue;
+            else
+               return 9+perr("unknown option: %s\n", pszArg);
+         }
+         if (isChainStart(pszCmd, argx, argc, iDir, &iChainNext))
+            break;
+         break;
+      }
+
+      if ((lRC = processDirParms(pszCmd, argc, argx, iDir, 1, &iChainNext))) return lRC;
+      if (btest) return 0;
+
+      cs.sim = !cs.yes;
+      if (cs.sim && !cs.nohead)
+         printx("$[simulating:]\n");
+
+      if (cs.yes)
+         chain.openOverallOutputFile("wb"); // if any
+
+      lRC = walkAllTrees(eFunc_UUEncode, lFiles, lDirs, nBytes);
+
+      if (cs.yes)
+         chain.closeOverallOutputFile(cs.filesChg);
+      else
+         info.print("would encode %d files with %s kbytes.\n",
+            cs.filesChg, numtoa(cs.totalinbytes/1000));
+
+      if (cs.sim && !cs.nohead)
+         printx("$[add -yes to execute.]\n");
+
+      if (iChainNext) {
+         STEP_CHAIN(iChainNext, 1);
+      }
+
+      bDone = 1;
+   }
+
+   ifcmd (strbeg(pszCmd, "uudec")  // sfk198
+       || strbeg(pszCmd, "xxdec")) // sfk198
+   {
+      ifhelp (chain.useany() == 0 && nparm < 1)
+      char sz[10];
+      sz[0]=pszCmd[0]; sz[1]=pszCmd[1]; sz[2]='\0';
+      printx("<help>$sfk ... +%sdecode [options]\n"
+             "$sfk %sdecode infile\n"
+             "\n"
+             "   extract encoded (binary) files from plain\n"
+             "   ascii text and write them to disk. decodes\n"
+             "   plain %sencode format marked by \"begin\".\n"
+             "\n",sz,sz,sz);
+      printx("   allows only to write relative pathnames like\n"
+             "\n"
+             #ifdef _WIN32
+             "       foo\\bar\\the.txt\n"
+             "\n"
+             "   but not absolute paths like C:\\foo.txt\n"
+             #else
+             "       foo/bar/the.txt\n"
+             "\n"
+             "   but not absolute paths like /foo.txt\n"
+             #endif
+             "\n"
+             "   $options\n"
+             "   -pat mask   extract only files having mask in their\n"
+             "               path or filename. use -pat <not>mask\n"
+             "               to exclude paths or filenames.\n"
+             "               -pat <sla>mask<sla> says the path or file\n"
+             "               must start and end with mask.\n"
+             "   -todir x    write output files to folder x\n"
+             "   -yes        really write the files. default is\n"
+             "               to simulate what would be written.\n"
+             "\n"
+             "   $command chaining\n"
+             "      can be used after another command\n"
+             #ifdef _WIN32
+             "      like fromclip which provides input text.\n"
+             #else
+             "      like filter which provides input text.\n"
+             #endif
+             "      automatically skips normal (mail) text until\n"
+             "      the first begin record is found.\n"
+             "\n"
+             "   $limitations\n"
+             "      uses filename characters as is, without any\n"
+             "      codepage or utf-8 conversion. accent or unicode\n"
+             "      characters in filenames may cause write failures\n"
+             "      on extraction.\n"
+             "\n");
+      printx("   $aliases\n"
+             "      #sfk %sdec<def>      same as %sdecode\n"
+             "      #sfk uudecode<def>   get uuencoded contents\n"
+             "      #sfk xxdecode<def>   get xxencoded contents\n"
+             "\n"
+             "   $see also\n"
+             "      #sfk %sencode<def>   encode files\n"
+             "\n",sz,sz,sz);
+      printx("   $examples\n"
+             "      #sfk %sdecode in.txt\n"
+             "          read in.txt and extract embedded files.\n"
+             "          suitable for large data, as input is read\n"
+             "          directly from file.\n"
+             #ifdef _WIN32
+             "      #sfk fromclip +%sdecode\n"
+             "          decode clipboard text\n"
+             #else
+             "      #sfk load in.txt +%sdecode\n"
+             "          decode text from command chain.\n"
+             "          not suitable for large data.\n"
+             #endif
+             ,sz,sz,sz
+             );
+      ehelp;
+
+      sfkarg;
+
+      // using crc via md5 class
+      cs.crcmd5 = 1;
+
+      char *pszInFile=0;
+      char *pszToDir=0;
+      int   istate = 0;
+      int   bxx = strbeg(pszCmd, "xxdec");
+
+      char szPat[SFK_MAX_PATH+100];
+      szPat[0] = '\0';
+
+      int iChainNext = 0;
+      for (; iDir<argc; iDir++)
+      {
+         char *pszArg = argx[iDir];
+         char *pszParm = 0;
+         if (!strcmp(argx[iDir], "-xx"))
+            { bxx = 1; continue; }
+         if (!strcmp(argx[iDir], "-xxe"))
+            { bxx = 2;  continue; }
+         if (haveParmOption(argx, argc, iDir, "-todir", &pszParm)) {
+            if (!pszParm) return 9;
+            pszToDir = pszParm;
+            continue;
+         }
+         if (strBegins(pszArg, "-pat"))
+            { istate=1; continue; }
+         if (sfkisopt(pszArg)) {
+            if (isDirParm(pszArg))
+               break; // fall through
+            if (setGeneralOption(argx, argc, iDir))
+               continue;
+            else
+               return 9+perr("unknown option: %s\n", pszArg);
+         }
+         if (isChainStart(pszCmd, argx, argc, iDir, &iChainNext))
+            break;
+         if (!pszInFile) {
+            pszInFile=pszArg;
+            continue;
+         }
+         if (istate) {
+            strcopy(szPat, pszArg);
+            fixPathChars(szPat);
+            glblUnzipMask.addString(szPat);
+            continue;
+         }
+         return 9+perr("unexpected: %s", pszArg);
+      }
+      if (!pszInFile && !chain.usedata)
+         return 9+perr("missing input data");
+
+      execUUDecode(pszInFile, pszToDir, bxx);
+
+      info.print("wrote %d files.\n",cs.filesChg);
+
+      if (iChainNext) {
+         STEP_CHAIN(iChainNext, 0);
+      }
+
+      bDone = 1;
+   }
+
    ifcmd (!strcmp(pszCmd, "difflines")
           || !strcmp(pszCmd, "tdifflines")   // internal
           || !strcmp(pszCmd, "diff")         // internal alias
@@ -38573,6 +42325,7 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
              "      -dig[its]=n  round result to n digits\n"
              "      -form        also print the formula,\n"
              "                   tab separated after result\n"
+             "      -sum         add values from chain text\n"
              "\n");
       printx("   $experimental brackets support\n"
              "      you may add option -bra[ckets] to use formulas\n"
@@ -38604,6 +42357,12 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
              "       #+calc \"##text/1000\" -dig=0\n"
              "        show the size of sfk.exe in kbytes, rounded to\n"
              "        zero digits after decimal point.  [29]\n"
+             "      #sfk filt in.csv -utabform \"##col2\" +calc -sum -dig=2\n"
+             "        if in.csv contains two tab-separated columns like\n"
+             "           $apple\t1.00\n"
+             "           $banana\t1.50\n"
+             "           $pineapple\t2.50\n"
+             "        then add prices from the second column.\n"
              );
       ehelp;
 
@@ -38688,6 +42447,9 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
          pszExp = pszArg;
       }
 
+      if (!pszExp && bSum)
+         pszExp = str("#text");
+
       if (!pszExp) {
          perr("missing expression.");
          return 9;
@@ -38706,12 +42468,12 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
             if (!pline) break;
          }
 
-         char *psz=strstr(pszExp, "$text");
-         if (!psz) psz=strstr(pszExp, "#text");
+         char *psz = strstr(pszExp, "$text");
+         if (!psz) psz = strstr(pszExp, "#text");
          if (psz) {
-            int ileft=psz-pszExp;
-            snprintf(szLineBuf,MAX_LINE_LEN,"%.*s%s%s",
-               ileft,pszExp, pline, psz+5);
+            int ileft = psz-pszExp;
+            snprintf(szLineBuf,MAX_LINE_LEN, "%.*s%s%s",
+               ileft, pszExp, pline, psz+5);
          } else {
             strcopy(szLineBuf, pszExp);
          }
@@ -38754,6 +42516,207 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
       }
 
       STEP_CHAIN(iChainNext, 1);
+
+      bDone = 1;
+   }
+
+   // .
+   if (!strcmp(pszCmd, "proxy")) // sfk198 internal
+   {
+      ifhelp (nparm < 1)
+      printx("<help>$sfk proxy from ... [action] [act2] [from] ...\n"
+             "\n"
+             "   the sfk multi connection proxy.\n"
+             "\n"
+             "   print and analyze traffic, like HTTP messages\n"
+             "   sent from web browser to a HTTP intranet site.\n"
+             "   (HTTPS/SSL internet proxying is not possible.)\n"
+             "\n"
+             "   pass-through udp, tcp and http traffic\n"
+             "   from one (sub) network to another.\n"
+             "\n"
+             "   $global options\n"
+             "      -debug       tell about active connections\n"
+             "\n"
+             "   $options global or after 'from protocol [ip:]port'\n"
+             "      -verbose     tell about received packages\n"
+             "      -maxdump=n   limit output to n bytes per package\n"
+             "      -fulldump    print all content\n"
+             "\n"
+             "   $options after 'to'\n"
+             "      -prefix[ed]  add packet source prefix with udp\n"
+             "\n"
+             "   $possible from sources\n"
+             "      $udp<def> [group:]port  listen for UDP\n"
+             "      $tcp<def> port          listen for TCP\n"
+             "      $http<def> port         TCP with HTTP\n"
+             "      $reverse<def> ip:port   read UDP messages from a\n"
+             "                        TCP reverse proxy\n"
+             "\n"
+             "   $possible actions after from\n"
+             "      $to udp<def> ip:port   send to UDP\n"
+             "      $to tcp<def> ip:port   send to TCP\n"
+             "      $to http<def> ip:port  send to TCP with some http\n"
+             "                       header creation or adaption\n"
+             "      $to reverse<def> port  provide a reverse proxy\n"
+             "          for UDP messages on given TCP port\n"
+             "\n"
+             "      $call<def> mylabel     within sfk script: call label,\n"
+             "         and pass to it variables: data fromip fromport\n"
+             "         which can be printed or changed. setvar data=\"\"\n"
+             "         blocks packet from passing through. changing\n"
+             "         fromip/port makes sense only with -prefix.\n"
+             "\n");
+      printx("   $the sfk packet source prefix\n"
+             "      tells about the original ip and port which\n"
+             "      sent an udp packet. it contains 14 bytes:\n"
+             "         SFK{NullByte}FW4    - 7 bytes magic\n"
+             "         SourceInfoLength    - byte with value 6\n"
+             "         4 bytes source ip   - big endian\n"
+             "         2 bytes source port - big endian\n"
+             "\n"
+             "   $create a template batch file\n"
+             "      #sfk batch proxy.<shext><def>\n"
+             "         creates an example batch file with three\n"
+             "         proxy functions running in parallel.\n"
+             "\n"
+             "   $see also\n"
+             "      #sfk web<def>      send http requests\n"
+             "      #sfk webserv<def>  run a simple web server\n"
+             "      #sfk tcpdump<def>  show tcp input on a single port\n"
+             "      #sfk udpsend<def>  send udp messages\n"
+             "\n");
+      printx("   $examples\n"
+             "      #sfk proxy from tcp:3000 to tcp 192.168.1.100:5000\n"
+             "         listen on tcp port 3000. pass-through data\n"
+             "         per connection to target-ip .100 port 5000.\n"
+             "         can handle multiple connections in parallel.\n"
+             "      #sfk proxy from http to http 192.168.1.100\n"
+             "         listen on http port 80. pass-through http requests\n"
+             "         and replies from/to single target .100 port 80.\n"
+             "         http does tcp plus some http header adaption.\n"
+             "         type 127.0.0.1 in your web browser to load content\n"
+             "         from target .100, while seeing sfk traffic status.\n"
+             "      #sfk proxy from http to any\n"
+             "         run as a true http proxy, connecting to variable\n"
+             "         target hosts. configure your web browser to use\n"
+             "         http proxy 127.0.0.1 port 80, if your browser is\n"
+             "         running on the same machine. supports only plain\n"
+             "         (intranet) http websites, but not https/ssl.\n"
+             "      #sfk proxy from udp 224.0.0.251:5353 to reverse 3000\n"
+             "         listen for udp multicast on given group and port,\n"
+             "         provide a reverse proxy service on port 3000\n"
+             "         where clients can connect to get the traffic.\n"
+             "      #sfk proxy from reverse 192.168.1.100:3000\n"
+             "       #to udp -prefixed 224.0.0.251:5353\n"
+             "         get udp messages from the above reverse proxy\n"
+             "         and send them in our own net to group 224...,\n"
+             "         however prefixed by sfk source ip/port info.\n"
+             );
+      ehelp;
+
+      sfkarg;
+
+      glblproxy.iclverbose = 0;
+      glblproxy.icldebug   = 0;
+      glblproxy.iclmaxdump = 0; // use default
+      glblproxy.blocking = 0;
+
+      int iChainNext = 0;
+      for (; iDir<argc; iDir++)
+      {
+         char *pszArg  = argx[iDir];
+         char *pszParm = 0;
+         if (!strcmp(pszArg, "-verbose"))
+            { glblproxy.iclverbose=1; continue; }
+         if (!strcmp(pszArg, "-verbose=2"))
+            { glblproxy.iclverbose=2; continue; }
+         if (!strcmp(pszArg, "-debug"))
+            { glblproxy.icldebug=1; continue; }
+         if (!strcmp(pszArg, "-debug=2"))
+            { glblproxy.icldebug=2; continue; }
+         if (!strcmp(pszArg, "-blocking"))
+            { glblproxy.blocking=1; continue; }
+         if (haveParmOption(argx, argc, iDir, "-maxdump", &pszParm)) {
+            if (!pszParm) return 9;
+            glblproxy.iclmaxdump = atoi(pszParm);
+            continue;
+         }
+         if (!strcmp(pszArg, "-fulldump"))
+            { glblproxy.iclmaxdump = -1; continue; }
+         if (sfkisopt(pszArg)) {
+            if (isDirParm(pszArg))
+               break; // fall through
+            if (setGeneralOption(argx, argc, iDir))
+               continue;
+            else
+               return 9+perr("unknown option: %s\n", pszArg);
+         }
+         if (isChainStart(pszCmd, argx, argc, iDir, &iChainNext))
+            break;
+         // process keywords blocks:
+         //    from ... to ... to ...
+         if (!strcmp(pszArg, "from")) {
+            char *pdstcur=(char*)abBuf;
+            char *pdstmax=pdstcur+MAX_ABBUF_SIZE;
+            int iNext=iDir+1;
+            for (; iNext<argc; iNext++) {
+               char *pNext=argx[iNext];
+               if (strbeg(pNext,"-prefix")
+                   || strbeg(pNext,"-bon")
+                   || !strcmp(pNext,"-knx")
+                   || !strcmp(pNext,"-verbose")
+                   || strbeg(pNext,"-maxdump")
+                   || strbeg(pNext,"-fulldump")
+                   )
+                  { } // pass thru
+               else
+               if (sfkisopt(pNext))
+                  return 9+perr("specify general option before first 'from': %s",pNext);
+               else
+               if (!strcmp(pNext,"from")
+                   || pNext[0]=='+')
+                  break;
+               int ilen=strlen(pNext);
+               if (pdstcur+ilen+4>pdstmax)
+                  return 9+perr("too many args");
+               if (pdstcur>(char*)abBuf)
+                  *pdstcur++=' ';
+               memcpy(pdstcur,pNext,ilen);
+               pdstcur+=ilen;
+            }
+            *pdstcur='\0';
+            if (glblproxy.addiodef((char*)abBuf))
+               return 9;
+            iDir=iNext-1; // due to iDir++ above
+            continue;
+         }
+         perr("unexpected: %s\n",pszArg);
+         pinf("use from ... to ...\n");
+         return 9;
+      }
+      if (!glblproxy.niodef)
+         return 9+perr("missing 'from' definitions");
+
+      glblproxy.pclenv = penv;
+
+      if (glblproxy.icldebug)
+         glblproxy.listdef();
+
+      if (bGlblConsColumnsSet && (nGlblConsColumns >= 120))
+         bGlblHexDumpWide = 1;
+
+      glblproxy.run();
+
+      // ...
+
+      if (iChainNext) {
+         if (chain.coldata) {
+            STEP_CHAIN(iChainNext, 1);
+         } else {
+            STEP_CHAIN(iChainNext, 0);
+         }
+      }
 
       bDone = 1;
    }
@@ -38820,21 +42783,36 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
       bDone = 1;
    }
 
-   #ifdef SFKINT
-    #ifdef _WIN32
+   #ifdef _WIN32
+   #if _MSC_VER >= 1900 // not with winxp
+   #ifdef SFKINT // requires winmm link
    if (!strcmp(pszCmd, "playsound")) // internal
    {
       ifhelp (nparm < 1)
-      printx("<help>$sfk playsound filename.wav\n"
+      printx("<help>$sfk playsound soundname[.wav]\n"
              "\n"
-             "   play a sound file\n"
+             "   play a system sound with name\n"
              "\n"
+             "      SystemAsterisk\n"
+             "      SystemExclamation\n"
+             "      SystemExit\n"
+             "      SystemHand\n"
+             "      SystemQuestion\n"
+             "      SystemStart\n"
+             "\n"
+             "   or play a soundfile by giving a filename\n"
+             "   ending with .wav. if that file exists\n"
+             "   (in local folder), it is played directly.\n"
+             "   else sfk searches the sfk home folder:\n"
+             "      %s\n"
+             "   for more on that type: sfk home -h\n"
+             "\n", sfkhome.szClDir
              );
       ehelp;
 
       sfkarg;
 
-      char *pszFilename = 0;
+      char *pszSound = 0;
 
       int iChainNext = 0;
       for (; iDir<argc; iDir++)
@@ -38850,22 +42828,35 @@ int extmain(int argc, char *argv[], char *penv[], char *pszCmd, int &iDir,
          }
          if (isChainStart(pszCmd, argx, argc, iDir, &iChainNext))
             break;
-         if (!pszFilename) {
-            pszFilename=pszArg;
+         if (!pszSound) {
+            pszSound=pszArg;
             continue;
          }
          return 9+pbad(pszCmd, pszArg);
       }
 
-      if (!PlaySound(pszFilename, 0, SND_FILENAME))
-         perr("cannot play: %s\n", pszFilename);
+      lRC = 0;
+
+      uint nmode = SND_ALIAS;
+      if (mystrstri(pszSound, ".wav")) {
+         nmode = SND_FILENAME;
+         if (!fileExists(pszSound)) {
+            char *psz = sfkhome.getPath(pszSound);
+            if (psz)
+               pszSound = psz;
+         }
+      }
+
+      if (!PlaySound(pszSound, 0, nmode))
+         { perr("cannot play: %s\n", pszSound); lRC=1; }
 
       STEP_CHAIN(iChainNext, 0);
 
       bDone = 1;
    }
-    #endif
-   #endif // SFKINT
+   #endif
+   #endif
+   #endif
 
    #ifdef SFKWINST
    // .
@@ -39818,9 +43809,12 @@ int execXFind
             if (bskip)
                { }
             else
-            if (cs.useJustNames) // 1770
+            if (cs.useJustNames || cs.useNotNames) // xfind
             {
-               if (!bFileTold) {
+               if (cs.useNotNames)
+                  { } // do not print hit text
+               else
+               if (!bFileTold) { // xfind
                   bFileTold = 1;
                   strcopy(szLineBuf3, pcoi->name()); // sfk193
                   if (useOfficeBaseNames())
@@ -40091,14 +44085,54 @@ int execXFind
    if (pcoi->isFileOpen())
       pcoi->close();
 
-   // was the file content changed at all?
+   // sfk198 tell filenames with no hits
+   if (bFoundHits==0
+       && cs.useNotNames>0 // xfind
+      )
+   {
+      // to terminal
+      if (!bFileTold) {
+         bFileTold = 1;
+         strcopy(szLineBuf3, pcoi->name()); // sfk193
+         if (useOfficeBaseNames())
+            stripOfficeName(szLineBuf3); // xfind -names
+         if (chain.colfiles)
+            { } // sfk191 no output here.
+         else if (chain.coldata) {
+            // note: +view scans extended end of attribute line
+            //       to identify 'f'ile header lines, therefore +2:
+            setattr(szAttrBuf3, 'f', strlen(szLineBuf3)+2, MAX_LINE_LEN);
+            chain.addLine(szLineBuf3, szAttrBuf3);
+         } else {
+            info.print("%s\n", szLineBuf3);
+         }
+         if (chain.justNamesFilter)
+            chain.justNamesFilter->put(szLineBuf3);
+      }
+      // to chaining
+      if (chain.colfiles) do {
+         #if defined(SFKOFFICE)
+         if (cs.office>0 && pOutCoi==0) {
+            if (useOfficeBaseNames())
+               pcoi->stripOfficeName(); // xfind -names
+            if (chain.hasFile(pcoi->name()))
+               break;
+         }
+         #endif
+         chain.addFile(pOutCoi ? *pOutCoi : *pcoi);
+      } while(0);
+      // update the stats
+      cs.filesChg++;
+   }
+
+   // tell filenames with hits: to terminal was done before
    if (bFoundHits 
       ) 
    {
       // chaining: add the found file
       if (chain.colfiles) do {
          #if defined(SFKOFFICE)
-         if (cs.office>0 && cs.useJustNames>0 && pOutCoi==0) {
+         if (cs.office>0 && cs.useJustNames>0 && pOutCoi==0) { // xfind
             if (useOfficeBaseNames())
                pcoi->stripOfficeName(); // xfind -names
             if (chain.hasFile(pcoi->name()))
