@@ -1605,7 +1605,8 @@ fundamental-mode) for performance sake."
 #+BEGIN_SRC emacs-lisp
 (use-package cc-mode
   :mode (("\\.\\(c\\|h\\)\\(pp\\)?\\'" . c++-mode)
-         ("\\.ino\\'" . c++-mode))
+         ("\\.ino\\'" . c++-mode)
+         ("\\.cu\\'"  . c++-mode))
 
   :config
   (defun +cc|write-header-guard ()
