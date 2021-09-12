@@ -3501,8 +3501,8 @@ Return the result as a string."
                (-cons* (car template) template-string (+ fields-width string-width)))))
 
   (defun +bibtex-completion--format-entry (entry width formats)
-    (let* ((format (or (assoc-string (bibtex-completion-get-value "=type=" entry) formats 'case-fold)
-                       (assoc t formats)))
+    (let* ((type (bibtex-completion-get-value "=type=" entry))
+           (format (or (assoc-string type formats 'case-fold) (assoc t formats)))
            (format-string (cadr format)))
       (concat
        (s-format
@@ -3520,11 +3520,10 @@ Return the result as a string."
                     (volume (bibtex-completion-get-value "volume" entry)))
                 (setq field-value
                       (or searchtitle
-                          (concat maintitle
-                                  (when (and maintitle title) ": ")
-                                  title
-                                  (when (and (or maintitle title) volume) ", ")
-                                  (when volume (concat "Vol. " volume)))))))
+                          (concat (when maintitle (concat maintitle
+                                                          (when volume ", Vol. ") volume
+                                                          (when title ": ")))
+                                  title)))))
 
              ((string= field-name "author")
               (setq field-value (or (bibtex-completion-get-value "author" entry)
@@ -3600,7 +3599,8 @@ Return the result as a string."
                                       :prompt (format "Entries%s: " (if local-bib " (local)" ""))
                                       :category 'bibtex
                                       :require-match t
-                                      :default (+bibtex-completion--get-default))))
+                                      :default (+bibtex-completion--get-default)
+                                      :sort nil)))
       (list (cdr (assoc chosen candidates)))))
 
   (defun nox/bibtex (&optional arg)
