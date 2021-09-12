@@ -1,3 +1,4 @@
+# -*- mode: sh -*-
 pkgname=nox-moltengamepad
 pkgver=e370fe3
 pkgrel=1
