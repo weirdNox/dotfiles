@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+set -euo pipefail
+shopt -s nullglob
+
+rm -f /tmp/scanfilt-*.pdf
+
+for File in "$@"
+do
+    Final=${File%.pdf}
+    Final=$Final"_scanned.pdf"
+
+    echo "Splitting $File into separate pages"
+    pdfseparate "$File" /tmp/scanfilt-split-%04d.pdf
+
+    for SplitFile in /tmp/scanfilt-split-*.pdf
+    do
+        SplitFileScanned=${SplitFile%.pdf}"_scanned.pdf"
+
+        convert -density 130 -trim -flatten "$SplitFile" \
+                -blur 0x0.5 -attenuate 0.25 +noise Gaussian \
+                -rotate "$([ $((RANDOM % 2)) -eq 1 ] && echo -)0.$(($RANDOM % 8 + 1))" "$SplitFileScanned"
+        echo "Output page $SplitFile to $SplitFileScanned"
+    done
+
+    convert -density 130 $(ls -rt /tmp/scanfilt-split-*_scanned.pdf) -attenuate 0.2 +noise Multiplicative \
+            -sharpen 0x1.0 +level 15%,100% -format pdf -quality 85 -compress JPEG -colorspace gray "$Final"
+    echo "PDF re-combined to $Final"
+
+    echo "Cleaning up..."
+    rm /tmp/scanfilt-*.pdf
+done
+
+echo "Done!"
