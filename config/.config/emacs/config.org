@@ -851,7 +851,8 @@ ARGS are the same as in `custom-set-faces'."
   :config
   (nox-add-customize-theme-hook "^sanityinc"
     (nox-theme-set-faces
-     `(org-drawer ((t . (:foreground ,(face-attribute 'shadow :foreground))))))))
+     `(org-drawer ((t . (:foreground ,(face-attribute 'shadow :foreground)))))
+     `(org-headline-done ((t . (:foreground ,(face-attribute 'shadow :foreground) :strike-through nil)))))))
 #+END_SRC
 
 **** Extra programming keywords
