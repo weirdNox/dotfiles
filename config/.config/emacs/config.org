@@ -448,8 +448,8 @@ called. The buffer to be switched to is current when these hooks run.")
       (bootstrap-version 5))
   (unless (file-exists-p bootstrap-file)
     (with-current-buffer (url-retrieve-synchronously
-			              "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
-			              'silent 'inhibit-cookies)
+                          "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
+                          'silent 'inhibit-cookies)
       (goto-char (point-max))
       (eval-print-last-sexp)))
   (load bootstrap-file nil 'nomessage))
@@ -3314,7 +3314,7 @@ Return the result as a string."
       ;; gather words from titlestring into a list.  Ignore
       ;; specific words and use only a specific amount of words.
       (let ((counter 0)
-	        (ignore-re (concat "\\`\\(?:"
+            (ignore-re (concat "\\`\\(?:"
                                (mapconcat 'identity
                                           bibtex-autokey-titleword-ignore "\\|")
                                "\\)\\'"))
@@ -3328,7 +3328,7 @@ Return the result as a string."
           ;; Ignore words matched by one of the elements of
           ;; `bibtex-autokey-titleword-ignore'.  Case is significant.
           (unless (let (case-fold-search)
-		            (string-match ignore-re word))
+                    (string-match ignore-re word))
             (setq counter (1+ counter))
             (if (or (not (numberp bibtex-autokey-titlewords))
                     (<= counter bibtex-autokey-titlewords))
@@ -3347,7 +3347,7 @@ Return the result as a string."
     (let ((case-fold-search t)
           (start (bibtex-beginning-of-entry))
           (_ (or (looking-at bibtex-any-entry-maybe-empty-head)
-	             (error "Not inside a BibTeX entry")))
+                 (error "Not inside a BibTeX entry")))
           (entry-type (bibtex-type-in-head))
           (key (bibtex-key-in-head)))
 
