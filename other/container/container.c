@@ -21,6 +21,8 @@
 #define DBUS_SYST_PROXY "--filter",
 #define DBUS_USER_PROXY "--filter",
 
+#define SHARE_CUDA 0
+
 #define ENVS_TO_KEEP W("DISPLAY"), W("TERM")
 
 #define BIND_ENV_DEFAULT_PATH "/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin"

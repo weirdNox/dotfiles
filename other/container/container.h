@@ -312,7 +312,7 @@ internal b8 makeDirectoryRaw_(string Path, mode_t Mode)
                 *Iter = 0;
             }
 
-            switch(getNodeType(wrapZ(Buffer), false))
+            switch(getNodeType(wrapZ(Buffer), true))
             {
                 case Node_Directory: {} break;
 
@@ -386,7 +386,7 @@ internal b8 createFileRaw_(string Path, mode_t Mode)
 {
     b8 Result = true;
 
-    switch(getNodeType(Path, false))
+    switch(getNodeType(Path, true))
     {
         // NOTE(nox): This function is currently used to create bind mount targets, and it looks like
         // bind mounts can be made over non-regular files!
@@ -563,7 +563,16 @@ internal pid_t runProgramInBackground(char *ShellArgs[])
 internal inline void runProgram(char *ShellArgs[])
 {
     pid_t ProcPID = runProgramInBackground(ShellArgs);
-    waitpid(ProcPID, 0, 0);
+
+    int Status;
+    waitpid(ProcPID, &Status, 0);
+
+    int ErrorCode = WEXITSTATUS(Status);
+    if(ErrorCode != 0)
+    {
+        fprintf(stderr, "%s exited with error code %d\n", ShellArgs[0], ErrorCode);
+        exit(EXIT_FAILURE);
+    }
 }
 
 internal void disableSetGroups(pid_t ChildPID)
@@ -1443,10 +1452,20 @@ internal inline void shareGraphics()
 {
     bindMap(0, "/dev/dri", Bind_Dev);
 
-    bindMap(0, "/dev/nvidia0",        Bind_Dev | Bind_Try);
-    bindMap(0, "/dev/nvidiactl",      Bind_Dev | Bind_Try);
-    bindMap(0, "/dev/nvidia-modeset", Bind_Dev | Bind_Try);
-    bindMount("/usr/bin/true", "/usr/bin/nvidia-modprobe", Bind_ReadOnly | Bind_Try);
+    { // NOTE(nox): NVIDIA
+        bindMap(0, "/dev/nvidia0",        Bind_Dev | Bind_Try);
+        bindMap(0, "/dev/nvidiactl",      Bind_Dev | Bind_Try);
+        bindMap(0, "/dev/nvidia-modeset", Bind_Dev | Bind_Try);
+        bindMount("/usr/bin/true", "/usr/bin/nvidia-modprobe", Bind_ReadOnly | Bind_Try);
+
+#if SHARE_CUDA
+        bindMap(0, "/dev/nvidia-uvm",       Bind_Dev);
+        bindMap(0, "/dev/nvidia-uvm-tools", Bind_Dev);
+
+        bindMap(0, "/lib64/libcuda.so.1", Bind_ReadOnly);
+        bindMap(0, "/lib64/libnvidia-ptxjitcompiler.so.1", Bind_ReadOnly);
+#endif
+    }
 }
 
 internal inline void shareAudio(b32 BindConfig)
@@ -1487,6 +1506,15 @@ internal inline void shareInput()
 {
     bindMap(0, "/dev/input",  Bind_Dev);
     bindMap(0, "/dev/uinput", Bind_Dev);
+}
+
+internal inline void setupCUDAParent()
+{
+#if SHARE_CUDA
+    // NOTE(nox): Ensure Unified Virtual Memory is loaded
+    char *ShellArgs[] = {"/usr/bin/nvidia-modprobe", "-u", "-c0", 0};
+    runProgram(ShellArgs);
+#endif
 }
 
 internal inline void setupNetwork()
@@ -1821,6 +1849,7 @@ int main(int ArgCount, char *ArgVals[])
 
     createUnionFS();
     setupDBusParent();
+    setupCUDAParent();
 
     sigset_t SigMask;
     sigemptyset(&SigMask); sigaddset(&SigMask, SIGUSR1);
