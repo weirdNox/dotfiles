@@ -3807,11 +3807,25 @@ Return the result as a string."
                `(cc
                  ,(rx
                    bol
-                   (group-n 1 (: (* num) (not space) (*? nonl)))
+                   (group-n 1 (*? nonl))
                    (: ":" (* " ") (group-n 2 (+ num)))
                    (? ":" (* " ") (group-n 4 (+ num)))
                    ":" (* " ")
                    common)
+                 1 (2 . 3) (4 . 5) (6 . 7))))
+
+;; ====================================================================================================
+;; NOTE(nox): NVCC
+;;
+(rx-let ((common (: (| (group-n 6 (| "warning")) "error") ":")))
+  (add-to-list 'compilation-error-regexp-alist 'nvcc)
+  (add-to-list 'compilation-error-regexp-alist-alist
+               `(nvcc
+                 ,(rx
+                   bol
+                   (group-n 1 (*? nonl))
+                   (: "(" (group-n 2 (+ num)) ")")
+                   ":" (* " ") common)
                  1 (2 . 3) (4 . 5) (6 . 7))))
 
 ;; ====================================================================================================
