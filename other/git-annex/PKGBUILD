@@ -1,5 +1,5 @@
 pkgname=nox-git-annex
-pkgver=8.20210224
+pkgver=0
 pkgrel=1
 pkgdesc="Manage files with git, without checking their contents into git."
 url="https://git-annex.branchable.com/"

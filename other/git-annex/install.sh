@@ -8,3 +8,6 @@ cd build
 
 ln -sf "$(pwd)/../PKGBUILD" PKGBUILD
 makepkg -si --noconfirm --needed
+
+# NOTE(nox): Ignore changes from makepkg
+sed -i 's/^pkgver=.*/pkgver=0/' ../PKGBUILD
