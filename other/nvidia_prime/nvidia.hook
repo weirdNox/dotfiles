@@ -1,0 +1,18 @@
+[Trigger]
+Operation=Install
+Operation=Upgrade
+Operation=Remove
+Type=Package
+Target=nvidia
+Target=nvidia-dkms
+Target=nvidia-lts
+Target=linux
+Target=linux-lts
+# If using another Linux kernel, add it in here and in the case list below
+
+[Action]
+Description=Updating NVIDIA modules in initcpio...
+Depends=mkinitcpio
+When=PostTransaction
+NeedsTargets
+Exec=/bin/sh -c 'while read -r Pkg; do case "$Pkg" in linux|linux-lts) exit 0; esac; done; /usr/bin/mkinitcpio -P'

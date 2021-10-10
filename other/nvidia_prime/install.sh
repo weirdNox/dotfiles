@@ -6,16 +6,13 @@ cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1
 pacman -Syu --needed nvidia-prime
 sudo systemctl enable nvidia-persistenced
 
-cat > "/etc/udev/rules.d/80-nvidia-pm.rules" <<EOF
-# Enable runtime PM for NVIDIA VGA/3D controller devices on driver bind
-ACTION=="bind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030000", TEST=="power/control", ATTR{power/control}="auto"
-ACTION=="bind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030200", TEST=="power/control", ATTR{power/control}="auto"
+echo -n "Configuring NVIDIA power management... "
+cp    nvidia-pm.conf  /etc/modprobe.d/
+cp 80-nvidia-pm.rules /etc/udev/rules.d/
+echo "done!"
 
-# Disable runtime PM for NVIDIA VGA/3D controller devices on driver unbind
-ACTION=="unbind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030000", TEST=="power/control", ATTR{power/control}="on"
-ACTION=="unbind", SUBSYSTEM=="pci", ATTR{vendor}=="0x10de", ATTR{class}=="0x030200", TEST=="power/control", ATTR{power/control}="on"
-EOF
-
-cat > "/etc/modprobe.d/nvidia-pm.conf" <<EOF
-options nvidia "NVreg_DynamicPowerManagement=0x02"
-EOF
+read -rp "Configure early module loading? [y/N] " InstallEarly
+if [[ "$InstallEarly" =~ ^[Yy]$ ]]
+then
+    ./install_early.sh
+fi
