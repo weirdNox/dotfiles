@@ -549,7 +549,8 @@ symbols.
  ffap-machine-p-known 'reject
  idle-update-delay 2
  inhibit-compacting-font-caches t
- minibuffer-prompt-properties '(read-only t point-entered minibuffer-avoid-prompt face minibuffer-prompt))
+ minibuffer-prompt-properties '(read-only t point-entered minibuffer-avoid-prompt face minibuffer-prompt)
+ auth-source-save-behavior nil)
 #+END_SRC
 
 *** UTF-8 as default
