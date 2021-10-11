@@ -860,23 +860,11 @@ ARGS are the same as in `custom-set-faces'."
 (use-package doom-themes :straight t
   :config
   (setq! doom-one-brighter-comments t
-         doom-one-comment-bg nil
          doom-peacock-brighter-modeline t)
 
-  (nox-add-customize-theme-hook "^doom-"
-    (after! outline
-      (set-face-attribute 'outline-1 nil :height 1.0)
-      (set-face-attribute 'outline-2 nil :height 1.0)
-      (set-face-attribute 'outline-3 nil :height 1.0))
-    (after! org
-      (set-face-attribute 'org-level-1 nil :height 1.0)
-      (set-face-attribute 'org-level-2 nil :height 1.0)
-      (set-face-attribute 'org-level-3 nil :height 1.0))
-    (set-face-attribute 'isearch        nil :background (face-attribute 'isearch :background nil t))
-    (set-face-attribute 'lazy-highlight nil :background (color-darken-name
-                                                         (face-attribute 'lazy-highlight :background) 15))
+  (nox-add-customize-theme-hook "^doom-one"
     (nox-theme-set-faces
-     `(org-special-keyword ((t . (:foreground ,(face-attribute 'shadow :foreground))))))))
+     `(font-lock-comment-face ((t . (:background nil)))))))
 
 (use-package gruvbox-theme :straight t
   :config
@@ -1048,7 +1036,9 @@ Disable fringes in the minibuffer window.
 #+begin_src emacs-lisp
 (use-package ctrlf :straight t
   :init
-  (ctrlf-mode 1))
+  ;; NOTE(nox): Workaround to prevent the `ctrl-mode-map' from being set at all times
+  (define-globalized-minor-mode ctrlf-all-mode ctrlf-local-mode ctrlf-local-mode)
+  (ctrlf-all-mode 1))
 #+end_src
 
 *** Actions
