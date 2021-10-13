@@ -3814,7 +3814,7 @@ Return the result as a string."
 ;; ====================================================================================================
 ;; NOTE(nox): NVCC
 ;;
-(rx-let ((common (: (| (group-n 6 (| "warning")) "error") ":")))
+(rx-let ((common (: (| (group-n 6 (| "warning")) "error") (* nonl) ":")))
   (add-to-list 'compilation-error-regexp-alist 'nvcc)
   (add-to-list 'compilation-error-regexp-alist-alist
                `(nvcc
