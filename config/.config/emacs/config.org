@@ -755,7 +755,8 @@ symbols.
 #+BEGIN_SRC emacs-lisp
 (use-package server
   :config
-  (add-hook 'after-make-frame-functions (lambda (frame) (select-frame-set-input-focus frame)) t))
+  (defun +server|bring-frame-to-front () (select-frame-set-input-focus (selected-frame)))
+  (add-hook! '(server-after-make-frame-hook server-switch-hook) #'+server|bring-frame-to-front))
 #+END_SRC
 
 *** Font

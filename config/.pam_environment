@@ -15,6 +15,7 @@ XDG_LIB_HOME        DEFAULT="${HOME_LOCAL_DIR}/lib"
 
 EDITOR              DEFAULT="${XDG_BIN_HOME}/editor"
 VISUAL              DEFAULT="${EDITOR}"
+ALTERNATE_EDITOR    DEFAULT=""
 
 DICPATH             DEFAULT="${XDG_DATA_HOME}/dicts"
 

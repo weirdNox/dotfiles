@@ -3,7 +3,7 @@
 Name=Emacs
 GenericName=Text Editor
 Comment=Edit text
-Exec=emacsclient -F "((fullscreen . maximized) (fullscreen-restore . maximized))" -c %U
+Exec=emacsclient -F "((fullscreen . maximized) (fullscreen-restore . maximized))" -ca "" %U
 Icon=emacs
 Type=Application
 Terminal=false

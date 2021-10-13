@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 if [ -z "$DISPLAY" ]; then
-    exec emacsclient -nw -a "" "$@"
+    exec emacsclient -nwa "" "$@"
 else
-    exec emacsclient -n -e "(> (length (frame-list)) 1)" | grep t
+    emacsclient -e "(> (length (frame-list)) 1)" -a "" | grep t >/dev/null
     if [ "$?" = "1" ]; then
-        exec emacsclient -c -n -a "" "$@"
+        exec emacsclient -cna "" "$@"
     else
-        exec emacsclient -n -a "" "$@"
+        exec emacsclient -na "" "$@"
     fi
 fi
