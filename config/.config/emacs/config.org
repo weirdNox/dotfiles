@@ -1230,11 +1230,16 @@ Disable fringes in the minibuffer window.
     (interactive "sProject root: ")
     (+projectile/ripgrep root))
 
+  (defun +projectile--remove-known-project (root)
+    (interactive "sProject root: ")
+    (projectile-remove-known-project root))
+
   (embark-define-keymap embark-project-map
     "Keymap for Embark project actions."
     ("s g" #'+projectile--git-grep-by-name)
     ("s s" #'+projectile--ripgrep-by-name)
-    ("v"   #'+projectile--vc-by-name))
+    ("v"   #'+projectile--vc-by-name)
+    ("C-k"   #'+projectile--remove-known-project))
   (add-to-list 'embark-keymap-alist '(project . embark-project-map)))
 #+END_SRC
 
