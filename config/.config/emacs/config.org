@@ -3003,14 +3003,10 @@ after removing the face property. This serves to restore the custom face set in 
     (let ((capture-frame (cl-loop for frame in (frame-list)
                                   when (frame-parameter frame 'org-capture-frame)
                                   return frame)))
-      (cond (capture-frame
-             (delete-frame)
-             (select-frame-set-input-focus capture-frame))
-
-            (t
-             (modify-frame-parameters nil '((name . "Org Capture") (org-capture-frame . t)
-                                            (width . 110) (height . 40)))
-             (org-capture)))))
+      (select-frame-set-input-focus (or capture-frame
+                                        (make-frame '((name . "Org Capture") (org-capture-frame . t)
+                                                      (width . 110) (height . 40)))))
+      (unless capture-frame (org-capture))))
 
   :config
   (defun +org-inactive-timestamp (&optional time)
@@ -3089,30 +3085,28 @@ after removing the face property. This serves to restore the custom face set in 
                            ("w" "web")
                            ("wc" "capture" entry (file "") "* [[%:link][%^{Title|%:description}]]\n%?")))
 
-  (add-hook 'org-capture-mode-hook 'nox|org-offer-all-agenda-tags)
+  (add-hook 'org-capture-mode-hook #'nox|org-offer-all-agenda-tags)
+  (add-hook 'org-capture-after-finalize-hook #'org-save-all-org-buffers)
 
+  ;;
   ;; NOTE(nox): Handle capture frame
-  (advice-add
-   'org-switch-to-buffer-other-window :after
-   (lambda (&rest _) (when (frame-parameter nil 'org-capture-frame) (delete-other-windows))))
-  (advice-add
-   'org-capture :around
-   (lambda (capture-function &rest args)
-     (condition-case nil (apply capture-function args)
-       (error (when (frame-parameter nil 'org-capture-frame)
-                (delete-frame))))))
-  (add-hook
-   'org-capture-after-finalize-hook
-   (lambda (&rest _)
-     (when (and (frame-parameter nil 'org-capture-frame) (not org-capture-is-refiling))
-       (org-save-all-org-buffers)
-       (delete-frame))))
-  (advice-add
-   'org-capture-refile :after
-   (lambda (&rest _)
-     (when (frame-parameter nil 'org-capture-frame)
-       (org-save-all-org-buffers)
-       (delete-frame)))))
+  ;;
+  (advice-add 'org-switch-to-buffer-other-window :after
+              (lambda (&rest _) (when (frame-parameter nil 'org-capture-frame) (delete-other-windows))))
+
+  (advice-add 'org-capture :around
+              (lambda (capture-function &rest args)
+                (condition-case nil (apply capture-function args)
+                  (error (when (frame-parameter nil 'org-capture-frame) (delete-frame))))))
+
+  (add-hook 'org-capture-after-finalize-hook
+            (lambda (&rest _)
+              (when (and (frame-parameter nil 'org-capture-frame) (not org-capture-is-refiling))
+                (delete-frame))))
+
+  (advice-add 'org-capture-refile :after
+              (lambda (&rest _)
+                (when (frame-parameter nil 'org-capture-frame) (delete-frame)))))
 #+END_SRC
 
 *** Clocking
