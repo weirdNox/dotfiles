@@ -3794,8 +3794,8 @@ Return the result as a string."
                        (group-n 7 (| "info" "information" "informational" "instantiated from" "required from" "note"))
                        (| (: (? "fatal ") "error") "sorry,"))
                     (| " " ":"))))
-  (add-to-list 'compilation-error-regexp-alist 'cc-no-file)
-  (add-to-list 'compilation-error-regexp-alist-alist `(cc-no-file ,(rx common) nil))
+  ;; (add-to-list 'compilation-error-regexp-alist 'cc-no-file)
+  ;; (add-to-list 'compilation-error-regexp-alist-alist `(cc-no-file ,(rx common) nil))
 
   (add-to-list 'compilation-error-regexp-alist 'cc)
   (add-to-list 'compilation-error-regexp-alist-alist
