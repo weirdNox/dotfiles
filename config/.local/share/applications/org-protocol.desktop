@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=org-protocol
-Exec=/usr/bin/sh -c "exec $HOME/.local/lib/org-protocol.sh %u"
+Exec=emacsclient -e (+capture-frame\ \"%u\")
 Type=Application
 Terminal=false
 NoDisplay=true

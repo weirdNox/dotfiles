@@ -1820,7 +1820,7 @@ fundamental-mode) for performance sake."
   (setq! org-directory "~/essential/agenda/")
 
   :config
-  (setq! org-modules '(org-habit org-id org-protocol org-timer))
+  (setq! org-modules '(org-habit org-id org-timer))
 #+END_SRC
 
 **** Directories and files
@@ -2995,20 +2995,24 @@ after removing the face property. This serves to restore the custom face set in 
          org-attach-auto-tag "ATTACH"))
 #+END_SRC
 
-*** Capture
+*** Capture and protocol
 #+BEGIN_SRC emacs-lisp
+(use-package org-protocol :commands org-protocol-check-filename-for-protocol)
+
 (use-package org-capture
-  :init
-  (defun +capture-frame ()
+  :commands +capture-frame
+  :config
+  (defun +capture-frame (&optional org-protocol-url)
     (let ((capture-frame (cl-loop for frame in (frame-list)
                                   when (frame-parameter frame 'org-capture-frame)
                                   return frame)))
       (select-frame-set-input-focus (or capture-frame
                                         (make-frame '((name . "Org Capture") (org-capture-frame . t)
-                                                      (width . 110) (height . 40)))))
-      (unless capture-frame (org-capture))))
+                                                      (width . 110) (height . 40) (window-system . x)))))
+      (unless capture-frame
+        (or (and org-protocol-url (eq (org-protocol-check-filename-for-protocol org-protocol-url t nil) nil))
+            (org-capture)))))
 
-  :config
   (defun +org-inactive-timestamp (&optional time)
     (format-time-string (concat "[" (substring (cdr org-time-stamp-formats) 1 -1) "]") time))
 

@@ -2,7 +2,7 @@
 
 * Org-mode
 ** Global =org-capture= shortcut
-Must setup a global shortcut that runs ~ec -ce "(+capture-frame)"~
+Must setup a global shortcut that runs ~emacsclient -e "(+capture-frame)"~
 
 ** =org-protocol= setup
 In order to update the desktop database, run ~update-desktop-database .local/share/applications/~
