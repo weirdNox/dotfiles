@@ -18,4 +18,7 @@ echo -n "Adding pacman hook... "
 mkdir -p /etc/pacman.d/hooks/
 cp -f nvidia.hook /etc/pacman.d/hooks/
 echo "done!"
+echo ""
 echo "IMPORTANT: Check if /etc/pacman.d/hooks/nvidia.hook lists the packages being used!"
+echo "IMPORTANT: Possibly run 'mkinitcpio -P' now"
+echo ""

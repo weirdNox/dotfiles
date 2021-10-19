@@ -10,9 +10,3 @@ echo -n "Configuring NVIDIA power management... "
 cp    nvidia-pm.conf  /etc/modprobe.d/
 cp 80-nvidia-pm.rules /etc/udev/rules.d/
 echo "done!"
-
-read -rp "Configure early module loading? [y/N] " InstallEarly
-if [[ "$InstallEarly" =~ ^[Yy]$ ]]
-then
-    ./install_early.sh
-fi
