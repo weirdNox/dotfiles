@@ -1737,24 +1737,29 @@ fundamental-mode) for performance sake."
   (add-hook! octave-mode (setq-local comment-add 0))
   (defun octave-indent-comment () nil))
 
-(use-package matlab :straight matlab-mode)
-(use-package matlab-shell
-  :init
-  (setq! magic-mode-alist (assq-delete-all 'matlab-is-matlab-file magic-mode-alist))
+(use-package matlab :straight matlab-mode
+  :init   (setq! magic-mode-alist (assq-delete-all 'matlab-is-matlab-file magic-mode-alist))
+  :config (setq! magic-mode-alist (assq-delete-all 'matlab-is-matlab-file magic-mode-alist)))
 
+(use-package matlab-shell
   :config
   (setq! matlab-shell-command-switches '("-nodesktop" "-nosplash")
-         magic-mode-alist (assq-delete-all 'matlab-is-matlab-file magic-mode-alist)
-         matlab-shell-input-ring-size 25000)
+         matlab-shell-history-file "~/.matlab/%s/nox-history.m"
+         matlab-shell-input-ring-size 100000)
 
   (defun matlab-shell-first-prompt-fcn ())
 
   ;; NOTE(nox): Write history correctly
+  (defun +matlab-write-history ()
+    (let ((reporter (make-progress-reporter "Writing MATLAB history... ")))
+      (comint-write-input-ring)
+      (progress-reporter-done reporter)))
+
   (defun +matlab-shell|sentinel (process event)
-    (when (not (process-live-p process)) (comint-write-input-ring)))
+    (when (not (process-live-p process)) (+matlab-write-history)))
 
   (defun +matlab-shell*set-hooks ()
-    (add-hook! :local 'kill-buffer-hook (comint-write-input-ring))
+    (add-hook! :local 'kill-buffer-hook (+matlab-write-history))
     (set-process-sentinel (get-buffer-process (current-buffer)) #'+matlab-shell|sentinel))
 
   (advice-add 'matlab-shell :after #'+matlab-shell*set-hooks))
