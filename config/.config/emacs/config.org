@@ -3158,6 +3158,13 @@ When optional argument is non-nil, refresh cached heading."
   (org-clock-persistence-insinuate))
 #+END_SRC
 
+*** Element
+#+begin_src emacs-lisp
+(use-package org-element
+  :config
+  (setq! org-element-use-cache nil))
+#+end_src
+
 *** Habit
 #+BEGIN_SRC emacs-lisp
 (use-package org-habit
@@ -3194,6 +3201,13 @@ When optional argument is non-nil, refresh cached heading."
          org-noter-notes-search-path '("~/archive/literature/notes/")
          org-noter-default-notes-file-names '("notes.org" "notas.org")))
 #+END_SRC
+
+*** Persist
+#+begin_src emacs-lisp
+(use-package org-persist
+  :config
+  (setq! org-persist-directory (concat nox-cache-dir "org-persist/")))
+#+end_src
 
 *** Source blocks
 #+BEGIN_SRC emacs-lisp
