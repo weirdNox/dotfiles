@@ -3025,8 +3025,8 @@ after removing the face property. This serves to restore the custom face set in 
     (unless (org-before-first-heading-p) (org-set-property "CREATED" (+org-inactive-timestamp))))
   (add-hook 'org-capture-before-finalize-hook '+capture|add-created-property)
 
-  (defconst +capture-tracker-type-to-heading '(movie "Filmes" series "Séries" book "Livros"))
-  (defconst +capture-tracker-type-template   '(movie "* WATCH " series "* WATCH " book "* READ "))
+  (defconst +capture-tracker-type-to-heading '(movie "Movies" series "Series" book "Books" game "Games"))
+  (defconst +capture-tracker-type-template   '(movie "* WATCH " series "* WATCH " book "* READ " game "* PLAY "))
 
   (defun +capture-tracker-template ()
     (with-current-buffer (find-file-noselect nox-org-tracker-file)
@@ -3091,6 +3091,8 @@ after removing the face property. This serves to restore the custom face set in 
                             :track-type series)
                            ("mb" "book" entry #'+capture-tracker-location #'+capture-tracker-template
                             :track-type book)
+                           ("mg" "game" entry #'+capture-tracker-location #'+capture-tracker-template
+                            :track-type game)
                            ("w" "web")
                            ("wc" "capture" entry (file "") "* [[%:link][%^{Title|%:description}]]\n%?")))
 
