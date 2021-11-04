@@ -1,12 +1,7 @@
 [Trigger]
-Operation=Install
 Operation=Upgrade
 Operation=Remove
 Type=Package
-# Match NVIDIA driver packages
-Target=nvidia
-Target=nvidia-dkms
-Target=nvidia-lts
 # Match Linux kernel
 Target=linux
 Target=linux-ck*
@@ -24,11 +19,10 @@ Target=!*docs
 Target=!*headers
 
 [Action]
-Description=Updating NVIDIA modules in initcpio...
-Depends=mkinitcpio
-When=PostTransaction
-NeedsTargets
-Exec=/bin/sh -c 'while read -r Pkg; do [[ "$Pkg" == *linux* ]] && exit 0; done; /usr/bin/mkinitcpio -P'
+Description=Backing up Linux kernel modules...
+When=PreTransaction
+Depends=base
+Exec=/usr/bin/bash -c 'M="/usr/lib/modules/$(uname -r)"; T="/tmp/kernmodbak"; [[ -L "$M" || -d "$T/$(uname -r)" ]] && exit 0; [[ -d "$M" ]] && /usr/bin/mkdir -p "$T" && /usr/bin/cp -a "$M" "$T"'
 
 # Local Variables:
 # mode: conf-unix
