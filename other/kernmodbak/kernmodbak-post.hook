@@ -1,22 +1,8 @@
 [Trigger]
 Operation=Upgrade
 Operation=Remove
-Type=Package
-# Match Linux kernel
-Target=linux
-Target=linux-ck*
-Target=linux-git*
-Target=linux-hardened*
-Target=linux-lts*
-Target=linux-mainline*
-Target=linux-next*
-Target=linux-tkg*
-Target=linux-vfio*
-Target=linux-xanmod*
-Target=linux-zen*
-# Prevent Linux kernel false positives
-Target=!*docs
-Target=!*headers
+Type=Path
+Target=usr/lib/modules/*/vmlinuz
 
 [Action]
 Description=Creating symlink for the kernel modules...
