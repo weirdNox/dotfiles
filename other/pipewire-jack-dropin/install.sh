@@ -2,6 +2,8 @@
 set -euo pipefail; shopt -s nullglob
 ScriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+echo "Installing pipewire-jack-dropin"
+
 cd "$ScriptDir"
 mkdir -p build
 
