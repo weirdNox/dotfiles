@@ -4,5 +4,5 @@ cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1
 
 echo "Setting up mimeapps.list"
 mkdir -p ~/.config ~/.local/share/mime/packages
-cp mimeapps.list ~/.config
+cp mimeapps.list ~/.config/
 update-mime-database ~/.local/share/mime

@@ -10,4 +10,4 @@ mkdir -p build
 cd build
 ln -sf "$ScriptDir/PKGBUILD" .
 ln -sf "$ScriptDir/pipewire-jack.conf" .
-makepkg -si --clean
+makepkg -si --clean --noconfirm
