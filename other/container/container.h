@@ -158,32 +158,68 @@ global int ProcFD;
 
 global b32 FullBind;
 
+global string IgnoreProgramBash = constZ("#!/usr/bin/env bash\nexit 0\n");
+#define IGNORE_PROGRAM(Path) replaceFile(Path, IgnoreProgramBash, Bind_Try, S_IXOTH|S_IXOTH|S_IXOTH);
+
+internal char *buildStringArgs(buffer *Buffer, char *Format, va_list ArgList)
+{
+    char *Result = Buffer->Char;
+
+    int BytesWritten = vsnprintf(Buffer->Char, Buffer->Size, Format, ArgList);
+    assert(BytesWritten >= 0);
+
+    if((umm)BytesWritten < Buffer->Size)
+    {
+        advance(Buffer, BytesWritten);
+    }
+    else
+    {
+        advance(Buffer, Buffer->Size);
+    }
+
+    return Result;
+}
+
+internal char *buildString(buffer *Buffer, char *Format, ...)
+{
+    va_list ArgList;
+    va_start(ArgList, Format);
+    char *Result = buildStringArgs(Buffer, Format, ArgList);
+    va_end(ArgList);
+
+    return Result;
+}
+
+internal string finalizeString(buffer *Buffer, char *First)
+{
+    string Result = {
+        .Size = (umm)(Buffer->Char - First),
+        .Char = First,
+    };
+
+    char *TerminatorLocation;
+    if(Buffer->Size > 0)
+    {
+        TerminatorLocation = (char *)advance(Buffer, 1);
+    }
+    else
+    {
+        --Result.Size;
+        TerminatorLocation = Buffer->Char - 1;
+    }
+    *TerminatorLocation = 0;
+
+    return Result;
+}
 
 internal string formatString(buffer *Buffer, char *Format, ...)
 {
     va_list ArgList;
-
     va_start(ArgList, Format);
-    int BytesWritten = vsnprintf((char *)Buffer->Data, Buffer->Size, Format, ArgList);
+    char *First = buildStringArgs(Buffer, Format, ArgList);
     va_end(ArgList);
 
-    assert(BytesWritten >= 0);
-
-    string Result = { .Data = Buffer->Data };
-
-    if((umm)BytesWritten < Buffer->Size)
-    {
-        Result.Size = BytesWritten;
-    }
-    else
-    {
-        fprintf(stderr, "String didn't fit buffer: Needed %d, only had %lu\n", BytesWritten, Buffer->Size);
-        exit(EXIT_FAILURE);
-    }
-
-    umm UsedBytes = Result.Size+1;
-    advance(Buffer, UsedBytes);
-
+    string Result = finalizeString(Buffer, First);
     return Result;
 }
 
@@ -1021,14 +1057,14 @@ internal void bindMapGlob(char *Prefix, char *Pattern, bind_option Options)
     }
 }
 
-internal inline void bindAux(char *Path, b8 File)
+internal inline void bindAux(char *Path, b8 File, bind_option ExtraOptions)
 {
     assert(Path && Path[0] == '/');
 
     u8 Memory[1<<10];
     string AuxPath = auxNode(&bundleArray(Memory), Path+1);
 
-    bindMount((char *)AuxPath.Data, Path, File ? Bind_EnsureFile : Bind_EnsureDir);
+    bindMount((char *)AuxPath.Data, Path, (File ? Bind_EnsureFile : Bind_EnsureDir) | ExtraOptions);
 }
 
 typedef enum {
@@ -1124,22 +1160,30 @@ internal void otherMount(mount_type Type, char *BindPath)
     }
 }
 
-internal void replaceFile_(char *FilePath, string Contents, mode_t ExtraMode)
+internal void replaceFile_(char *FilePath, string Contents, bind_option ExtraOptions, mode_t ExtraMode)
 {
-    bindAux(FilePath + (sizeof(BindRootFolder)-1), true);
+    bindAux(FilePath + (sizeof(BindRootFolder)-1), true, ExtraOptions);
 
-    int File = open(FilePath, O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, S_IRUSR|S_IWUSR|ExtraMode);
-    if(File < 0)
+    int File = open(FilePath, O_WRONLY|O_TRUNC|O_CLOEXEC);
+    if(File >= 0)
+    {
+        if(fchmod(File, S_IRUSR|S_IWUSR|ExtraMode) < 0)
+        {
+            fprintf(stderr, "Couldn't change file %s mode to %o: %s\n", FilePath, S_IRUSR|S_IWUSR|ExtraMode, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+
+        writeAll(File, Contents);
+        close(File);
+    }
+    else if((ExtraOptions & Bind_Try) == 0)
     {
         fprintf(stderr, "Couldn't open %s: %s\n", FilePath, strerror(errno));
         exit(EXIT_FAILURE);
     }
-
-    writeAll(File, Contents);
-    close(File);
 }
-#define replaceFile(FilePath, Contents, ...) replaceFile_((BindRootFolder FilePath), (Contents), \
-                                                          (sizeof(stringify(__VA_ARGS__)) > 1 ? __VA_ARGS__ : 0))
+#define replaceFile(FilePath, Contents, ExOp, ...) replaceFile_((BindRootFolder FilePath), (Contents), ExOp, \
+                                                                (sizeof(stringify(__VA_ARGS__)) > 1 ? __VA_ARGS__ : 0))
 
 internal void cleanupEnvironmentVariables()
 {
@@ -1434,7 +1478,7 @@ internal inline void setupMachineID(char *FakeID)
             exit(EXIT_FAILURE);
         }
 
-        replaceFile("/etc/machine-id", Contents);
+        replaceFile("/etc/machine-id", Contents, 0);
     }
 }
 
@@ -1564,7 +1608,7 @@ internal inline void setupNetwork()
     else
     {
         replaceFile("/etc/hosts", formatString(&Buffer, "127.0.0.1 localhost %s %s.localdomain\n",
-                                               Hostname.Data, Hostname.Data));
+                                               Hostname.Data, Hostname.Data), 0);
     }
 #endif
 }
@@ -1639,34 +1683,77 @@ internal void bindCustomWineBuild(char *BasePath)
 internal inline void setupUsersAndGroups()
 {
     u8 Memory[1<<13];
-    buffer Buffer = bundleArray(Memory);
 
-    char *BindHomePath = getBindHomePath(&Buffer);
+    {
+        buffer Buffer = bundleArray(Memory);
+        char *BindHomePath = getBindHomePath(&Buffer);
 
-    string Passwd = formatString(&Buffer,
-                                 "%s:x:%lu:%lu:%s:%s:/usr/bin/bash\n"
-                                 "root:x:%lu:%lu:::/sbin/nologin\n"
-                                 "nobody:x:%lu:%lu:::/sbin/nologin\n"
-                                 "postfix:x:%lu:%lu:::/sbin/nologin\n",
-                                 getBindUserName(), getBindUID(), getBindGID(), getBindUserName(), BindHomePath,
-                                 getBindUID(), getBindGID(),
-                                 getBindUID(), getBindGID(),
-                                 getBindUID(), getBindGID());
-    replaceFile("/etc/passwd", Passwd);
+        char *Start = Buffer.Char;
+        buildString(&Buffer, "%s:x:%lu:%lu:%s:%s:/usr/bin/bash\n", getBindUserName(), getBindUID(), getBindGID(), getBindUserName(), BindHomePath);
+#define addUser(Name) buildString(&Buffer, Name":x:%lu:%lu:::/sbin/nologin\n", getBindUID(), getBindGID());
+        addUser("_apt");
+        addUser("postfix");
+        addUser("root");
+        addUser("systemd-network");
+#undef  addUser
+        buildString(&Buffer, "nobody:x:65534:65534:::/sbin/nologin\n");
+        replaceFile("/etc/passwd", finalizeString(&Buffer, Start), 0);
+    }
 
-    replaceFile("/etc/group", formatString(&Buffer,
-                                           "%s:x:%lu:%s\n"
-                                           "root:x:%lu:\n"
-                                           "nobody:x:%lu:\n"
-                                           "audio:x:%lu:\n"
-                                           "tty:x:%lu:\n"
-                                           "postdrop:x:%lu:\n"
-                                           "postfix:x:%lu:\n"
-                                           "mail:x:%lu:\n",
-                                           getBindUserName(), getBindGID(), getBindUserName(),
-                                           getBindGID(), getBindGID(), getBindGID(),
-                                           getBindGID(), getBindGID(), getBindGID(),
-                                           getBindGID()));
+    {
+        buffer Buffer = bundleArray(Memory);
+        string UserAdd = formatString(&Buffer,
+                                      "#!/usr/bin/env bash\n"
+                                      "while [[ $# > 0 && \"${1:0:1}\" == - ]]; do shift; done\n"
+                                      "echo \"ADDING USER $1\"\n"
+                                      "echo \"$1:x:$(id -u):$(id -g):::/sbin/nologin\" >> /etc/passwd\n"
+                                      "exit 0\n");
+        replaceFile("/usr/bin/useradd",  UserAdd, Bind_Try, S_IXOTH|S_IXOTH|S_IXOTH);
+        replaceFile("/usr/sbin/useradd", UserAdd, Bind_Try, S_IXUSR|S_IXGRP|S_IXOTH);
+    }
+    IGNORE_PROGRAM("/usr/bin/chage");
+    IGNORE_PROGRAM("/usr/bin/chfn");
+    IGNORE_PROGRAM("/usr/bin/usermod");
+    IGNORE_PROGRAM("/usr/sbin/adduser");
+    IGNORE_PROGRAM("/usr/sbin/usermod");
+
+    {
+        buffer Buffer = bundleArray(Memory);
+        buildString(&Buffer, "%s:x:%lu:%s\n", getBindUserName(), getBindGID(), getBindUserName());
+#define addGroup(Name) buildString(&Buffer, Name":x:%lu:%s\n", getBindGID(), getBindUserName());
+        addGroup("adm");
+        addGroup("audio");
+        addGroup("dialout");
+        addGroup("lp");
+        addGroup("mail");
+        addGroup("man");
+        addGroup("messagebus");
+        addGroup("postdrop");
+        addGroup("postfix");
+        addGroup("root");
+        addGroup("sudo");
+        addGroup("sys");
+        addGroup("systemd-journal");
+        addGroup("systemd-network");
+        addGroup("tty");
+        addGroup("utmp");
+        addGroup("uucp");
+#undef  addGroup
+        buildString(&Buffer, "nobody:x:65534:nobody\n");
+        replaceFile("/etc/group", finalizeString(&Buffer, (char *)Memory), 0);
+    }
+
+    {
+        buffer Buffer = bundleArray(Memory);
+        string GroupAdd = formatString(&Buffer,
+                                       "#!/usr/bin/env bash\n"
+                                       "while [[ $# > 0 && \"${1:0:1}\" == - ]]; do shift; done\n"
+                                       "echo \"ADDING GROUP $1\"\n"
+                                       "echo \"$1:x:$(id -g):$(id -un)\" >> /etc/group\n"
+                                       "exit 0\n");
+        replaceFile("/usr/bin/groupadd",  GroupAdd, Bind_Try, S_IXOTH|S_IXOTH|S_IXOTH);
+        replaceFile("/usr/sbin/groupadd", GroupAdd, Bind_Try, S_IXUSR|S_IXGRP|S_IXOTH);
+    }
 }
 
 internal inline void setupProcVersion()
@@ -1674,7 +1761,7 @@ internal inline void setupProcVersion()
 #if defined(PROC_VERSION)
     if(constZ(PROC_VERSION"").Size)
     {
-        replaceFile("/proc/version", constZ(PROC_VERSION"\n"));
+        replaceFile("/proc/version", constZ(PROC_VERSION"\n"), 0);
     }
 #endif
 }
@@ -1688,10 +1775,11 @@ internal void setupSeccomp()
         BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K,   __X32_SYSCALL_BIT, 0, 1),
         BPF_STMT(BPF_RET | BPF_K,             SECCOMP_RET_ALLOW),
 
-        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_chown,    4, 0),
-        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_fchown,   3, 0),
-        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_fchownat, 2, 0),
-        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_lchown,   1, 0),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_setgroups, 5, 0),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_chown,     4, 0),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_fchown,    3, 0),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_fchownat,  2, 0),
+        BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,   SYS_lchown,    1, 0),
 
         BPF_STMT(BPF_RET | BPF_K,             SECCOMP_RET_ALLOW),
         BPF_STMT(BPF_RET | BPF_K,             SECCOMP_RET_ERRNO),
