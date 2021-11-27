@@ -13,6 +13,8 @@
 #define BIND_HOME_PATH
 #define BIND_SHELL "/bin/bash"
 
+#define SHARE_PID 0
+
 #define SHARE_NETWORK 0
 #define DUMMY_LINK    1
 #define BIND_HOSTNAME host
@@ -25,14 +27,14 @@
 
 #define ENVS_TO_KEEP W("DISPLAY"), W("TERM")
 
-#define BIND_ENV_DEFAULT_PATH "/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin"
+#define BIND_ENV_DEFAULT_PATH "/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin"
 #define PROC_VERSION
 
 #define DROP_CAPS 0
 
 #define ARGS_OVERRIDE_STRING "-"
 
-#include "container.h"
+#include <nox/container_base.h>
 
 CONFIGURE_CONTAINER()
 {

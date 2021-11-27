@@ -9,8 +9,8 @@ gcc()
     command "${Cmd[@]}"
 }
 
-TestCompileFlags+=(
-    -O0 -ggdb3
+FakeSudoFlags+=(
+    -O3 -ggdb3 -static
 
     -fno-strict-overflow
     -fno-strict-aliasing
@@ -36,4 +36,4 @@ TestCompileFlags+=(
     -Wno-write-strings
 )
 
-gcc "${TestCompileFlags[@]}" "$(pwd)/container.c" -o container
+gcc "${FakeSudoFlags[@]}" "$(pwd)/fake_sudo.c" -o fake_sudo

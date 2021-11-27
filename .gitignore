@@ -1,3 +1,5 @@
+other/container/fake_sudo
+
 ### C ###
 # Object files
 *.o
