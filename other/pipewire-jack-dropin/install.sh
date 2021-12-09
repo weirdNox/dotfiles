@@ -10,4 +10,5 @@ mkdir -p build
 cd build
 ln -sf "$ScriptDir/PKGBUILD" .
 ln -sf "$ScriptDir/pipewire-jack.conf" .
-makepkg -si --clean --noconfirm
+makepkg --syncdeps --clean --force
+sudo pacman -U --noconfirm *.pkg.* || sudo pacman -U *.pkg.*
