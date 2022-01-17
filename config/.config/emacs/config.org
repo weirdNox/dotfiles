@@ -64,6 +64,9 @@ dependencies or long-term shared data.")
 (defconst nox-cache-dir (concat nox-local-dir "cache/")
   "Directory for volatile storage.
 Use this for files that change often, like cache files.")
+
+(defconst nox-repo-packages-dir (concat nox-emacs-dir "repo-packages/")
+  "Directory containing the packages stored in the dotfiles repository.")
 #+END_SRC
 
 Also create the directories if they don't exist.
@@ -455,6 +458,8 @@ called. The buffer to be switched to is current when these hooks run.")
   (load bootstrap-file nil 'nomessage))
 
 (setq! straight-vc-git-default-clone-depth 1)
+
+(add-to-list 'load-path nox-repo-packages-dir)
 #+END_SRC
 
 **** Setup use-package
@@ -1785,7 +1790,7 @@ fundamental-mode) for performance sake."
 
 *** SPICE
 #+begin_src emacs-lisp
-(use-package spice-mode :straight t
+(use-package spice-mode
   :mode (("\\.sp\\'"  . spice-mode)
          ("\\.cir\\'" . spice-mode)
          ("\\.cdl\\'" . spice-mode)
