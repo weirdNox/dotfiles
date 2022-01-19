@@ -7,7 +7,6 @@ Folders=(
     kernmodbak
     locale
     mime
-    pipewire-jack-dropin
     swappiness
     systemcleanup
     tty
