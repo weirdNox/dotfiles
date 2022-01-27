@@ -1763,9 +1763,16 @@ fundamental-mode) for performance sake."
   (defun +matlab-shell|sentinel (process event)
     (when (not (process-live-p process)) (+matlab-write-history)))
 
+  (defvar +matlab-shell--process nil)
+  (defun +matlab-shell|kill-emacs-hook ()
+    (when (and (processp +matlab-shell--process) (process-live-p +matlab-shell--process))
+      (with-current-buffer (process-buffer +matlab-shell--process) (+matlab-write-history))))
+
   (defun +matlab-shell*set-hooks ()
-    (add-hook! :local 'kill-buffer-hook (+matlab-write-history))
-    (set-process-sentinel (get-buffer-process (current-buffer)) #'+matlab-shell|sentinel))
+    (let ((process (get-buffer-process (current-buffer))))
+      (setq +matlab-shell--process process)
+      (add-hook! 'kill-emacs-hook #'+matlab-shell|kill-emacs-hook)
+      (set-process-sentinel process #'+matlab-shell|sentinel)))
 
   (advice-add 'matlab-shell :after #'+matlab-shell*set-hooks))
 #+END_SRC
@@ -3156,7 +3163,8 @@ When optional argument is non-nil, refresh cached heading."
                           'mouse-face 'mode-line-highlight))))
     (force-mode-line-update t))
 
-  (setq! org-clock-in-resume t
+  (setq! org-clock-ask-before-exiting nil
+         org-clock-in-resume t
          org-clock-out-remove-zero-time-clocks t
          org-clock-report-include-clocking-task t
          org-clock-persist t
