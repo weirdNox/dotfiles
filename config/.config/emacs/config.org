@@ -1686,6 +1686,12 @@ fundamental-mode) for performance sake."
                                      (substatement-open . 0))))))
 #+END_SRC
 
+*** Dockerfile & Containerfile
+#+begin_src emacs-lisp
+(use-package dockerfile-mode :straight t
+  :mode (("/Containerfile\\'" . dockerfile-mode)))
+#+end_src
+
 *** GLSL
 #+begin_src emacs-lisp
 (use-package glsl-mode :straight t)
