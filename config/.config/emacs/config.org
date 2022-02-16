@@ -1703,7 +1703,10 @@ fundamental-mode) for performance sake."
 *** Dockerfile & Containerfile
 #+begin_src emacs-lisp
 (use-package dockerfile-mode :straight t
-  :mode (("/Containerfile\\'" . dockerfile-mode)))
+  :mode (("/Containerfile\\'"   . dockerfile-mode)
+         ("\\.containerfile\\'" . dockerfile-mode))
+  :config
+  (setq! dockerfile-indent-offset 5))
 #+end_src
 
 *** GLSL
