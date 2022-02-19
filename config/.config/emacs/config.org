@@ -1023,7 +1023,8 @@ Disable fringes in the minibuffer window.
     "Face used to highlight projects.")
 
   (setq! consult-ripgrep-command
-         "rg --null --line-buffered --color=ansi --max-columns=1000 --no-heading --line-number --smart-case . -e ARG OPTS")
+         "rg --null --line-buffered --color=ansi --max-columns=1000 --no-heading --line-number --smart-case . -e ARG OPTS"
+         consult-project-root-function nil)
 
   ;; NOTE(nox): De-prioritize buffers shown in this frame
   (defun consult--buffer-sort-visibility (buffers)
