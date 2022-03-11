@@ -1042,6 +1042,7 @@ Disable fringes in the minibuffer window.
 *** Search
 #+begin_src emacs-lisp
 (use-package ctrlf :straight t
+  :demand
   :general
   (:keymaps 'ctrlf-mode-map
             [remap isearch-forward]         nil
