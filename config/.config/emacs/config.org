@@ -1673,8 +1673,7 @@ fundamental-mode) for performance sake."
                (string-match "\\.h\\(pp\\)?\\'" buffer-file-name))
       (let ((definition (concat (upcase (file-name-sans-extension (file-name-nondirectory buffer-file-name)))
                                 "_H")))
-        (insert (format "#if !defined(%s)\n#define %s\n\n\n\n#endif // %s" definition definition definition))
-        (forward-line -2))))
+        (insert "#pragma once\n"))))
   (add-hook! c-mode-common #'+cc|write-header-guard)
 
   (add-hook! (c-mode c++-mode) (setq-local comment-start "// "
