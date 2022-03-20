@@ -12,7 +12,7 @@ md5sums=('SKIP')
 build() {
     cd MoltenGamepad
     sed -i '/^MG_BUILT_INS/s/^/#/' Makefile
-    make -j8 || return 1
+    make -j8 moltengamepad plugins || return 1
 
     cd installation/singleuser
     ./configure.sh "$USER"

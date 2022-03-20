@@ -1774,7 +1774,7 @@ fundamental-mode) for performance sake."
   :config
   (setq! matlab-shell-command-switches '("-nodesktop" "-nosplash")
          matlab-shell-history-file "~/.matlab/%s/nox-history.m"
-         matlab-shell-input-ring-size 100000)
+         matlab-shell-input-ring-size 500000)
 
   (defun matlab-shell-first-prompt-fcn ())
 
