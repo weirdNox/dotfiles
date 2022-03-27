@@ -7,6 +7,6 @@ pacman -Syu --needed nvidia-prime
 sudo systemctl enable nvidia-persistenced
 
 echo -n "Configuring NVIDIA power management... "
-cp    nvidia-pm.conf  /etc/modprobe.d/
-cp 80-nvidia-pm.rules /etc/udev/rules.d/
+cp -f    nvidia-pm.conf  /etc/modprobe.d/
+cp -f 80-nvidia-pm.rules /etc/udev/rules.d/
 echo "done!"

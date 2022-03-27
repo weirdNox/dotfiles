@@ -15,6 +15,12 @@ then
     ./install_devmode.sh
 fi
 
+read -rp "Activate DRM kernel mode setting? [y/N] " InstallModeSetting
+if [[ "$InstallModeSetting" =~ ^[Yy]$ ]]
+then
+    ./install_modesetting.sh
+fi
+
 read -rp "Configure early module loading? [y/N] " InstallEarly
 if [[ "$InstallEarly" =~ ^[Yy]$ ]]
 then

@@ -14,7 +14,10 @@ else
     echo "done!"
 fi
 
-FilesToAdd=("/etc/udev/rules.d/80-nvidia-pm.rules")
+FilesToAdd=(
+    "/etc/modprobe.d/nvidia-drm-modesetting.conf"
+    "/etc/udev/rules.d/80-nvidia-pm.rules"
+)
 for File in "${FilesToAdd[@]}"
 do
     if [[ -f "$File" ]]
