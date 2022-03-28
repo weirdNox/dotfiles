@@ -4509,12 +4509,11 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 (use-package tramp
   :config
   (setq! tramp-default-method "ssh"
-         tramp-remote-path '(tramp-own-remote-path)
+         tramp-remote-path '(tramp-own-remote-path "/usr/bin" "/usr/sbin" "/bin" "/sbin")
          tramp-backup-directory-alist '(("." . "/tmp/tramp-backup-files/"))
          tramp-auto-save-directory   (concat nox-cache-dir "tramp-auto-save/")
          tramp-persistency-file-name (concat nox-cache-dir "tramp-persistency.el")
-         tramp-default-proxies-alist '(((regexp-quote (system-name)) nil nil)
-                                       (nil "\\`root\\'" "/ssh:%h:")))
+         tramp-default-proxies-alist '(((regexp-quote (system-name)) nil nil)))
 
   ;; NOTE(nox): Add version that forwards ssh-agent
   (let ((cdr (copy-tree (cdr (assoc "ssh" tramp-methods)))))
