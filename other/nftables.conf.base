@@ -1,31 +1,48 @@
-#!/sbin/nft -f
-flush ruleset
+#!/usr/sbin/nft -f
+#
+# Location: /etc/nftables.conf
+# After placing in the correct location, run `systemctl enable --now nftables`
+#
+# To open ports temporarily, run:
+#   nft add element inet firewall ports_tcp {22}
+#   nft add element inet firewall ports_udp {53}
+#
 
-table inet filter {
-    chain base_checks {
-        # Drop invalid connections and allow established/related connections
-		ct state invalid drop
-		ct state {established, related} accept
+table inet firewall
+delete table inet firewall
+table inet firewall {
+    set ports_tcp {
+        type inet_service; flags interval;
+        # elements = {}
+    }
+
+    set ports_udp {
+        type inet_service; flags interval;
+        # elements = {}
+    }
+
+    chain input_ipv4 {
+        icmp type echo-request limit rate 5/second accept
+    }
+
+    chain input_ipv6 {
+        icmpv6 type {nd-neighbor-solicit, nd-router-advert, nd-neighbor-advert} accept
+        icmpv6 type echo-request limit rate 5/second accept
     }
 
 	chain input {
-		type filter hook input priority 0; policy drop;
+        type filter hook input priority 0; policy drop;
 
-        jump base_checks
+        ct state {established, related} accept
+        ct state invalid drop
 
-        # Allow from loopback
-		iifname lo accept
-        iifname != lo ip daddr 127.0.0.1/8 drop
+		iif lo accept
+        ip daddr 127.0.0.1/8 drop
 
-        # New UDP traffic will jump to the UDP chain
-		ip protocol udp ct state new jump UDP
-        # New TCP traffic will jump to the TCP chain
-		tcp flags & (fin | syn | rst | ack) == syn ct state new jump TCP
+        ct state new tcp dport @ports_tcp accept
+        ct state new udp dport @ports_udp accept
 
-        # Everything else
-		ip protocol udp reject
-		ip protocol tcp reject with tcp reset
-        reject with icmpx type port-unreachable
+        meta protocol vmap {ip: jump input_ipv4, ip6: jump input_ipv6}
 	}
 
 	chain forward {
@@ -34,36 +51,5 @@ table inet filter {
 
 	chain output {
 		type filter hook output priority 0; policy accept;
-	}
-
-    # ---------------------------------------------------------------------------------
-    # In order to add/delete elements to/from these sets while running, execute:
-    # sudo nft add element inet filter ???_accepted {...}
-    # sudo nft delete element inet filter ???_accepted {...}
-
-    # TCP chain
-    set TCP_accepted {
-        type inet_service; flags interval;
-        # elements = {
-        #     ssh,        # SSH
-        #     22000,      # Syncthing
-        #     1714-1764   # KDE Connect
-        # }
-    }
-	chain TCP {
-        tcp dport @TCP_accepted accept
-	}
-
-    # UDP chain
-    set UDP_accepted {
-        type inet_service; flags interval;
-        # elements = {
-        #     ssh,        # SSH
-        #     21027,      # Syncthing
-        #     1714-1764   # KDE Connect
-        # }
-    }
-	chain UDP {
-        udp dport @UDP_accepted accept
 	}
 }
