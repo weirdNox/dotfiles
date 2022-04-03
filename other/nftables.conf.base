@@ -22,25 +22,26 @@ table inet firewall {
     }
 
     chain input_ipv4 {
-        icmp type echo-request limit rate 5/second accept
+        icmp type echo-request accept
     }
 
     chain input_ipv6 {
-        icmpv6 type {nd-neighbor-solicit, nd-router-advert, nd-neighbor-advert} accept
-        icmpv6 type echo-request limit rate 5/second accept
+        icmpv6 type {nd-neighbor-advert, nd-neighbor-solicit, nd-router-advert} accept
+        icmpv6 type echo-request accept
     }
 
 	chain input {
         type filter hook input priority 0; policy drop;
 
-        ct state {established, related} accept
+		iif lo accept
         ct state invalid drop
 
-		iif lo accept
-        ip daddr 127.0.0.1/8 drop
+        icmp   type echo-request limit rate over 2/second drop
+        icmpv6 type echo-request limit rate over 2/second drop
 
-        ct state new tcp dport @ports_tcp accept
-        ct state new udp dport @ports_udp accept
+        ct state {established, related} accept
+        tcp dport @ports_tcp accept
+        udp dport @ports_udp accept
 
         meta protocol vmap {ip: jump input_ipv4, ip6: jump input_ipv6}
 	}
