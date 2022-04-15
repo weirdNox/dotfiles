@@ -3846,40 +3846,33 @@ Return the result as a string."
 **** Error matching
 #+begin_src emacs-lisp
 ;; ====================================================================================================
-;; NOTE(nox): C/C++
+;; NOTE(nox): C/C++ (and Go)
 ;;
-(rx-let ((common (: (| (group-n 6 (| "warning"))
-                       (group-n 7 (| "info" "information" "informational" "instantiated from" "required from" "note"))
-                       (| (: (? "fatal ") "error") "sorry,"))
-                    (| " " ":"))))
-  ;; (add-to-list 'compilation-error-regexp-alist 'cc-no-file)
-  ;; (add-to-list 'compilation-error-regexp-alist-alist `(cc-no-file ,(rx common) nil))
-
-  (add-to-list 'compilation-error-regexp-alist 'cc)
-  (add-to-list 'compilation-error-regexp-alist-alist
-               `(cc
-                 ,(rx
-                   bol
-                   (group-n 1 (*? nonl))
-                   (: ":" (* " ") (group-n 2 (+ num)))
-                   (? ":" (* " ") (group-n 4 (+ num)))
-                   ":" (* " ")
-                   common)
-                 1 (2 . 3) (4 . 5) (6 . 7))))
+(add-to-list 'compilation-error-regexp-alist 'cc)
+(add-to-list 'compilation-error-regexp-alist-alist
+             `(cc ,(rx
+                    bol
+                    (group-n 1 (*? nonl))
+                    (: ":" (* " ") (group-n 2 (+ num)))
+                    (? ":" (* " ") (group-n 4 (+ num)))
+                    ": " (* " ")
+                    (? (| (group-n 6 (| "warning"))
+                          (group-n 7 (| "info" "information" "informational" "instantiated from"
+                                        "required from" "note")))))
+                  1 (2 . 3) (4 . 5) (6 . 7)))
 
 ;; ====================================================================================================
 ;; NOTE(nox): NVCC
 ;;
-(rx-let ((common (: (| (group-n 6 (| "warning")) "error") (* nonl) ":")))
-  (add-to-list 'compilation-error-regexp-alist 'nvcc)
-  (add-to-list 'compilation-error-regexp-alist-alist
-               `(nvcc
-                 ,(rx
-                   bol
-                   (group-n 1 (*? nonl))
-                   (: "(" (group-n 2 (+ num)) ")")
-                   ":" (* " ") common)
-                 1 (2 . 3) (4 . 5) (6 . 7))))
+(add-to-list 'compilation-error-regexp-alist 'nvcc)
+(add-to-list 'compilation-error-regexp-alist-alist
+             `(nvcc
+               ,(rx
+                 bol
+                 (group-n 1 (*? nonl))
+                 (: "(" (group-n 2 (+ num)) ")")
+                 ":" (* " ") (: (| (group-n 6 (| "warning")) "error") (* nonl) ":"))
+               1 (2 . 3) (4 . 5) (6 . 7)))
 
 ;; ====================================================================================================
 ;; NOTE(nox): Cadence Spectre
