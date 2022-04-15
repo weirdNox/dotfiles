@@ -1719,7 +1719,7 @@ fundamental-mode) for performance sake."
 #+BEGIN_SRC emacs-lisp
 (use-package go-mode :straight t
   :config
-  (setq! gofmt-command (substitute-in-file-name "$GOPATH/bin/goimports"))
+  (setq! gofmt-command "goimports")
   (add-hook! go-mode (add-hook! :local 'before-save-hook 'gofmt-before-save)))
 #+END_SRC
 
