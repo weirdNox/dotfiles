@@ -4,7 +4,7 @@
 # History settings
 HISTCONTROL=ignoreboth # Don't insert commands that start with a space or that are duplicates in the history
 HISTSIZE=-1            # Unlimited history during a single session
-HISTFILESIZE=500000    # Number of commands to store in history file
+HISTFILESIZE=1000000   # Number of commands to store in history file
 
 # ------------------------------------------------------------------------------------------
 # Aliases

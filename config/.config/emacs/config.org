@@ -1059,6 +1059,8 @@ Disable fringes in the minibuffer window.
             "C-r"   #'ctrlf-backward-default
             "C-M-s" #'ctrlf-forward-alternate
             "C-M-r" #'ctrlf-backward-alternate)
+  (:keymaps 'ctrlf-minibuffer-mode-map
+            [remap abort-minibuffers] #'ctrlf-cancel) ; NOTE(nox): Fix restoring original point when cancelling
   :init
   (ctrlf-mode 1))
 #+end_src
@@ -1774,7 +1776,7 @@ fundamental-mode) for performance sake."
   :config
   (setq! matlab-shell-command-switches '("-nodesktop" "-nosplash")
          matlab-shell-history-file "~/.matlab/%s/nox-history.m"
-         matlab-shell-input-ring-size 500000)
+         matlab-shell-input-ring-size 1000000)
 
   (defun matlab-shell-first-prompt-fcn ())
 
