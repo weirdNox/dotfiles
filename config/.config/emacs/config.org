@@ -624,6 +624,14 @@ symbols.
        bidi-inhibit-bpa         t)
 #+end_src
 
+*** Save minibuffer history persistently
+#+begin_src emacs-lisp
+(use-package savehist
+  :init
+  (setq! savehist-file (concat nox-cache-dir "savehist.el"))
+  (savehist-mode))
+#+end_src
+
 *** Comint mode fixes
 #+begin_src emacs-lisp
 (use-package comint
