@@ -1690,7 +1690,8 @@ fundamental-mode) for performance sake."
                  (c-offsets-alist . ((arglist-close . c-lineup-arglist)
                                      (case-label . +)
                                      (statement-case-intro . (+cc-style-stmt-case-intro +))
-                                     (substatement-open . 0))))))
+                                     (substatement-open . 0)
+                                     (innamespace . [0]))))))
 #+END_SRC
 
 *** Dockerfile & Containerfile
