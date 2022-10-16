@@ -554,8 +554,10 @@ symbols.
  ffap-machine-p-known 'reject
  idle-update-delay 2
  inhibit-compacting-font-caches t
- minibuffer-prompt-properties '(read-only t point-entered minibuffer-avoid-prompt face minibuffer-prompt)
+ minibuffer-prompt-properties '(read-only t cursor-intangible t face minibuffer-prompt)
  auth-source-save-behavior nil)
+
+(add-hook! 'minibuffer-setup-hook #'cursor-intangible-mode)
 #+END_SRC
 
 *** UTF-8 as default
@@ -959,27 +961,30 @@ Disable fringes in the minibuffer window.
 #+END_SRC
 
 ** Minibuffer completion
-*** Selectrum
+*** Vertico
 #+begin_src emacs-lisp
-(use-package selectrum :straight t
-  :demand
-  :config
-  (setq! suggest-key-bindings nil
-         selectrum-max-window-height nil)
-  (selectrum-mode 1))
-#+end_src
+(use-package vertico :straight t
+  :init (vertico-mode 1))
 
-*** Filtering and frecency-based sorting
-#+begin_src emacs-lisp
-(use-package prescient
+(use-package orderless :straight t
+  :after vertico :demand
   :config
-  (prescient-persist-mode 1)
-  (setq! prescient-history-length 1000))
+  (defun +orderless--is-partial-tramp (path)
+    (string-match-p "\\`/[^/|:]+:[^:]*\\(?:|[^/|:]+:[^:]*\\)*$" (substitute-in-file-name path)))
 
-(use-package selectrum-prescient :straight t
-  :after selectrum :demand
-  :config
-  (selectrum-prescient-mode 1))
+  (defun basic-remote-try-completion (string table pred point)
+    (and (+orderless--is-partial-tramp string)
+         (completion-basic-try-completion string table pred point)))
+
+  (defun basic-remote-all-completions (string table pred point)
+    (and (+orderless--is-partial-tramp string)
+         (completion-basic-all-completions string table pred point)))
+
+  (add-to-list 'completion-styles-alist
+               '(basic-partial-remote basic-remote-try-completion basic-remote-all-completions nil))
+
+  (setq! completion-styles '(orderless basic)
+         completion-category-overrides '((file (styles basic-partial-remote)))))
 #+end_src
 
 *** Consult
