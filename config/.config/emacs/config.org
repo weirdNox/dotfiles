@@ -944,6 +944,10 @@ Disable fringes in the minibuffer window.
  '((line-number-mode (column-number-mode (column-number-indicator-zero-based " %l:%c" " %l:%C") " %l")
                      (column-number-mode (column-number-indicator-zero-based " :%c" " :%C")))
    (" " mode-line-percent-position " ")))
+
+(use-package anzu :straight t
+  :after isearch :demand
+  :init (global-anzu-mode 1))
 #+END_SRC
 
 *** Appearance setup
@@ -1017,7 +1021,6 @@ Disable fringes in the minibuffer window.
   ("M-s m" #'consult-multi-occur)
   ("M-s k" #'consult-keep-lines)
   ("M-s u" #'consult-focus-lines)
-  ("M-s e" #'consult-isearch)
 
   (nox-leader "k" #'consult-kmacro)
 
@@ -1050,32 +1053,6 @@ Disable fringes in the minibuffer window.
             (push it hidden)
             nil)))
       (nconc (nreverse hidden) buffers (list (current-buffer))))))
-#+end_src
-
-*** Search
-#+begin_src emacs-lisp
-(use-package ctrlf :straight t
-  :demand
-  :general
-  (:keymaps 'ctrlf-mode-map
-            [remap isearch-forward]         nil
-            [remap isearch-backward]        nil
-            [remap isearch-forward-regexp]  nil
-            [remap isearch-backward-regexp] nil
-
-            "C-S-s"   #'isearch-forward
-            "C-S-r"   #'isearch-backward
-            "C-M-S-s" #'isearch-forward-regexp
-            "C-M-S-r" #'isearch-backward-regexp
-
-            "C-s"   #'ctrlf-forward-default
-            "C-r"   #'ctrlf-backward-default
-            "C-M-s" #'ctrlf-forward-alternate
-            "C-M-r" #'ctrlf-backward-alternate)
-  (:keymaps 'ctrlf-minibuffer-mode-map
-            [remap abort-minibuffers] #'ctrlf-cancel) ; NOTE(nox): Fix restoring original point when cancelling
-  :init
-  (ctrlf-mode 1))
 #+end_src
 
 *** Actions
@@ -4262,8 +4239,6 @@ Return the result as a string."
   :config
   (unless (or noninteractive (eq this-command 'pdf-tools-install))
     (pdf-tools-install))
-
-  (add-hook! 'pdf-isearch-minor-mode-hook (ctrlf-local-mode -1))
 
   (defun +pdf-view-scroll-page-left ()
     (interactive)
