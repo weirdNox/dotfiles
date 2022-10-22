@@ -1660,14 +1660,6 @@ fundamental-mode) for performance sake."
          ("\\.cu\\'"  . c++-mode))
 
   :config
-  (defun +cc|write-header-guard ()
-    (when (and buffer-file-name (not (file-exists-p buffer-file-name))
-               (string-match "\\.h\\(pp\\)?\\'" buffer-file-name))
-      (let ((definition (concat (upcase (file-name-sans-extension (file-name-nondirectory buffer-file-name)))
-                                "_H")))
-        (insert "#pragma once\n"))))
-  (add-hook! c-mode-common #'+cc|write-header-guard)
-
   (add-hook! (c-mode c++-mode) (setq-local comment-start "// "
                                            comment-end   ""))
 
