@@ -1,7 +1,9 @@
-#!/usr/bin/env sh
+#
 # This file is loaded at the beginning of the X user session.
+#
+
 killall x11_input_daemon >/dev/null 2>&1
-x11_input_daemon ~/.local/lib/x11_input_setup.sh
+x11_input_daemon "$HOME/.local/lib/x11_input_setup.sh"
 
 xrdb -merge "$HOME/.Xresources"
 
