@@ -996,33 +996,53 @@ Disable fringes in the minibuffer window.
 (use-package consult :straight t
   :demand
   :general
-  ("C-x M-:" #'consult-complex-command)
-  ("C-x b"   #'consult-buffer)
-  ("C-x 4 b" #'consult-buffer-other-window)
-  ("C-x 5 b" #'consult-buffer-other-frame)
+  (nox-leader "h" #'consult-history)
+  (nox-leader "m" #'consult-mode-command)
+  (nox-leader "k" #'consult-kmacro)
 
-  ("M-y" #'consult-yank-pop)
+  ([remap repeat-complex-command]        #'consult-complex-command)
+  ([remap switch-to-buffer]              #'consult-buffer)
+  ([remap switch-to-buffer-other-window] #'consult-buffer-other-window)
+  ([remap switch-to-buffer-other-frame]  #'consult-buffer-other-frame)
+  ([remap bookmark-jump]                 #'consult-bookmark)
+  ([remap project-switch-to-buffer]      #'consult-project-buffer)
 
-  ("M-g I"   #'consult-project-imenu)
-  ("M-g M-g" #'consult-goto-line)
+  (  "M-#" #'consult-register-load)
+  (  "M-'" #'consult-register-store)
+  ("C-M-#" #'consult-register)
+
+  ([remap yank-pop]        #'consult-yank-pop)
+  ([remap apropos-command] #'consult-apropos)
+
   ("M-g e"   #'consult-compile-error)
   ("M-g g"   #'consult-goto-line)
-  ("M-g i"   #'consult-imenu)
-  ("M-g k"   #'consult-global-mark)
-  ("M-g m"   #'consult-mark)
+  ("M-g M-g" #'consult-goto-line)
   ("M-g o"   #'consult-outline)
+  ("M-g m"   #'consult-mark)
+  ("M-g k"   #'consult-global-mark)
+  ("M-g i"   #'consult-imenu)
+  ("M-g I"   #'consult-imenu-multi)
 
-  ("M-s f" #'consult-find)
-  ("M-s L" #'consult-locate)
+  ("M-s d" #'consult-find)
+  ("M-s D" #'consult-locate)
   ("M-s g" #'consult-grep)
   ("M-s G" #'consult-git-grep)
   ("M-s r" #'consult-ripgrep)
   ("M-s l" #'consult-line)
+  ("M-s L" #'consult-line-multi)
   ("M-s m" #'consult-multi-occur)
   ("M-s k" #'consult-keep-lines)
   ("M-s u" #'consult-focus-lines)
 
-  (nox-leader "k" #'consult-kmacro)
+  ("M-s e" #'consult-isearch-history)
+  (:keymaps 'isearch-mode-map
+            [remap isearch-edit-string] #'consult-isearch-history
+            "M-s l"                     #'consult-line
+            "M-s L"                     #'consult-line-multi)
+
+  (:keymaps 'minibuffer-local-map
+            [remap     next-matching-history-element] #'consult-history
+            [remap previous-matching-history-element] #'consult-history)
 
   :init
   (setq! register-preview-delay 0
