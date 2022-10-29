@@ -1762,6 +1762,11 @@ fundamental-mode) for performance sake."
   (make-directory TeX-auto-local t))
 #+END_SRC
 
+*** Markdown
+#+begin_src emacs-lisp
+(use-package markdown-mode :straight t)
+#+end_src
+
 *** MATLAB & Octave
 #+BEGIN_SRC emacs-lisp
 (use-package octave
@@ -3823,9 +3828,12 @@ Return the result as a string."
 #+begin_src emacs-lisp
 (use-package calc
   :config
-  (setq! calc-group-digits t
-         calc-group-char " "
-         calc-float-format '(eng 15)))
+  (setq! calc-float-format '(eng 0)))
+#+end_src
+
+*** CMake
+#+begin_src emacs-lisp
+(use-package cmake-mode :straight t)
 #+end_src
 
 *** Compilation
