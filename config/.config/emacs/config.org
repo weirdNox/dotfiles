@@ -964,8 +964,244 @@ Disable fringes in the minibuffer window.
   (add-transient-hook! 'emacs-startup-hook (nox-setup-appearance (selected-frame))))
 #+END_SRC
 
-** Minibuffer completion
-*** Vertico
+** Editor
+*** Settings
+#+BEGIN_SRC emacs-lisp
+(setq! vc-follow-symlinks t
+       save-interprogram-paste-before-kill t
+       enable-recursive-minibuffers t
+       mouse-yank-at-point t
+       prettify-symbols-unprettify-at-point 'right-edge)
+
+#+END_SRC
+
+**** Whitespace, indentation & formatting
+#+BEGIN_SRC emacs-lisp
+(setq! tab-width 4
+       indent-tabs-mode nil
+       require-final-newline t
+       sentence-end-double-space nil
+       tab-always-indent t
+       tabify-regexp "^\t* [ \t]+"
+       fill-column 105
+       comment-column 0
+       word-wrap t
+       truncate-lines t
+       truncate-partial-width-windows 70)
+
+(add-hook! 'before-save-hook #'delete-trailing-whitespace)
+(add-hook! 'after-save-hook #'executable-make-buffer-file-executable-if-script-p)
+#+END_SRC
+
+**** Scrolling
+#+BEGIN_SRC emacs-lisp
+(setq! scroll-margin 1
+       hscroll-margin 2
+       hscroll-step 1
+       scroll-conservatively 101
+       scroll-preserve-screen-position t
+       mouse-wheel-scroll-amount '(1)
+       mouse-wheel-progressive-speed nil
+       recenter-positions '(top middle bottom))
+#+END_SRC
+
+**** Limits
+#+BEGIN_SRC emacs-lisp
+(setq! kill-ring-max 5000
+       undo-limit (* 20 1024 1024)
+       undo-strong-limit (* 40 1024 1024)
+       undo-outer-limit (* 100 1024 1024)
+       mark-ring-max 5000
+       global-mark-ring-max 5000)
+#+END_SRC
+
+**** Automatic revert
+#+BEGIN_SRC emacs-lisp
+(use-package autorevert
+  :after-call after-find-file
+  :config
+  (setq! auto-revert-verbose nil)
+  (global-auto-revert-mode))
+#+END_SRC
+
+**** Recent files
+#+BEGIN_SRC emacs-lisp
+(use-package recentf
+  :demand
+  :config
+  (setq recentf-save-file (concat nox-cache-dir "recentf")
+        recentf-auto-cleanup 120
+        recentf-max-menu-items 0
+        recentf-max-saved-items 300
+        recentf-filename-handlers '(file-truename)
+        recentf-exclude
+        (list #'file-remote-p "\\.\\(?:gz\\|gif\\|svg\\|png\\|jpe?g\\)$"
+              "^/tmp/" "^/ssh:" "\\.?ido\\.last$" "\\.revive$" "/TAGS$"
+              "^/var/folders/.+$"
+              (lambda (file) (file-in-directory-p file nox-local-dir))))
+  (advice-add 'recentf-cleanup :around 'nox*shut-up)
+
+  (quiet! (recentf-mode)))
+#+END_SRC
+
+**** Bookmarks
+#+BEGIN_SRC emacs-lisp
+(use-package bookmark
+  :config
+  (setq! bookmark-default-file (concat nox-etc-dir "bookmarks")
+         bookmark-save-flag t))
+#+END_SRC
+
+*** Navigation
+**** Avy
+#+BEGIN_SRC emacs-lisp
+(use-package avy :straight t
+  :general
+  ("C-."   #'avy-goto-char-timer
+   "M-g l" #'avy-goto-line
+   "M-g w" #'avy-goto-word-1)
+  :config
+  (setq! avy-all-windows nil
+         avy-background t
+         avy-timeout-seconds .3))
+#+END_SRC
+
+**** Dumb jump
+#+BEGIN_SRC emacs-lisp
+(use-package dumb-jump :straight t
+  :commands dumb-jump-result-follow
+  :general
+  ("M-g j" #'nox@dumb-jump/body)
+  :config
+  (defhydra nox@dumb-jump (:color teal :columns 3)
+    "Dumb Jump"
+    ("j" dumb-jump-go "Go")
+    ("o" dumb-jump-go-other-window "Other window")
+    ("e" dumb-jump-go-prefer-external "Go external")
+    ("x" dumb-jump-go-prefer-external-other-window "Go external other window")
+    ("i" dumb-jump-go-prompt "Prompt")
+    ("l" dumb-jump-quick-look "Quick look")
+    ("b" dumb-jump-back "Back" :exit nil))
+
+  (setq! dumb-jump-selector 'completing-read
+         dumb-jump-prefer-searcher 'rg
+         dumb-jump-default-project nox-emacs-dir
+         dumb-jump-aggressive nil
+         dumb-jump-use-visible-window nil))
+#+END_SRC
+
+**** Imenu
+#+BEGIN_SRC emacs-lisp
+(use-package imenu
+  :general (nox-leader "i" #'+imenu)
+  :config
+  (setq! imenu-auto-rescan t
+         imenu-auto-rescan-maxout 500000)
+#+END_SRC
+
+***** Imenu across several buffers
+#+BEGIN_SRC emacs-lisp
+(defconst +imenu-friendly-modes '((c-mode c++-mode))
+  "List of lists which are groups of friend modes.")
+
+(defvar-local +imenu-cache nil
+  "Vector [TICK CACHED-VALUE].")
+
+(defun +imenu-buffer-filter (current other)
+  (let ((current-mode (buffer-local-value 'major-mode current))
+        (other-mode   (buffer-local-value 'major-mode other)))
+    (or (eq current-mode other-mode)
+        (cl-some (lambda (friend-mode-list) (and (memq current-mode friend-mode-list)
+                                                 (memq other-mode   friend-mode-list)))
+                 +imenu-friendly-modes))))
+
+(defun +imenu-get-candidates-from (alist &optional prefix)
+  (cl-mapcan
+   (lambda (element)
+     (if (imenu--subalist-p element)
+         (+imenu-get-candidates-from (cdr element) (concat prefix (if prefix " | ") (car element)))
+       (let ((key (concat (and prefix (propertize (concat prefix  " | ") 'face 'compilation-info))
+                          (car element))))
+         (list (cons (replace-regexp-in-string "\n" " " key)
+                     (cond ((integerp (cdr element)) (copy-marker (cdr element)))
+                           ((overlayp (cdr element)) (copy-marker (overlay-start (cdr element))))
+                           (t (cdr element))))))))
+   alist))
+
+(defun +imenu-buffer-candidates ()
+  (setq imenu--index-alist nil)
+  (imenu--make-index-alist t)
+  (+imenu-get-candidates-from imenu--index-alist (buffer-name)))
+
+(defun +imenu-candidates ()
+  (let* (projectile-require-project-root
+         (current-buffer (current-buffer))
+         (buffers (cl-remove-if-not (lambda (buffer) (+imenu-buffer-filter current-buffer buffer))
+                                    (+projectile-project-buffers))))
+    (mapcan (lambda (buffer)
+              (with-current-buffer buffer
+                (let ((tick (buffer-modified-tick buffer)))
+                  (unless (and +imenu-cache (= (aref +imenu-cache 0) tick))
+                    (setq +imenu-cache (vector tick (+imenu-buffer-candidates))))
+                  (copy-sequence (aref +imenu-cache 1)))))
+            buffers)))
+
+(defun +imenu-goto (_name marker &optional _rest)
+  (cl-assert (markerp marker))
+  (let ((buffer   (marker-buffer marker))
+        (position (marker-position marker)))
+    (switch-to-buffer buffer)
+    (when (or (< position (point-min)) (> position (point-max))) (widen))
+    (goto-char position)))
+
+(defun +imenu ()
+  "Jump to a buffer position indexed by imenu."
+  (interactive)
+  (let* ((items (+imenu-candidates))
+         (imenu-default-goto-function #'+imenu-goto)
+         (candidate (completing-read "Jump to... " items nil t nil nil (thing-at-point 'symbol)))
+         (target (assoc-string candidate items)))
+    (imenu target)
+    (recenter)))
+#+END_SRC
+
+***** End
+#+BEGIN_SRC emacs-lisp
+) ;; (use-package imenu)
+#+END_SRC
+
+**** Line movement functions
+#+BEGIN_SRC emacs-lisp
+(defun nox/previous-blank-line ()
+  "Move point to the previous blank line"
+  (interactive)
+  (move-end-of-line nil)
+  (if (search-backward-regexp "^[\t ]*\n[\t ]*[^\t\n ]+" nil "NOERROR") nil
+    (goto-char (point-min))))
+
+(defun nox/next-blank-line ()
+  "Move point to the next blank line"
+  (interactive)
+  (move-beginning-of-line nil)
+  (if (not (search-forward-regexp "[^\t\n ]\n[\t ]*$" nil "NOERROR"))
+      (goto-char (point-max))))
+
+(defun nox/open-line-above ()
+  "Insert an empty line above the current line.
+Position the cursor at its beginning, according to the current mode."
+  (interactive)
+  (move-end-of-line 0)
+  (newline-and-indent))
+
+(defun nox/open-line-below ()
+  "Insert an empty line below the current line.
+Position the cursor at its beginning, according to the current mode."
+  (interactive)
+  (move-end-of-line nil)
+  (newline-and-indent))
+#+END_SRC
+
+*** Minibuffer completion
 #+begin_src emacs-lisp
 (use-package vertico :straight t
   :init (vertico-mode 1))
@@ -989,10 +1225,7 @@ Disable fringes in the minibuffer window.
 
   (setq! completion-styles '(orderless basic)
          completion-category-overrides '((file (styles basic-partial-remote)))))
-#+end_src
 
-*** Consult
-#+begin_src emacs-lisp
 (use-package consult :straight t
   :demand
   :general
@@ -1073,10 +1306,7 @@ Disable fringes in the minibuffer window.
             (push it hidden)
             nil)))
       (nconc (nreverse hidden) buffers (list (current-buffer))))))
-#+end_src
 
-*** Actions
-#+begin_src emacs-lisp
 (use-package embark :straight t
   :demand
   :general
@@ -1118,7 +1348,40 @@ Disable fringes in the minibuffer window.
   (marginalia-mode))
 #+end_src
 
-** Project management
+*** Completion
+#+begin_src emacs-lisp
+(use-package company :straight t)
+(use-package company-dabbrev
+  :config
+  (setq! company-dabbrev-downcase nil
+         company-dabbrev-ignore-case nil
+         company-dabbrev-ignore-invisible t
+         company-dabbrev-code-other-buffers t)
+
+  (defun +company-dabbrev-buffer-check (buffer)
+    (with-current-buffer buffer
+      (derived-mode-p 'pdf-view-mode 'doc-view-mode)))
+  (setq! company-dabbrev-ignore-buffers #'+company-dabbrev-buffer-check))
+
+(use-package corfu :straight t
+  :init
+  (global-corfu-mode)
+
+  (add-hook! 'minibuffer-setup-hook
+    (when (where-is-internal #'completion-at-point (list (current-local-map)))
+      (corfu-mode 1))))
+
+(use-package cape :straight t
+  :general ("<tab>" #'completion-at-point)
+  :init
+  (setq! +cape-dabbrev      (cape-company-to-capf #'company-dabbrev))
+  (setq! +cape-dabbrev-code (cape-company-to-capf #'company-dabbrev-code))
+
+  (setq! completion-at-point-functions `(cape-file ,+cape-dabbrev))
+  (setq-hook! prog-mode completion-at-point-functions `(cape-file ,+cape-dabbrev-code)))
+#+end_src
+
+*** Project management
 #+BEGIN_SRC emacs-lisp
 (use-package projectile :straight t
   :demand
@@ -1283,286 +1546,6 @@ Disable fringes in the minibuffer window.
   (add-to-list 'embark-keymap-alist '(project . embark-project-map)))
 #+END_SRC
 
-** Editor
-*** Settings
-#+BEGIN_SRC emacs-lisp
-(setq! vc-follow-symlinks t
-       save-interprogram-paste-before-kill t
-       enable-recursive-minibuffers t
-       mouse-yank-at-point t
-       prettify-symbols-unprettify-at-point 'right-edge)
-
-#+END_SRC
-
-**** Whitespace, indentation & formatting
-#+BEGIN_SRC emacs-lisp
-(setq! tab-width 4
-       indent-tabs-mode nil
-       require-final-newline t
-       sentence-end-double-space nil
-       tab-always-indent t
-       tabify-regexp "^\t* [ \t]+"
-       fill-column 105
-       comment-column 0
-       word-wrap t
-       truncate-lines t
-       truncate-partial-width-windows 70)
-
-(add-hook! 'before-save-hook #'delete-trailing-whitespace)
-(add-hook! 'after-save-hook #'executable-make-buffer-file-executable-if-script-p)
-#+END_SRC
-
-**** Scrolling
-#+BEGIN_SRC emacs-lisp
-(setq! scroll-margin 1
-       hscroll-margin 2
-       hscroll-step 1
-       scroll-conservatively 101
-       scroll-preserve-screen-position t
-       mouse-wheel-scroll-amount '(1)
-       mouse-wheel-progressive-speed nil
-       recenter-positions '(top middle bottom))
-#+END_SRC
-
-**** Limits
-#+BEGIN_SRC emacs-lisp
-(setq! kill-ring-max 5000
-       undo-limit (* 20 1024 1024)
-       undo-strong-limit (* 40 1024 1024)
-       undo-outer-limit (* 100 1024 1024)
-       mark-ring-max 5000
-       global-mark-ring-max 5000)
-#+END_SRC
-
-**** Automatic revert
-#+BEGIN_SRC emacs-lisp
-(use-package autorevert
-  :after-call after-find-file
-  :config
-  (setq! auto-revert-verbose nil)
-  (global-auto-revert-mode))
-#+END_SRC
-
-**** Recent files
-#+BEGIN_SRC emacs-lisp
-(use-package recentf
-  :demand
-  :config
-  (setq recentf-save-file (concat nox-cache-dir "recentf")
-        recentf-auto-cleanup 120
-        recentf-max-menu-items 0
-        recentf-max-saved-items 300
-        recentf-filename-handlers '(file-truename)
-        recentf-exclude
-        (list #'file-remote-p "\\.\\(?:gz\\|gif\\|svg\\|png\\|jpe?g\\)$"
-              "^/tmp/" "^/ssh:" "\\.?ido\\.last$" "\\.revive$" "/TAGS$"
-              "^/var/folders/.+$"
-              (lambda (file) (file-in-directory-p file nox-local-dir))))
-  (advice-add 'recentf-cleanup :around 'nox*shut-up)
-
-  (quiet! (recentf-mode)))
-#+END_SRC
-
-**** Bookmarks
-#+BEGIN_SRC emacs-lisp
-(use-package bookmark
-  :config
-  (setq! bookmark-default-file (concat nox-etc-dir "bookmarks")
-         bookmark-save-flag t))
-#+END_SRC
-
-*** Company
-#+BEGIN_SRC emacs-lisp
-(use-package company :straight t
-  :after-call (pre-command-hook after-find-file dired-before-readin-hook)
-  :general
-  (:keymaps 'company-mode-map
-   "<tab>" 'company-complete)
-  (:keymaps 'company-active-map
-   "<tab>" 'company-complete-common-or-cycle)
-  (:keymaps 'company-template-nav-map
-   "<tab>" 'company-complete-common
-   "<C-return>" 'company-template-forward-field)
-
-  :config
-  (setq! company-idle-delay nil
-         company-tooltip-limit 15
-         company-tooltip-align-annotations t
-         company-require-match 'never
-         company-global-modes '(not comint-mode erc-mode message-mode help-mode gud-mode)
-         company-frontends '(company-pseudo-tooltip-frontend company-echo-metadata-frontend)
-         company-transformers '(company-sort-by-occurrence))
-
-  (setq-hook! prog-mode
-    company-backends '((company-capf company-dabbrev-code :with company-yasnippet)))
-
-  (setq-hook! text-mode
-    company-backends '((company-capf company-dabbrev :with company-yasnippet)))
-
-  (global-company-mode))
-
-(use-package company-dabbrev
-  :config
-  (setq! company-dabbrev-downcase nil
-         company-dabbrev-ignore-case nil
-         company-dabbrev-ignore-invisible t
-         company-dabbrev-code-other-buffers t)
-
-  (defun nox-company-dabbrev-buffer-check (buffer)
-    (with-current-buffer buffer (derived-mode-p 'pdf-view-mode
-                                                'doc-view-mode)))
-  (setq! company-dabbrev-ignore-buffers #'nox-company-dabbrev-buffer-check))
-#+END_SRC
-
-*** Navigation
-**** Avy
-#+BEGIN_SRC emacs-lisp
-(use-package avy :straight t
-  :general
-  ("C-."   #'avy-goto-char-timer
-   "M-g l" #'avy-goto-line
-   "M-g w" #'avy-goto-word-1)
-  :config
-  (setq! avy-all-windows nil
-         avy-background t
-         avy-timeout-seconds .3))
-#+END_SRC
-
-**** Dumb jump
-#+BEGIN_SRC emacs-lisp
-(use-package dumb-jump :straight t
-  :commands dumb-jump-result-follow
-  :general
-  ("M-g j" #'nox@dumb-jump/body)
-  :config
-  (defhydra nox@dumb-jump (:color teal :columns 3)
-    "Dumb Jump"
-    ("j" dumb-jump-go "Go")
-    ("o" dumb-jump-go-other-window "Other window")
-    ("e" dumb-jump-go-prefer-external "Go external")
-    ("x" dumb-jump-go-prefer-external-other-window "Go external other window")
-    ("i" dumb-jump-go-prompt "Prompt")
-    ("l" dumb-jump-quick-look "Quick look")
-    ("b" dumb-jump-back "Back" :exit nil))
-
-  (setq! dumb-jump-selector 'completing-read
-         dumb-jump-prefer-searcher 'rg
-         dumb-jump-default-project nox-emacs-dir
-         dumb-jump-aggressive nil
-         dumb-jump-use-visible-window nil))
-#+END_SRC
-
-**** Imenu
-#+BEGIN_SRC emacs-lisp
-(use-package imenu
-  :general (nox-leader "i" #'+imenu)
-  :config
-  (setq! imenu-auto-rescan t
-         imenu-auto-rescan-maxout 500000)
-#+END_SRC
-
-***** Imenu across several buffers
-#+BEGIN_SRC emacs-lisp
-(defconst +imenu-friendly-modes '((c-mode c++-mode))
-  "List of lists which are groups of friend modes.")
-
-(defvar-local +imenu-cache nil
-  "Vector [TICK CACHED-VALUE].")
-
-(defun +imenu-buffer-filter (current other)
-  (let ((current-mode (buffer-local-value 'major-mode current))
-        (other-mode   (buffer-local-value 'major-mode other)))
-    (or (eq current-mode other-mode)
-        (cl-some (lambda (friend-mode-list) (and (memq current-mode friend-mode-list)
-                                                 (memq other-mode   friend-mode-list)))
-                 +imenu-friendly-modes))))
-
-(defun +imenu-get-candidates-from (alist &optional prefix)
-  (cl-mapcan
-   (lambda (element)
-     (if (imenu--subalist-p element)
-         (+imenu-get-candidates-from (cdr element) (concat prefix (if prefix " | ") (car element)))
-       (let ((key (concat (and prefix (propertize (concat prefix  " | ") 'face 'compilation-info))
-                          (car element))))
-         (list (cons (replace-regexp-in-string "\n" " " key)
-                     (cond ((integerp (cdr element)) (copy-marker (cdr element)))
-                           ((overlayp (cdr element)) (copy-marker (overlay-start (cdr element))))
-                           (t (cdr element))))))))
-   alist))
-
-(defun +imenu-buffer-candidates ()
-  (setq imenu--index-alist nil)
-  (imenu--make-index-alist t)
-  (+imenu-get-candidates-from imenu--index-alist (buffer-name)))
-
-(defun +imenu-candidates ()
-  (let* (projectile-require-project-root
-         (current-buffer (current-buffer))
-         (buffers (cl-remove-if-not (lambda (buffer) (+imenu-buffer-filter current-buffer buffer))
-                                    (+projectile-project-buffers))))
-    (mapcan (lambda (buffer)
-              (with-current-buffer buffer
-                (let ((tick (buffer-modified-tick buffer)))
-                  (unless (and +imenu-cache (= (aref +imenu-cache 0) tick))
-                    (setq +imenu-cache (vector tick (+imenu-buffer-candidates))))
-                  (copy-sequence (aref +imenu-cache 1)))))
-            buffers)))
-
-(defun +imenu-goto (_name marker &optional _rest)
-  (cl-assert (markerp marker))
-  (let ((buffer   (marker-buffer marker))
-        (position (marker-position marker)))
-    (switch-to-buffer buffer)
-    (when (or (< position (point-min)) (> position (point-max))) (widen))
-    (goto-char position)))
-
-(defun +imenu ()
-  "Jump to a buffer position indexed by imenu."
-  (interactive)
-  (let* ((items (+imenu-candidates))
-         (imenu-default-goto-function #'+imenu-goto)
-         (candidate (completing-read "Jump to... " items nil t nil nil (thing-at-point 'symbol)))
-         (target (assoc-string candidate items)))
-    (imenu target)
-    (recenter)))
-#+END_SRC
-
-***** End
-#+BEGIN_SRC emacs-lisp
-) ;; (use-package imenu)
-#+END_SRC
-
-**** Line movement functions
-#+BEGIN_SRC emacs-lisp
-(defun nox/previous-blank-line ()
-  "Move point to the previous blank line"
-  (interactive)
-  (move-end-of-line nil)
-  (if (search-backward-regexp "^[\t ]*\n[\t ]*[^\t\n ]+" nil "NOERROR") nil
-    (goto-char (point-min))))
-
-(defun nox/next-blank-line ()
-  "Move point to the next blank line"
-  (interactive)
-  (move-beginning-of-line nil)
-  (if (not (search-forward-regexp "[^\t\n ]\n[\t ]*$" nil "NOERROR"))
-      (goto-char (point-max))))
-
-(defun nox/open-line-above ()
-  "Insert an empty line above the current line.
-Position the cursor at its beginning, according to the current mode."
-  (interactive)
-  (move-end-of-line 0)
-  (newline-and-indent))
-
-(defun nox/open-line-below ()
-  "Insert an empty line below the current line.
-Position the cursor at its beginning, according to the current mode."
-  (interactive)
-  (move-end-of-line nil)
-  (newline-and-indent))
-#+END_SRC
-
 *** Electric
 #+BEGIN_SRC emacs-lisp
 (use-package electric
@@ -1660,7 +1643,6 @@ fundamental-mode) for performance sake."
   (:keymaps 'grep-mode-map
             "C-x C-q" #'wgrep-change-to-wgrep-mode))
 #+end_src
-
 ** Languages
 *** Assembly
 #+begin_src emacs-lisp
@@ -1674,9 +1656,7 @@ fundamental-mode) for performance sake."
      (and (looking-at "c?global\\|section\\|default\\|align\\|INIT_..X") 0)
      4))
 
-  (add-hook! 'asm-mode-hook
-    (setq-local tab-always-indent t)
-    (local-unset-key (vector asm-comment-char))))
+  (add-hook! 'asm-mode-hook (local-unset-key (vector asm-comment-char))))
 #+end_src
 
 *** C/C++
