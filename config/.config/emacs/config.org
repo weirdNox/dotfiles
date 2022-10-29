@@ -1106,6 +1106,7 @@ Disable fringes in the minibuffer window.
   (:keymaps 'projectile-mode-map "C-c p" '(:keymap +projectile-map :wk "Projectile"))
   (:keymaps '+projectile-map
             "SPC" #'+projectile
+            "o"   #'+projectile/find-other-file
             "p"   #'+projectile/switch-project
             "s g" #'+projectile/git-grep
             "s s" #'+projectile/ripgrep
@@ -1216,6 +1217,12 @@ Disable fringes in the minibuffer window.
              :annotate #'+projectile--annotate-project-item
              :action   #'+projectile
              :items    (+projectile--get-relevant-projects root)))))
+
+  (defun +projectile/find-other-file ()
+    (interactive)
+    (if-let (root (projectile-project-root))
+        (projectile-find-other-file)
+      (ff-find-other-file)))
 
   (defun +projectile/switch-project ()
     (interactive)
@@ -1655,7 +1662,7 @@ fundamental-mode) for performance sake."
 *** C/C++
 #+BEGIN_SRC emacs-lisp
 (use-package cc-mode
-  :mode (("\\.\\(c\\|h\\)\\(pp\\)?\\'" . c++-mode)
+  :mode (("\\.\\(c\\|h\\)\\(pp\\)?\\(\\.inl\\)?\\'" . c++-mode)
          ("\\.ino\\'" . c++-mode)
          ("\\.cu\\'"  . c++-mode))
 
@@ -4516,7 +4523,6 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
   "s" '(save-buffer :wk "Save")
   "r" '(nox/rename-file-and-buffer :wk "Rename current")
   "k" '(nox/delete-file-and-buffer :wk "Delete current")
-  "o" '(ff-find-other-file :wk "Switch header/source")
   "b" '(hexl-find-file :wk "Open binary")
   "l" '(find-file-literally :wk "Open literally"))
 #+END_SRC
