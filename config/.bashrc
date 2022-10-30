@@ -7,6 +7,7 @@
 HISTCONTROL=ignoreboth # Don't insert commands that start with a space or that are duplicates in the history
 HISTSIZE=-1            # Unlimited history during a single session
 HISTFILESIZE=5000000   # Number of commands to store in history file
+HISTFILE="$XDG_STATE_HOME"/bash_history
 
 # ------------------------------------------------------------------------------------------
 # Aliases
