@@ -196,11 +196,7 @@ Body forms can access the hook's arguments through the let-bound variable `args'
   `(add-hook! :remove ,@args))
 
 (defmacro setq-hook! (hooks &rest rest)
-  "Convenience macro for setting buffer-local variables in a hook.
-
-  (setq-hook! 'markdown-mode-hook
-    line-spacing 2
-    fill-column 80)"
+  "Convenience macro for setting buffer-local variables in a hook."
   (declare (indent 1))
   (unless (= 0 (% (length rest) 2))
     (signal 'wrong-number-of-arguments (length rest)))
@@ -674,24 +670,6 @@ symbols.
 		             comint-input-ring-index nil))))))
 #+end_src
 
-** OS specific
-#+BEGIN_SRC emacs-lisp
-(setq! x-select-request-type '(UTF8_STRING COMPOUND_TEXT TEXT STRING)
-       select-enable-clipboard t)
-
-(cond (IS-MAC (setq! mac-command-modifier 'meta
-                     mac-option-modifier  'alt
-                     mac-redisplay-dont-reset-vscroll t
-                     mac-mouse-wheel-smooth-scroll nil
-                     ns-use-native-fullscreen nil
-                     ns-pop-up-frames nil))
-
-      (IS-LINUX (setq! x-underline-at-descent-line t
-                       x-frame-normalize-before-maximize t))
-
-      (IS-WINDOWS (setq! w32-get-true-file-attributes nil)))
-#+END_SRC
-
 ** UI
 *** Settings
 #+BEGIN_SRC emacs-lisp
@@ -741,15 +719,6 @@ symbols.
        jit-lock-context-time 2)
 #+END_SRC
 
-**** Highlight line
-#+BEGIN_SRC emacs-lisp
-(use-package hl-line
-  :ghook ('emacs-startup-hook #'global-hl-line-mode)
-  :config
-  (setq! hl-line-sticky-flag nil
-         global-hl-line-sticky-flag nil))
-#+END_SRC
-
 **** Highlight matching parentheses
 #+BEGIN_SRC emacs-lisp
 (use-package paren
@@ -776,8 +745,14 @@ symbols.
 
 *** Font
 #+BEGIN_SRC emacs-lisp
-(defvar nox-fonts '(("PragmataPro" . 12) ("DejaVu Sans Mono" . 10) ("Source Code Pro" . 10)
-                    ("Iosevka" . 12) ("Inconsolata" . 13))
+(setq! line-spacing 0.1)
+
+(defvar nox-fonts '(("PragmataPro" . 10.5)
+                    ("Consolas" . 11)
+                    ("Liberation Mono" . 10)
+                    ("DejaVu Sans Mono" . 10)
+                    ("Source Code Pro" . 10)
+                    ("Cascadia Code" . 10))
   "List of fonts and sizes. The first one available will be used.")
 
 (defvar nox-font-faces-changed nil
@@ -797,7 +772,7 @@ ARGS are the same as in `custom-set-faces'."
       (when (member (car font) (font-family-list))
         (push font available-fonts)))
 
-    (push (cons "Monospace" 11) available-fonts)
+    (push (cons "Monospace" 10.5) available-fonts)
     (setq available-fonts (nreverse available-fonts))
 
     (when nox-debug-mode (message "Available fonts: %s" available-fonts))
@@ -810,14 +785,14 @@ ARGS are the same as in `custom-set-faces'."
       (setq font-name (caar available-fonts)
             font-size (cdar available-fonts)))
 
-    (set-face-attribute 'default nil :font (format "%s-%d" font-name font-size))
+    (set-face-attribute 'default nil :font font-name :height (floor (* 10 font-size)))
 
     (dolist (args nox-font-faces-changed)
       (apply 'custom-theme-reset-faces 'user args))
     (setq nox-font-faces-changed nil)
 
     (cond ((string= font-name "PragmataPro")
-           (nox-font-set-faces `(org-table ((t . (:family ,(format "PragmataPro Mono-%d" font-size))))))))))
+           (nox-font-set-faces `(org-table ((t . (:family "PragmataPro Mono")))))))))
 #+END_SRC
 
 *** Theme
@@ -1307,6 +1282,10 @@ Position the cursor at its beginning, according to the current mode."
             nil)))
       (nconc (nreverse hidden) buffers (list (current-buffer))))))
 
+(use-package embark-consult :straight t
+  :after (embark consult) :demand
+  :hook (embark-collect-mode . embark-consult-preview-minor-mode))
+
 (use-package embark :straight t
   :demand
   :general
@@ -1337,10 +1316,6 @@ Position the cursor at its beginning, according to the current mode."
   (setq! embark-indicators '(+embark--which-key-indicator
                              embark-highlight-indicator
                              embark-isearch-highlight-indicator)))
-
-(use-package embark-consult :straight t
-  :after (embark consult) :demand
-  :hook (embark-collect-mode . embark-consult-preview-minor-mode))
 
 (use-package marginalia :straight t
   :demand
