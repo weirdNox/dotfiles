@@ -1,6 +1,12 @@
-%autoreload 2
+# -*- mode: python -*-
 
-import matplotlib.pyplot as plt
+import math
+import random
+import statistics as stat
+
 import numpy as np
 
+import matplotlib.pyplot as plt
 plt.ion() # Make plots redraw automatically after changes
+
+%autoreload 2
