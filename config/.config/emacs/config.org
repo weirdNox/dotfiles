@@ -745,15 +745,12 @@ symbols.
 
 *** Font
 #+BEGIN_SRC emacs-lisp
-(setq! line-spacing 0.1)
-
-(defvar nox-fonts '(("PragmataPro" . 10.5)
-                    ("Consolas" . 11)
-                    ("Liberation Mono" . 10)
-                    ("DejaVu Sans Mono" . 10)
-                    ("Source Code Pro" . 10)
-                    ("Cascadia Code" . 10))
-  "List of fonts and sizes. The first one available will be used.")
+(defvar nox-fonts '(("PragmataPro"      10.5 .15)
+                    ("Cascadia Code"    10.0 .00)
+                    ("Consolas"         11.0 .15)
+                    ("Liberation Mono"  10.0 .15)
+                    ("DejaVu Sans Mono" 10.0 .15)
+                    ("Source Code Pro"  10.0 .00)))
 
 (defvar nox-font-faces-changed nil
   "List ARGS passed to custom-set-faces, in order to fix font.")
@@ -767,12 +764,13 @@ ARGS are the same as in `custom-set-faces'."
 
 (defun nox/change-font ()
   (interactive)
-  (let* (available-fonts font-name font-size font-setting)
+  (let ((all-fonts (font-family-list))
+        available-fonts font-name font-size line-spac)
     (dolist (font nox-fonts)
-      (when (member (car font) (font-family-list))
+      (when (member (car font) all-fonts)
         (push font available-fonts)))
 
-    (push (cons "Monospace" 10.5) available-fonts)
+    (push (list "Monospace" 10.5 .15) available-fonts)
     (setq available-fonts (nreverse available-fonts))
 
     (when nox-debug-mode (message "Available fonts: %s" available-fonts))
@@ -781,14 +779,16 @@ ARGS are the same as in `custom-set-faces'."
         (let* ((chosen (assoc-string (completing-read "What font to use? " available-fonts nil t)
                                      available-fonts)))
           (setq font-name (car chosen)
-                font-size (read-number "Font size: " (cdr chosen))))
-      (setq font-name (caar available-fonts)
-            font-size (cdar available-fonts)))
+                font-size (read-number "Font size: "    (cadr  chosen))
+                line-spac (read-number "Line spacing: " (caddr chosen))))
+      (setq font-name (caar   available-fonts)
+            font-size (cadar  available-fonts)
+            line-spac (caddar available-fonts)))
 
     (set-face-attribute 'default nil :font font-name :height (floor (* 10 font-size)))
+    (setq! line-spacing line-spac)
 
-    (dolist (args nox-font-faces-changed)
-      (apply 'custom-theme-reset-faces 'user args))
+    (dolist (args nox-font-faces-changed) (apply 'custom-theme-reset-faces 'user args))
     (setq nox-font-faces-changed nil)
 
     (cond ((string= font-name "PragmataPro")
