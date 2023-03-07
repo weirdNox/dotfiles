@@ -23,5 +23,7 @@ alias   gdb='gdb -q'
 alias gdash='gdb -q -x "$XDG_CONFIG_HOME"/gdb/gdb-dashboard'
 alias   gef='gdb -q -x "$XDG_CONFIG_HOME"/gdb/gef.py'
 
+alias sshnc='ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR'
+
 # This makes bash check if the commands following sudo are aliases
 alias sudo='sudo '

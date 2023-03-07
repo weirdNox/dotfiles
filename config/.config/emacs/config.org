@@ -554,6 +554,8 @@ symbols.
  auth-source-save-behavior nil)
 
 (add-hook! 'minibuffer-setup-hook #'cursor-intangible-mode)
+
+(global-so-long-mode 1)
 #+END_SRC
 
 *** UTF-8 as default
@@ -717,6 +719,11 @@ symbols.
        jit-lock-stealth-time 2.5
        jit-lock-contextually t
        jit-lock-context-time 2)
+#+END_SRC
+
+**** Highlight line
+#+BEGIN_SRC emacs-lisp
+(use-package hl-line :init (global-hl-line-mode 1))
 #+END_SRC
 
 **** Highlight matching parentheses
@@ -1512,12 +1519,11 @@ Position the cursor at its beginning, according to the current mode."
     (interactive "sProject root: ")
     (projectile-remove-known-project root))
 
-  (embark-define-keymap embark-project-map
-    "Keymap for Embark project actions."
-    ("s g" #'+projectile--git-grep-by-name)
-    ("s s" #'+projectile--ripgrep-by-name)
-    ("v"   #'+projectile--vc-by-name)
-    ("C-k"   #'+projectile--remove-known-project))
+  (defvar-keymap embark-project-map
+    "s g" #'+projectile--git-grep-by-name
+    "s s" #'+projectile--ripgrep-by-name
+    "v"   #'+projectile--vc-by-name
+    "C-k" #'+projectile--remove-known-project)
   (add-to-list 'embark-keymap-alist '(project . embark-project-map)))
 #+END_SRC
 
@@ -1788,7 +1794,15 @@ fundamental-mode) for performance sake."
   :config
   (when (executable-find "ipython")
     (setq! python-shell-interpreter "ipython"
-           python-shell-interpreter-args "--simple-prompt --no-banner")))
+           python-shell-interpreter-args "--simple-prompt --no-banner"))
+  (add-hook! python-mode (setq forward-sexp-function nil))
+
+  (defun python-indent-dedent-line-backspace (arg)
+    (interactive "*p")
+    (cond
+     ((and (use-region-p) delete-active-region) (delete-backward-char 1))
+     ((python-indent-dedent-line))
+     (t (backward-delete-char-untabify arg)))))
 #+end_src
 
 *** SPICE
@@ -3768,14 +3782,13 @@ Return the result as a string."
                (title (bibtex-completion-apa-get-value "title" entry)))
       (insert (format "[[bibtex:%s][%s]]" key title))))
 
-  (embark-define-keymap embark-bibtex-map
-    "Keymap for Embark bibtex actions."
-    ("k" #'+bibtex-completion--insert-key)
-    ("b" #'+bibtex-completion--insert-bibtex)
-    ("c" #'+bibtex-completion--insert-citation)
-    ("s" #'+bibtex-completion--show-entry)
-    ("l" #'+bibtex-completion--open-link)
-    ("O" #'+bibtex-completion--insert-org-link))
+  (defvar-keymap embark-bibtex-map
+    "k" #'+bibtex-completion--insert-key
+    "b" #'+bibtex-completion--insert-bibtex
+    "c" #'+bibtex-completion--insert-citation
+    "s" #'+bibtex-completion--show-entry
+    "l" #'+bibtex-completion--open-link
+    "O" #'+bibtex-completion--insert-org-link)
   (add-to-list 'embark-keymap-alist '(bibtex . embark-bibtex-map)))
 #+end_src
 
@@ -3816,6 +3829,11 @@ Return the result as a string."
          compilation-error-regexp-alist-alist nil)
 
   (put 'compilation-error-regexp-alist 'safe-local-variable 'listp)
+
+  (defun +compile|ansi-color-apply ()
+    "Applies ansi codes to the compilation buffers. Meant for `compilation-filter-hook'."
+    (with-silent-modifications (ansi-color-apply-on-region compilation-filter-start (point))))
+  (add-hook! 'compilation-filter-hook #'+compile|ansi-color-apply)
 #+END_SRC
 
 **** Error matching
@@ -4385,7 +4403,7 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
          magit-bury-buffer-function 'magit-mode-quit-window))
 
 (use-package transient :straight t
-  :config
+  :init
   (setq! transient-levels-file  (concat nox-etc-dir   "transient/levels.el")
          transient-values-file  (concat nox-etc-dir   "transient/values.el")
          transient-history-file (concat nox-cache-dir "transient/history.el")))
