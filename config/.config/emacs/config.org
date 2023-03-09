@@ -443,12 +443,15 @@ called. The buffer to be switched to is current when these hooks run.")
 (defvar straight-base-dir nox-local-dir)
 (defvar bootstrap-version)
 
+(setq straight-recipe-overrides
+      '((nil (nongnu-elpa :type git :repo "https://git.savannah.gnu.org/git/emacs/nongnu.git"
+                          :depth (full single-branch) :local-repo "nongnu-elpa" :build nil))))
+
 (let ((bootstrap-file (expand-file-name "straight/repos/straight.el/bootstrap.el" straight-base-dir))
       (bootstrap-version 5))
   (unless (file-exists-p bootstrap-file)
-    (with-current-buffer (url-retrieve-synchronously
-                          "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
-                          'silent 'inhibit-cookies)
+    (with-current-buffer (url-retrieve-synchronously "https://raw.githubusercontent.com/raxod502/straight.el/develop/install.el"
+                                                     'silent 'inhibit-cookies)
       (goto-char (point-max))
       (eval-print-last-sexp)))
   (load bootstrap-file nil 'nomessage))
@@ -638,19 +641,19 @@ symbols.
   :config
   (defun comint-read-input-ring (&optional silent)
     (cond ((or (null comint-input-ring-file-name)
-	           (equal comint-input-ring-file-name ""))
-	       nil)
-	      ((not (file-readable-p comint-input-ring-file-name))
-	       (or silent (message "Cannot read history file %s" comint-input-ring-file-name)))
-	      (t (let* ((file comint-input-ring-file-name)
-		            (count 0)
+               (equal comint-input-ring-file-name ""))
+           nil)
+          ((not (file-readable-p comint-input-ring-file-name))
+           (or silent (message "Cannot read history file %s" comint-input-ring-file-name)))
+          (t (let* ((file comint-input-ring-file-name)
+                    (count 0)
                     (max-size comint-input-ring-size)
-		            (ring-size (min 1500 max-size))
-		            (ring (make-ring ring-size))
+                    (ring-size (min 1500 max-size))
+                    (ring (make-ring ring-size))
                     (ring-separator comint-input-ring-separator)
                     (history-ignore comint-input-history-ignore)
                     (ignoredups comint-input-ignoredups))
-	           (with-temp-buffer
+               (with-temp-buffer
                  (insert-file-contents file)
                  (goto-char (point-max))
                  (let (start end history)
@@ -661,15 +664,15 @@ symbols.
                      (setq history (buffer-substring start end))
                      (goto-char start)
                      (when (and (not (string-match history-ignore history))
-			                    (or (null ignoredups) (ring-empty-p ring)
-				                    (not (string-equal (ring-ref ring (- count 1)) history))))
-		               (when (= count ring-size)
+                                (or (null ignoredups) (ring-empty-p ring)
+                                    (not (string-equal (ring-ref ring (- count 1)) history))))
+                       (when (= count ring-size)
                          (ring-extend ring (min (- max-size ring-size) ring-size))
-		                 (setq ring-size (ring-size ring)))
-		               (ring-insert-at-beginning ring history)
-		               (setq count (1+ count))))))
-	           (setq comint-input-ring ring
-		             comint-input-ring-index nil))))))
+                         (setq ring-size (ring-size ring)))
+                       (ring-insert-at-beginning ring history)
+                       (setq count (1+ count))))))
+               (setq comint-input-ring ring
+                     comint-input-ring-index nil))))))
 #+end_src
 
 ** UI
