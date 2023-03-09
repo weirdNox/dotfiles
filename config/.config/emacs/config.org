@@ -547,7 +547,6 @@ symbols.
  ad-redefinition-action 'accept
  auto-window-vscroll nil ;; https://emacs.stackexchange.com/a/28746
  autoload-compute-prefixes nil
- bidi-display-reordering nil
  byte-compile-verbose nox-debug-mode
  debug-on-error nox-debug-mode
  ffap-machine-p-known 'reject
