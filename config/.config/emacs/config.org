@@ -562,12 +562,8 @@ symbols.
 
 *** UTF-8 as default
 #+BEGIN_SRC emacs-lisp
-(when (fboundp 'set-charset-priority)
-  (set-charset-priority 'unicode))
 (set-language-environment "UTF-8")
-(prefer-coding-system        'utf-8-unix)
-(set-selection-coding-system 'utf-8-unix)
-(set-default-coding-systems  'utf-8-unix)
+(set-coding-system-priority 'utf-8 'chinese-gbk)
 #+END_SRC
 
 *** Quiet startup
