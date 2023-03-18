@@ -3870,10 +3870,12 @@ Return the result as a string."
 ;;
 (add-to-list 'compilation-error-regexp-alist 'keil t)
 (add-to-list 'compilation-error-regexp-alist-alist
-             `(keil ,(rx "*** ERROR C" (+ num)
+             `(keil ,(rx "*** "
+                         (| "ERROR" (group-n 6 "WARNING"))
+                         " C" (+ num)
                          " IN LINE " (group-n 2 (+ num))
                          " OF " (group-n 1 (*? nonl)) ":")
-                    1 2))
+                    1 2 nil (6 . 7)))
 
 ;; ====================================================================================================
 ;; NOTE(nox): Cadence Spectre
