@@ -3866,6 +3866,16 @@ Return the result as a string."
                1 (2 . 3) (4 . 5) (6 . 7)))
 
 ;; ====================================================================================================
+;; NOTE(nox): IAR
+;;
+(add-to-list 'compilation-error-regexp-alist 'iar t)
+(add-to-list 'compilation-error-regexp-alist-alist
+             `(iar ,(rx "\"" (group-n 1 (*? nonl)) "\","
+                        (group-n 2 (+ num))
+                        (+? space) (| "Error" (group-n 6 "Warning")))
+                   1 2 nil (6 . 7)))
+
+;; ====================================================================================================
 ;; NOTE(nox): Keil
 ;;
 (add-to-list 'compilation-error-regexp-alist 'keil t)
