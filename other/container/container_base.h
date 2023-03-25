@@ -1584,6 +1584,8 @@ RUN_COMMAND();
 
 int main(int ArgCount, char *ArgVals[])
 {
+    int ReturnCode = 0;
+
     --ArgCount;
     ++ArgVals;
 
@@ -1630,7 +1632,11 @@ int main(int ArgCount, char *ArgVals[])
         mapID(ChildPID, Map_GID, BaseGID, getBindGID());
 
         kill(ChildPID, SIGUSR1);
-        waitpid(ChildPID, 0, 0);
+
+        int WaitResult = 0;
+        waitpid(ChildPID, &WaitResult, 0);
+
+        ReturnCode = WEXITSTATUS(WaitResult);
     }
     else if(ChildPID == 0)
     {
@@ -1698,7 +1704,7 @@ int main(int ArgCount, char *ArgVals[])
     deletePathRaw(AuxDirectory);
 #endif
 
-    return 0;
+    return ReturnCode;
 }
 // Local Variables:
 // mode: c
