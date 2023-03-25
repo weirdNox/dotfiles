@@ -3039,7 +3039,7 @@ after removing the face property. This serves to restore the custom face set in 
             (org-capture)))))
 
   (defun +org-inactive-timestamp (&optional time)
-    (format-time-string (concat "[" (substring (cdr org-time-stamp-formats) 1 -1) "]") time))
+    (format-time-string (concat "[" (cdr org-time-stamp-formats) "]") time))
 
   (defun +capture|add-created-property ()
     (unless (org-before-first-heading-p) (org-set-property "CREATED" (+org-inactive-timestamp))))
