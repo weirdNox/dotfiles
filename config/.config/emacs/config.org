@@ -3877,8 +3877,9 @@ Return the result as a string."
 (add-to-list 'compilation-error-regexp-alist 'iar t)
 (add-to-list 'compilation-error-regexp-alist-alist
              `(iar ,(rx "\"" (group-n 1 (*? nonl)) "\","
-                        (group-n 2 (+ num))
-                        (+? space) (| "Error" (group-n 6 "Warning")))
+                        (*? space) (group-n 2 (+ num))
+                        (*? space) (| "Fatal error" "Error" (group-n 6 "Warning") (group-n 7 "Remark"))
+                        "[" (+ letter) (+ digit) "]:")
                    1 2 nil (6 . 7)))
 
 ;; ====================================================================================================
