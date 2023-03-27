@@ -3832,6 +3832,12 @@ Return the result as a string."
     "Applies ansi codes to the compilation buffers. Meant for `compilation-filter-hook'."
     (with-silent-modifications (ansi-color-apply-on-region compilation-filter-start (point))))
   (add-hook! 'compilation-filter-hook #'+compile|ansi-color-apply)
+
+  (defun +compile|resolve-wine-names (oldfun marker filename directory &rest formats)
+    (setq filename (replace-regexp-in-string (rx letter ":") ""
+                                             (replace-regexp-in-string (regexp-quote "\\") "/" filename)))
+    (apply oldfun marker filename directory formats))
+  (advice-add 'compilation-find-file :around #'+compile|resolve-wine-names)
 #+END_SRC
 
 **** Error matching
