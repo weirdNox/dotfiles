@@ -1669,7 +1669,8 @@ fundamental-mode) for performance sake."
                                      (case-label . +)
                                      (statement-case-intro . (+cc-style-stmt-case-intro +))
                                      (substatement-open . 0)
-                                     (innamespace . [0]))))))
+                                     (innamespace . [0])
+                                     (inextern-lang . 0))))))
 #+END_SRC
 
 *** Dockerfile & Containerfile
