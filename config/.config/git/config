@@ -10,6 +10,9 @@
 [include]
     path = ~/.config/git/local
 
+[push]
+    autoSetupRemote = true
+
 [pull]
 	rebase = true
 
