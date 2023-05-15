@@ -1695,6 +1695,13 @@ fundamental-mode) for performance sake."
   (add-hook! go-mode (add-hook! :local 'before-save-hook 'gofmt-before-save)))
 #+END_SRC
 
+*** Jai
+#+begin_src emacs-lisp
+(use-package jai-mode :straight (jai-mode :type git
+                                          :host github :repo "weirdNox/jai-mode"
+                                          :files ("*.el")))
+#+end_src
+
 *** LaTeX
 #+BEGIN_SRC emacs-lisp
 (use-package latex :straight (auctex :includes latex)
