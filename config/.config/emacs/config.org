@@ -3897,27 +3897,31 @@ Return the result as a string."
              '(cadence-spectre "^ *\\(?:ERROR\\|\\(WARNING\\)\\) (.+): \"\\(.+\\)\" \\([0-9]+\\)" 2 3 nil (1)))
 #+end_src
 
-**** List of scripts
-#+BEGIN_SRC emacs-lisp
-(defconst +compile-sh-names
-  (let ((extension (if (eq system-type 'windows-nt) ".bat" ".sh")))
-    (mapcar (lambda (str) (concat str extension)) '("build-nox" "build"))))
-(defconst +compile-makefile-names '("makefile" "Makefile"))
-(defconst +compile-script-names (append +compile-sh-names +compile-makefile-names))
-#+END_SRC
-
 **** Compilation command
 #+BEGIN_SRC emacs-lisp
+(defconst +compile-jai-names '("build.jai" "first.jai"))
+(defconst +compile-sh-names (let ((extension (if (eq system-type 'windows-nt) ".bat" ".sh")))
+                              (mapcar (lambda (str) (concat str extension)) '("build-nox" "build"))))
+(defconst +compile-makefile-names '("makefile" "Makefile"))
+(defconst +compile-script-names (append +compile-jai-names +compile-sh-names +compile-makefile-names))
+
 (cl-defstruct +compile-info type path (last-time '(0 0 0 0)) args should-delete-window)
 (defvar-local +compile-info nil)
 (defvar +compile-info-table (make-hash-table :test 'equal))
 (defvar +compile-buffer-name) ;; NOTE(nox): Let-bound
 
-(defsubst +compile-get-buffer-name (&rest _) (or +compile-buffer-name "*Compile*"))
+(defsubst +compile-is-jai (file-name) (string-equal (file-name-extension file-name) "jai"))
 
 (defun +compile-info (script-name path)
-  (make-+compile-info :type (if (member script-name +compile-sh-names) 'sh 'make)
+  (make-+compile-info :type (cond
+                             ((+compile-is-jai script-name) 'jai)
+                             ((member script-name +compile-sh-names) 'sh)
+                             ((member script-name +compile-makefile-names) 'make))
                       :path path))
+
+(defsubst +compile-info-relative-path-for-shell (info)
+  (shell-quote-argument (concat "./" (file-name-nondirectory (+compile-info-path info)))))
+(defsubst +compile-get-buffer-name (&rest _) (or +compile-buffer-name "*Compile*"))
 
 (defun +compile (arg)
   (interactive "P")
@@ -3935,19 +3939,25 @@ Return the result as a string."
         (while (setq found-script-directory (locate-dominating-file start-directory script-name))
           (setq start-directory (file-name-directory (directory-file-name found-script-directory))
                 path (expand-file-name script-name found-script-directory)
-                info (or (gethash path +compile-info-table) (+compile-info script-name path))
-                script-cons (cons path info))
+                script-cons (cons path script-name))
+          (push script-cons cons-list))))
 
-          (push script-cons cons-list)
-
-          (when (and (not +compile-info)
-                     (or (not chosen-cons)
-                         (time-less-p (+compile-info-last-time (cdr chosen-cons))
-                                      (+compile-info-last-time info))))
-            (setq chosen-cons script-cons)))))
+    (when (+compile-is-jai calling-file-name)
+      (push (cons calling-file-name (file-name-nondirectory calling-file-name)) cons-list))
     (setq cons-list (nreverse cons-list))
 
     (unless cons-list (error "No build script found"))
+
+    (dolist (script-cons cons-list)
+      (let ((info (or (gethash (car script-cons) +compile-info-table)
+                      (+compile-info (cdr script-cons) (car script-cons)))))
+        (setcdr script-cons info)
+
+        (when (and (not +compile-info)
+                   (or (not chosen-cons)
+                       (time-less-p (+compile-info-last-time (cdr chosen-cons))
+                                    (+compile-info-last-time info))))
+          (setq chosen-cons script-cons))))
 
     (let* ((info (if (and set-default (> (length cons-list) 1))
                      (cdr (assoc (completing-read "Which build script? " cons-list nil t nil nil (car chosen-cons))
@@ -3969,22 +3979,27 @@ Return the result as a string."
       (setq buffer (get-buffer-create +compile-buffer-name)
             existing-window (get-buffer-window buffer))
 
-      (cond ((eq (+compile-info-type info) 'make)
+      (cond ((eq (+compile-info-type info) 'jai)
+             (setq command "jai"
+                   command-args (or (+compile-info-args info) "%s")))
+            ((eq (+compile-info-type info) 'make)
              (setq command "make"
                    command-args (or (+compile-info-args info) "-k")))
             (t
-             (setq command (shell-quote-argument (concat "./" (file-name-nondirectory (+compile-info-path info))))
+             (setq command (+compile-info-relative-path-for-shell info)
                    command-args (or (+compile-info-args info) "%f"))))
 
 
       (when arg (setq command-args (read-string "Arguments: " command-args)))
-
       (when (or (not (+compile-info-args info)) set-default) (setf (+compile-info-args info) command-args))
+
+      (setq command-args (replace-regexp-in-string (regexp-quote "%s")
+                                                   (+compile-info-relative-path-for-shell info)
+                                                   command-args nil t))
 
       (setq command-args (replace-regexp-in-string (regexp-quote "%f")
                                                    (shell-quote-argument
-                                                    (or (file-remote-p calling-file-name 'localname)
-                                                        calling-file-name))
+                                                    (or (file-remote-p calling-file-name 'localname) calling-file-name))
                                                    command-args nil t))
 
       (setf (+compile-info-last-time info) (current-time))
