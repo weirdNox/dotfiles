@@ -3844,29 +3844,35 @@ Return the result as a string."
 ;;
 (add-to-list 'compilation-error-regexp-alist 'cc t)
 (add-to-list 'compilation-error-regexp-alist-alist
-             `(cc ,(rx
-                    bol
-                    (group-n 1 (*? nonl))
-                    (: ":" (* " ") (group-n 2 (+ num)))
-                    (? ":" (* " ") (group-n 4 (+ num)))
-                    ": " (* " ")
-                    (? (| (group-n 6 (| "warning"))
-                          (group-n 7 (| "info" "information" "informational" "instantiated from"
-                                        "required from" "note")))))
+             `(cc ,(rx bol (group-n 1 (*? nonl))
+                       (: ":" (* " ") (group-n 2 (+ num)))
+                       (? ":" (* " ") (group-n 4 (+ num)))
+                       ": " (* " ")
+                       (? (| (group-n 6 (| "warning"))
+                             (group-n 7 (| "info" "information" "informational" "instantiated from"
+                                           "required from" "note")))))
                   1 (2 . 3) (4 . 5) (6 . 7)))
+
+;; ====================================================================================================
+;; NOTE(nox): Jai
+;;
+(add-to-list 'compilation-error-regexp-alist 'jai t)
+(add-to-list 'compilation-error-regexp-alist-alist
+             `(jai ,(rx bol (group-n 1 (*? nonl))
+                        (: ":" (group-n 2 (+ num)))
+                        (? "," (group-n 4 (+ num)))
+                        ": " (* " ") (? (| "Error" (group-n 6 (| "Warning"))) ":"))
+                   1 (2 . 3) (4 . 5) (6 . 7)))
 
 ;; ====================================================================================================
 ;; NOTE(nox): NVCC
 ;;
 (add-to-list 'compilation-error-regexp-alist 'nvcc t)
 (add-to-list 'compilation-error-regexp-alist-alist
-             `(nvcc
-               ,(rx
-                 bol
-                 (group-n 1 (*? nonl))
-                 (: "(" (group-n 2 (+ num)) ")")
-                 ":" (* " ") (: (| (group-n 6 (| "warning")) "error") (* nonl) ":"))
-               1 (2 . 3) (4 . 5) (6 . 7)))
+             `(nvcc ,(rx bol (group-n 1 (*? nonl))
+                         (: "(" (group-n 2 (+ num)) ")")
+                         ":" (* " ") (: (| (group-n 6 (| "warning")) "error") (* nonl) ":"))
+                    1 (2 . 3) (4 . 5) (6 . 7)))
 
 ;; ====================================================================================================
 ;; NOTE(nox): IAR
