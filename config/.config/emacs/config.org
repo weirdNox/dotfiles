@@ -4256,6 +4256,8 @@ Return the result as a string."
   :general
   (:keymaps 'pdf-view-mode-map
             "C-s" 'isearch-forward
+            [remap consult-goto-line] 'pdf-view-goto-page
+
             "C-b" '+pdf-view-scroll-page-left
             "C-f" '+pdf-view-scroll-page-right
             "<M-mouse-4>" 'image-backward-hscroll
