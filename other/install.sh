@@ -10,7 +10,6 @@ Folders=(
     swappiness
     systemcleanup
     tty
-    x11_input_daemon
 )
 for Folder in "${Folders[@]}"
 do
