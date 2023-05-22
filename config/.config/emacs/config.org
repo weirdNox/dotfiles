@@ -468,7 +468,8 @@ called. The buffer to be switched to is current when these hooks run.")
 (setq! use-package-always-defer t
        use-package-verbose nox-debug-mode
        use-package-compute-statistics nox-debug-mode
-       use-package-minimum-reported-time (if nox-debug-mode 0 0.1))
+       use-package-minimum-reported-time (if nox-debug-mode 0 0.1)
+       use-package-hook-name-suffix nil)
 #+END_SRC
 
 Add the :after-call keyword, that takes a symbol or list of symbols, where the symbols are
@@ -1049,25 +1050,13 @@ Disable fringes in the minibuffer window.
 **** Dumb jump
 #+BEGIN_SRC emacs-lisp
 (use-package dumb-jump :straight t
-  :commands dumb-jump-result-follow
-  :general
-  ("M-g j" #'nox@dumb-jump/body)
+  :hook (xref-backend-functions . dumb-jump-xref-activate)
+  :general (:prefix "M-g j"
+                    "j" #'xref-find-definitions
+                    "o" #'xref-find-definitions-other-window)
   :config
-  (defhydra nox@dumb-jump (:color teal :columns 3)
-    "Dumb Jump"
-    ("j" dumb-jump-go "Go")
-    ("o" dumb-jump-go-other-window "Other window")
-    ("e" dumb-jump-go-prefer-external "Go external")
-    ("x" dumb-jump-go-prefer-external-other-window "Go external other window")
-    ("i" dumb-jump-go-prompt "Prompt")
-    ("l" dumb-jump-quick-look "Quick look")
-    ("b" dumb-jump-back "Back" :exit nil))
-
-  (setq! dumb-jump-selector 'completing-read
-         dumb-jump-prefer-searcher 'rg
-         dumb-jump-default-project nox-emacs-dir
-         dumb-jump-aggressive nil
-         dumb-jump-use-visible-window nil))
+  (setq! dumb-jump-prefer-searcher 'rg
+         dumb-jump-default-project "."))
 #+END_SRC
 
 **** Imenu
@@ -1289,7 +1278,7 @@ Position the cursor at its beginning, according to the current mode."
 
 (use-package embark-consult :straight t
   :after (embark consult) :demand
-  :hook (embark-collect-mode . embark-consult-preview-minor-mode))
+  :hook (embark-collect-mode-hook . embark-consult-preview-minor-mode))
 
 (use-package embark :straight t
   :demand
@@ -1699,7 +1688,12 @@ fundamental-mode) for performance sake."
 #+begin_src emacs-lisp
 (use-package jai-mode :straight (jai-mode :type git
                                           :host github :repo "weirdNox/jai-mode"
-                                          :files ("*.el")))
+                                          :files ("*.el"))
+  :config
+  (after! dumb-jump
+    (add-to-list 'dumb-jump-language-file-exts '(:language "jai" :ext "jai" :agtype nil :rgtype "jai"))
+    (add-to-list 'dumb-jump-find-rules
+                 '(:type "constant" :supports ("ag" "grep" "rg" "git-grep") :language "jai" :regex "JJJ\\s+::"))))
 #+end_src
 
 *** LaTeX
@@ -3905,11 +3899,11 @@ Return the result as a string."
 
 **** Compilation command
 #+BEGIN_SRC emacs-lisp
-(defconst +compile-jai-names '("build.jai" "first.jai"))
 (defconst +compile-sh-names (let ((extension (if (eq system-type 'windows-nt) ".bat" ".sh")))
                               (mapcar (lambda (str) (concat str extension)) '("build-nox" "build"))))
+(defconst +compile-jai-names '("build.jai" "first.jai" "main.jai"))
 (defconst +compile-makefile-names '("makefile" "Makefile"))
-(defconst +compile-script-names (append +compile-jai-names +compile-sh-names +compile-makefile-names))
+(defconst +compile-script-names (append +compile-sh-names +compile-jai-names +compile-makefile-names))
 
 (cl-defstruct +compile-info type path (last-time '(0 0 0 0)) args should-delete-window)
 (defvar-local +compile-info nil)
@@ -3948,8 +3942,9 @@ Return the result as a string."
                 script-cons (cons path script-name))
           (push script-cons cons-list))))
 
-    (when (+compile-is-jai calling-file-name)
+    (when (+compile-is-jai calling-file-name) ; Jai programs may be just a single file
       (push (cons calling-file-name (file-name-nondirectory calling-file-name)) cons-list))
+
     (setq cons-list (nreverse cons-list))
 
     (unless cons-list (error "No build script found"))
