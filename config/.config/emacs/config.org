@@ -4441,7 +4441,29 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
   :when (executable-find "git")
   :config
   (setq! magit-diff-refine-hunk 'all
-         magit-bury-buffer-function 'magit-mode-quit-window))
+         magit-bury-buffer-function 'magit-mode-quit-window)
+
+  (transient-define-suffix magit-submodule-update (modules args)
+    "Update MODULES by checking out the recorded commits."
+    :class 'magit--git-submodule-suffix
+    :description "Update         git submodule update [--init] [--remote] [--no-fetch]
+                      [--force] [--checkout|--rebase|--merge] [--recursive]"
+    (interactive (list (magit-module-confirm "Update" 'magit-module-worktree-p)
+                       (magit-submodule-arguments "--init" "--remote" "--no-fetch" "--force"
+                                                  "--checkout" "--rebase" "--merge" "--recursive")))
+    (magit-with-toplevel (magit-run-git-async "submodule" "update" args "--" modules)))
+
+  (transient-define-suffix +magit-submodule-update-all (args)
+    "Update all submodules"
+    :class 'magit--git-submodule-suffix
+    :description "Update all modules    git submodule update [--init] [--remote] [--no-fetch]
+                             [--force] [--checkout|--rebase|--merge] [--recursive]"
+    (interactive (list (magit-submodule-arguments "--init" "--remote" "--no-fetch" "--force"
+                                                  "--checkout" "--rebase" "--merge" "--recursive")))
+    (magit-with-toplevel (magit-run-git-async "submodule" "update" args)))
+
+  (transient-append-suffix 'magit-submodule '(0 -1) '("-i" "Also initialize" "--init"))
+  (transient-append-suffix 'magit-submodule '(2 -1) '("U" +magit-submodule-update-all)))
 
 (use-package transient :straight t
   :init
