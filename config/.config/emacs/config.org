@@ -1517,8 +1517,8 @@ Position the cursor at its beginning, according to the current mode."
 *** Electric
 #+BEGIN_SRC emacs-lisp
 (use-package electric
-  :init
-  (electric-indent-mode))
+  :init (electric-indent-mode)
+  :config (setq! electric-indent-inhibit t))
 
 (use-package elec-pair
   :init
