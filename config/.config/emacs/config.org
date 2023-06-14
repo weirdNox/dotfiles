@@ -3855,7 +3855,7 @@ Return the result as a string."
 ;;
 (add-to-list 'compilation-error-regexp-alist 'jai t)
 (add-to-list 'compilation-error-regexp-alist-alist
-             `(jai ,(rx bol (group-n 1 (*? nonl))
+             `(jai ,(rx bol (* space) (group-n 1 (*? nonl))
                         (: ":" (group-n 2 (+ num)))
                         (? "," (group-n 4 (+ num)))
                         ": " (* " ") (? (| "Error" (group-n 6 (| "Warning"))) ":"))
