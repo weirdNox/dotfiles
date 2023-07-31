@@ -1629,7 +1629,20 @@ fundamental-mode) for performance sake."
 
   (defun +treesit/install-all-language-grammars ()
     (interactive)
-    (mapc #'treesit-install-language-grammar (mapcar #'car treesit-language-source-alist))))
+    (mapc #'treesit-install-language-grammar (mapcar #'car treesit-language-source-alist)))
+
+  (add-to-list 'treesit-simple-indent-presets
+               (cons 'standalone-parent-or-uncle
+                     (lambda (_n parent &rest _)
+                       (save-excursion
+                         (catch 'term
+                           (while parent
+                             (goto-char (treesit-node-start parent))
+                             (when (looking-back (rx bol (* whitespace))
+                                                 (line-beginning-position))
+                               (throw 'term (point)))
+                             (setq parent (or (treesit-node-prev-sibling parent)
+                                              (treesit-node-parent parent))))))))))
 #+end_src
 
 ** Languages
@@ -1663,7 +1676,86 @@ fundamental-mode) for performance sake."
   (add-to-list 'major-mode-remap-alist '(c++-mode . c++-ts-mode))
 
   :config
-  (setq! c-ts-mode-indent-offset 4))
+  (setq! c-ts-mode-indent-offset 4)
+
+  (defun c-ts--nox-indent-style ()
+    `((c-ts-mode--for-each-tail-body-matcher prev-line c-ts-mode-indent-offset)
+
+      ((parent-is "translation_unit") column-0 0)
+      ((query "(ERROR (ERROR)) @indent") column-0 0)
+      ((node-is ")") parent 0)
+      ((node-is "]") standalone-parent-or-uncle 0)
+      ((node-is "else") parent-bol 0)
+      ((node-is "case") parent-bol c-ts-mode-indent-offset)
+      ((node-is "preproc_arg") no-indent)
+      ;; `c-ts-common-looking-at-star' has to come before
+      ;; `c-ts-common-comment-2nd-line-matcher'.
+      ((and (parent-is "comment") c-ts-common-looking-at-star) c-ts-common-comment-start-after-first-star -1)
+      (c-ts-common-comment-2nd-line-matcher c-ts-common-comment-2nd-line-anchor 1)
+      ((parent-is "comment") prev-adaptive-prefix 0)
+
+      ;; Labels.
+      ((node-is "labeled_statement") standalone-parent 0)
+      ((parent-is "labeled_statement") c-ts-mode--standalone-grandparent c-ts-mode-indent-offset)
+
+      ;; Preproc directives
+      ((node-is "preproc") column-0 0)
+      ((node-is "#endif") column-0 0)
+      ((match "preproc_call" "compound_statement") column-0 0)
+
+      ;; Top-level things under a preproc directive.
+      ;; Note that "preproc" matches more than one type: it matches preproc_if, preproc_elif, etc.
+      ((n-p-gp nil "preproc" "translation_unit") column-0 0)
+      ;; Indent rule for an empty line after a preproc directive.
+      ((and no-node (parent-is ,(rx (or "\n" "preproc")))) c-ts-mode--standalone-parent-skip-preproc c-ts-mode--preproc-offset)
+
+      ((parent-is "function_definition") parent-bol 0)
+      ((parent-is "conditional_expression") first-sibling 0)
+      ((parent-is "assignment_expression") parent-bol c-ts-mode-indent-offset)
+      ((parent-is "concatenated_string") first-sibling 0)
+      ((parent-is "comma_expression") first-sibling 0)
+      ((parent-is "init_declarator") parent-bol c-ts-mode-indent-offset)
+      ((parent-is "parenthesized_expression") first-sibling 1)
+      ((parent-is "argument_list") first-sibling 1)
+      ((parent-is "parameter_list") first-sibling 1)
+      ((parent-is "binary_expression") parent 0)
+      ((parent-is "call_expression") parent 0)
+      ;; Closing bracket.  This should be before initializer_list
+      ;; (and probably others) rule because that rule (and other
+      ;; similar rules) will match the closing bracket.  (Bug#61398)
+      ((node-is "}") standalone-parent-or-uncle 0)
+      ((node-is "access_specifier") parent-bol 0)
+      ;; Indent the body of namespace definitions.
+      ((parent-is "declaration_list") parent-bol c-ts-mode-indent-offset)
+
+      ;; int[5] a = { 0, 0, 0, 0 };
+      ((match nil "initializer_list" nil 1 1) parent-bol c-ts-mode-indent-offset)
+      ((parent-is "initializer_list") c-ts-mode--anchor-prev-sibling 0)
+      ;; Statement in enum.
+      ((match nil "enumerator_list" nil 1 1) standalone-parent c-ts-mode-indent-offset)
+      ((parent-is "enumerator_list") c-ts-mode--anchor-prev-sibling 0)
+      ;; Statement in struct and union.
+      ((match nil "field_declaration_list" nil 1 1) standalone-parent c-ts-mode-indent-offset)
+      ((parent-is "field_declaration_list") c-ts-mode--anchor-prev-sibling 0)
+
+      ;; Statement in {} blocks.
+      ((parent-is "compound_statement") standalone-parent-or-uncle c-ts-mode-indent-offset)
+      ;; Opening bracket.
+      ((node-is "compound_statement") parent-bol 0)
+      ;; Bug#61291.
+      ((match "expression_statement" nil "body") standalone-parent c-ts-mode-indent-offset)
+      ;; These rules are for cases where the body is bracketless.
+      ;; Tested by the "Bracketless Simple Statement" test.
+      ((parent-is "if_statement") standalone-parent c-ts-mode-indent-offset)
+      ((parent-is "for_statement") standalone-parent c-ts-mode-indent-offset)
+      ((parent-is "while_statement") standalone-parent c-ts-mode-indent-offset)
+      ((parent-is "do_statement") standalone-parent c-ts-mode-indent-offset)
+
+      ((parent-is "for_statement") (nth-sibling 1) 1)
+      ((parent-is "case_statement") standalone-parent c-ts-mode-indent-offset)
+
+      ((node-is "field_initializer_list") parent-bol ,(* c-ts-mode-indent-offset 2))))
+  (setq! c-ts-mode-indent-style #'c-ts--nox-indent-style))
 #+END_SRC
 
 *** Dockerfile & Containerfile
