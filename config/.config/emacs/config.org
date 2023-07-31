@@ -52,7 +52,6 @@ line or use --debug-init to enable this.")
 (defconst nox-local-dir         (concat nox-emacs-dir "local/"))
 (defconst nox-etc-dir           (concat nox-local-dir "etc/"))
 (defconst nox-cache-dir         (concat nox-local-dir "cache/"))
-(defconst nox-packages-dir      (concat nox-local-dir "packages/"))
 (defconst nox-repo-packages-dir (concat nox-emacs-dir "repo-packages/"))
 #+END_SRC
 
@@ -372,7 +371,7 @@ When ARG is:
 *** Package ecosystem
 #+BEGIN_SRC emacs-lisp
 (defvar elpaca-installer-version 0.5)
-(defvar elpaca-directory nox-packages-dir)
+(defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
 (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
 (defvar elpaca-repos-directory (expand-file-name "repos/" elpaca-directory))
 (defvar elpaca-order '(elpaca :repo "https://github.com/progfolio/elpaca.git"
@@ -558,11 +557,10 @@ called. The buffer to be switched to is current when these hooks run.")
  idle-update-delay 2
  inhibit-compacting-font-caches t
  minibuffer-prompt-properties '(read-only t cursor-intangible t face minibuffer-prompt)
- auth-source-save-behavior nil)
+ auth-source-save-behavior nil
+ process-error-pause-time 0)
 
 (add-hook! 'minibuffer-setup-hook #'cursor-intangible-mode)
-
-(global-so-long-mode 1)
 #+END_SRC
 
 *** UTF-8 as default
@@ -694,9 +692,9 @@ called. The buffer to be switched to is current when these hooks run.")
        window-divider-default-bottom-width 1
        window-divider-default-right-width 1
        frame-title-format '("Emacs - %b")
-       tooltip-hide-delay 3600)
+       tooltip-hide-delay 3600
+       use-short-answers t)
 
-(fset 'yes-or-no-p 'y-or-n-p)
 (minibuffer-depth-indicate-mode)
 #+END_SRC
 
@@ -1217,8 +1215,7 @@ Position the cursor at its beginning, according to the current mode."
   (  "M-'" #'consult-register-store)
   ("C-M-#" #'consult-register)
 
-  ([remap yank-pop]        #'consult-yank-pop)
-  ([remap apropos-command] #'consult-apropos)
+  ([remap yank-pop] #'consult-yank-pop)
 
   ("M-g e"   #'consult-compile-error)
   ("M-g g"   #'consult-goto-line)
@@ -1615,6 +1612,26 @@ fundamental-mode) for performance sake."
   (:keymaps 'grep-mode-map
             "C-x C-q" #'wgrep-change-to-wgrep-mode))
 #+end_src
+
+*** Tree-sitter
+#+begin_src emacs-lisp
+(use-package treesit :elpaca nil
+  :config
+  (setq! treesit-language-source-alist
+         '((bash       . ("https://github.com/tree-sitter/tree-sitter-bash"))
+           (c          . ("https://github.com/tree-sitter/tree-sitter-c"))
+           (cmake      . ("https://github.com/uyha/tree-sitter-cmake"))
+           (cpp        . ("https://github.com/tree-sitter/tree-sitter-cpp"))
+           (dockerfile . ("https://github.com/camdencheek/tree-sitter-dockerfile"))
+           (javascript . ("https://github.com/tree-sitter/tree-sitter-javascript"))
+           (json       . ("https://github.com/tree-sitter/tree-sitter-json"))
+           (python     . ("https://github.com/tree-sitter/tree-sitter-python"))))
+
+  (defun +treesit/install-all-language-grammars ()
+    (interactive)
+    (mapc #'treesit-install-language-grammar (mapcar #'car treesit-language-source-alist))))
+#+end_src
+
 ** Languages
 *** Assembly
 #+begin_src emacs-lisp
@@ -1630,49 +1647,30 @@ fundamental-mode) for performance sake."
 
   (add-hook! 'asm-mode-hook (local-unset-key (vector asm-comment-char))))
 #+end_src
+*** (Ba)sh
+#+begin_src emacs-lisp
+(use-package sh-mode :elpaca nil
+  :init (add-to-list 'major-mode-remap-alist '(sh-mode . bash-ts-mode)))
+#+end_src
 
 *** C/C++
 #+BEGIN_SRC emacs-lisp
-(use-package cc-mode :elpaca nil
-  :mode (("\\.\\(c\\|h\\)\\(pp\\)?\\(\\.inl\\)?\\'" . c++-mode)
-         ("\\.ino\\'" . c++-mode)
-         ("\\.cu\\'"  . c++-mode))
+(use-package c-ts-mode :elpaca nil
+  :mode (("\\.\\(c\\|h\\)\\(\\.inl\\)?\\'" . c-ts-mode)
+         ("\\.\\(c\\|h\\)pp\\(\\.inl\\)?\\'" . c++-ts-mode))
+  :init
+  (add-to-list 'major-mode-remap-alist '(c-mode   . c-ts-mode))
+  (add-to-list 'major-mode-remap-alist '(c++-mode . c++-ts-mode))
 
   :config
-  (add-hook! (c-mode c++-mode) (setq-local comment-start "// "
-                                           comment-end   ""))
-
-  (defun +cc-style-stmt-case-intro (info)
-    "When the case label has inline code, don't indent the next syntactic structure.
-     Eg.:
-        switch(...) {
-            case ...: { doIt(); } break
-            dontIndentThisMacroCall();
-        }"
-    (save-excursion
-      (goto-char (cdr info)) ;; NOTE(nox): Anchor
-      (when (and (search-forward ":" (line-end-position) t)
-                 (not (looking-at "[[:space:]]*$")))
-        0)))
-
-  (setq! c-default-style "weirdNox")
-  (c-add-style c-default-style
-               '((c-basic-offset . 4)
-                 (c-offsets-alist . ((arglist-close . c-lineup-arglist)
-                                     (case-label . +)
-                                     (statement-case-intro . (+cc-style-stmt-case-intro +))
-                                     (substatement-open . 0)
-                                     (innamespace . [0])
-                                     (inextern-lang . 0))))))
+  (setq! c-ts-mode-indent-offset 4))
 #+END_SRC
 
 *** Dockerfile & Containerfile
 #+begin_src emacs-lisp
-(use-package dockerfile-mode
-  :mode (("/Containerfile\\'"   . dockerfile-mode)
-         ("\\.containerfile\\'" . dockerfile-mode))
-  :config
-  (setq! dockerfile-indent-offset 5))
+(use-package dockerfile-ts-mode :elpaca nil
+  :mode (("\\(?:Dockerfile\\(?:\\..*\\)?\\|\\.[Dd]ockerfile\\)\\'"       . dockerfile-ts-mode)
+         ("\\(?:Containerfile\\(?:\\..*\\)?\\|\\.[Cc]ontainerfile\\)\\'" . dockerfile-ts-mode)))
 #+end_src
 
 *** GLSL
@@ -1697,6 +1695,14 @@ fundamental-mode) for performance sake."
     (add-to-list 'dumb-jump-language-file-exts '(:language "jai" :ext "jai" :agtype nil :rgtype "jai"))
     (add-to-list 'dumb-jump-find-rules
                  '(:type "constant" :supports ("ag" "grep" "rg" "git-grep") :language "jai" :regex "JJJ\\s+::"))))
+#+end_src
+
+*** Javascript (& JSON)
+#+begin_src emacs-lisp
+(use-package js :elpaca nil
+  :init
+  (add-to-list 'major-mode-remap-alist '(js-mode      . js-ts-mode))
+  (add-to-list 'major-mode-remap-alist '(js-json-mode . json-ts-mode)))
 #+end_src
 
 *** LaTeX
@@ -1794,11 +1800,13 @@ fundamental-mode) for performance sake."
 *** Python
 #+begin_src emacs-lisp
 (use-package python :elpaca nil
+  :init (add-to-list 'major-mode-remap-alist '(python-mode . python-ts-mode))
   :config
   (when (executable-find "ipython")
     (setq! python-shell-interpreter "ipython"
            python-shell-interpreter-args "--simple-prompt --no-banner"))
-  (add-hook! python-mode (setq forward-sexp-function nil))
+
+  (add-hook! python-ts-mode (setq forward-sexp-function nil))
 
   (defun python-indent-dedent-line-backspace (arg)
     (interactive "*p")
@@ -3793,7 +3801,20 @@ Return the result as a string."
 
 *** CMake
 #+begin_src emacs-lisp
-(use-package cmake-mode)
+(use-package cmake-ts-mode :elpaca nil
+  :mode (("CMakeLists\\.txt\\'" . cmake-ts-mode)
+         ("\\.cmake\\'"         . cmake-ts-mode))
+  :config
+  (setq! cmake-ts-mode-indent-offset 4
+         cmake-ts-mode--indent-rules `((cmake ((node-is ")") parent-bol 0)
+                                              ((node-is "else_command") parent-bol 0)
+                                              ((node-is "elseif_command") parent-bol 0)
+                                              ((node-is "endforeach_command") parent-bol 0)
+                                              ((node-is "endfunction_command") parent-bol 0)
+                                              ((node-is "endif_command") parent-bol 0)
+                                              ((parent-is "source_file") parent-bol 0)
+                                              ((parent-is "argument_list") parent-bol cmake-ts-mode-indent-offset)
+                                              ((parent-is "body") parent-bol cmake-ts-mode-indent-offset)))))
 #+end_src
 
 *** Compilation
