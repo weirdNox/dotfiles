@@ -1058,7 +1058,8 @@ Disable fringes in the minibuffer window.
                     "o" #'xref-find-definitions-other-window)
   :config
   (setq! dumb-jump-prefer-searcher 'rg
-         dumb-jump-default-project "."))
+         dumb-jump-default-project "."
+         dumb-jump-fallback-search nil))
 #+END_SRC
 
 **** Imenu
@@ -1806,7 +1807,7 @@ fundamental-mode) for performance sake."
   (after! dumb-jump
     (add-to-list 'dumb-jump-language-file-exts '(:language "jai" :ext "jai" :agtype nil :rgtype "jai"))
     (add-to-list 'dumb-jump-find-rules
-                 '(:type "constant" :supports ("ag" "grep" "rg" "git-grep") :language "jai" :regex "JJJ\\s+::"))))
+                 '(:type "constant" :supports ("ag" "grep" "rg" "git-grep") :language "jai" :regex "\\bJJJ\\s+::"))))
 #+end_src
 
 *** Javascript (& JSON)
