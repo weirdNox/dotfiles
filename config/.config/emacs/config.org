@@ -2261,6 +2261,7 @@ The next part was taken from DOOM themes
 #+BEGIN_SRC emacs-lisp
 (setq! org-log-done 'time
        org-log-reschedule 'time
+       org-log-redeadline 'time
        org-log-into-drawer t)
 #+END_SRC
 
