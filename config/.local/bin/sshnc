@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o LogLevel=ERROR "$@"
