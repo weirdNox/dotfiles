@@ -1,0 +1,5 @@
+{
+    "combinedupgrade": false,
+	"batchinstall": true,
+	"sudoloop": true
+}
