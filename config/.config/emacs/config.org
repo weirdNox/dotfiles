@@ -410,9 +410,7 @@ When ARG is:
 
 **** Setup use-package
 #+BEGIN_SRC emacs-lisp
-(elpaca elpaca-use-package
-        (elpaca-use-package-mode)
-        (setq elpaca-use-package-by-default t))
+(elpaca elpaca-use-package (elpaca-use-package-mode))
 (elpaca-wait)
 
 (setq! use-package-always-defer t
@@ -531,7 +529,7 @@ called. The buffer to be switched to is current when these hooks run.")
 *** Packages
 **** General
 #+BEGIN_SRC emacs-lisp
-(use-package general :demand
+(use-package general :elpaca t :demand
   :config
   (general-create-definer nox-leader :prefix "C-c")
   (general-create-definer nox-local-leader :prefix "C-c m"))
@@ -541,7 +539,7 @@ called. The buffer to be switched to is current when these hooks run.")
 
 **** Hydra
 #+BEGIN_SRC emacs-lisp
-(use-package hydra
+(use-package hydra :elpaca t
   :config (setq! lv-use-separator t))
 #+END_SRC
 
@@ -627,7 +625,7 @@ called. The buffer to be switched to is current when these hooks run.")
 
 *** Save minibuffer history persistently
 #+begin_src emacs-lisp
-(use-package savehist :elpaca nil
+(use-package savehist
   :init
   (setq! savehist-file (concat nox-cache-dir "savehist.el"))
   (savehist-mode))
@@ -635,7 +633,7 @@ called. The buffer to be switched to is current when these hooks run.")
 
 *** Comint mode fixes
 #+begin_src emacs-lisp
-(use-package comint :elpaca nil
+(use-package comint
   :config
   (defun comint-read-input-ring (&optional silent)
     (cond ((or (null comint-input-ring-file-name)
@@ -724,12 +722,12 @@ called. The buffer to be switched to is current when these hooks run.")
 
 **** Highlight line
 #+BEGIN_SRC emacs-lisp
-(use-package hl-line :elpaca nil :init (global-hl-line-mode 1))
+(use-package hl-line :init (global-hl-line-mode 1))
 #+END_SRC
 
 **** Highlight matching parentheses
 #+BEGIN_SRC emacs-lisp
-(use-package paren :elpaca nil
+(use-package paren
   :after-call (after-find-file nox-exit-buffer-hook)
   :config
   (setq show-paren-delay 0
@@ -745,7 +743,7 @@ called. The buffer to be switched to is current when these hooks run.")
 
 **** Misc
 #+BEGIN_SRC emacs-lisp
-(use-package server :elpaca nil
+(use-package server
   :config
   (defun +server|bring-frame-to-front () (select-frame-set-input-focus (selected-frame)))
   (add-hook! '(server-after-make-frame-hook server-switch-hook) #'+server|bring-frame-to-front))
@@ -847,7 +845,7 @@ ARGS are the same as in `custom-set-faces'."
 
 **** Theme
 #+BEGIN_SRC emacs-lisp
-(use-package darktooth-theme
+(use-package darktooth-theme :elpaca t
   :config
   (nox-add-customize-theme-hook 'darktooth
     (nox-theme-set-faces
@@ -856,7 +854,7 @@ ARGS are the same as in `custom-set-faces'."
      '(org-agenda-structure ((t . (:inherit font-lock-doc-face))))
      '(hl-line ((t . (:background "#32302F")))))))
 
-(use-package doom-themes
+(use-package doom-themes :elpaca t
   :config
   (setq! doom-one-brighter-comments t
          doom-peacock-brighter-modeline t)
@@ -865,7 +863,7 @@ ARGS are the same as in `custom-set-faces'."
     (nox-theme-set-faces
      `(font-lock-comment-face ((t . (:background nil)))))))
 
-(use-package gruvbox-theme
+(use-package gruvbox-theme :elpaca t
   :config
   (nox-add-customize-theme-hook "^gruvbox"
     (nox-theme-set-faces
@@ -875,7 +873,7 @@ ARGS are the same as in `custom-set-faces'."
      `(org-block ((t . (:background ,(ignore-errors (color-darken-name (face-attribute 'default :background) 2))))))
      `(fringe ((t . (:foreground ,(ignore-errors (color-darken-name (face-attribute 'shadow :foreground) 10)))))))))
 
-(use-package color-theme-sanityinc-tomorrow
+(use-package color-theme-sanityinc-tomorrow :elpaca t
   :config
   (nox-add-customize-theme-hook "^sanityinc"
     (nox-theme-set-faces
@@ -927,7 +925,7 @@ Disable fringes in the minibuffer window.
                      (column-number-mode (column-number-indicator-zero-based " :%c" " :%C")))
    (" " mode-line-percent-position " ")))
 
-(use-package anzu
+(use-package anzu :elpaca t
   :after isearch :demand
   :init (global-anzu-mode 1))
 #+END_SRC
@@ -1000,7 +998,7 @@ Disable fringes in the minibuffer window.
 
 **** Automatic revert
 #+BEGIN_SRC emacs-lisp
-(use-package autorevert :elpaca nil
+(use-package autorevert
   :after-call after-find-file
   :config
   (setq! auto-revert-verbose nil)
@@ -1009,7 +1007,7 @@ Disable fringes in the minibuffer window.
 
 **** Recent files
 #+BEGIN_SRC emacs-lisp
-(use-package recentf :elpaca nil
+(use-package recentf
   :demand
   :config
   (setq recentf-save-file (concat nox-cache-dir "recentf")
@@ -1029,7 +1027,7 @@ Disable fringes in the minibuffer window.
 
 **** Bookmarks
 #+BEGIN_SRC emacs-lisp
-(use-package bookmark :elpaca nil
+(use-package bookmark
   :config
   (setq! bookmark-default-file (concat nox-etc-dir "bookmarks")
          bookmark-save-flag t))
@@ -1038,7 +1036,7 @@ Disable fringes in the minibuffer window.
 *** Navigation
 **** Avy
 #+BEGIN_SRC emacs-lisp
-(use-package avy
+(use-package avy :elpaca t
   :general
   ("C-."   #'avy-goto-char-timer
    "M-g l" #'avy-goto-line
@@ -1051,7 +1049,7 @@ Disable fringes in the minibuffer window.
 
 **** Dumb jump
 #+BEGIN_SRC emacs-lisp
-(use-package dumb-jump
+(use-package dumb-jump :elpaca t
   :hook (xref-backend-functions . dumb-jump-xref-activate)
   :general (:prefix "M-g j"
                     "j" #'xref-find-definitions
@@ -1064,7 +1062,7 @@ Disable fringes in the minibuffer window.
 
 **** Imenu
 #+BEGIN_SRC emacs-lisp
-(use-package imenu :elpaca nil
+(use-package imenu
   :general (nox-leader "i" #'+imenu)
   :config
   (setq! imenu-auto-rescan t
@@ -1175,10 +1173,10 @@ Position the cursor at its beginning, according to the current mode."
 
 *** Minibuffer completion
 #+begin_src emacs-lisp
-(use-package vertico
+(use-package vertico :elpaca t
   :init (vertico-mode 1))
 
-(use-package orderless
+(use-package orderless :elpaca t
   :after vertico :demand
   :config
   (defun +orderless--is-partial-tramp (path)
@@ -1198,7 +1196,7 @@ Position the cursor at its beginning, according to the current mode."
   (setq! completion-styles '(orderless basic)
          completion-category-overrides '((file (styles basic-partial-remote)))))
 
-(use-package consult
+(use-package consult :elpaca t
   :demand
   :general
   (nox-leader "h" #'consult-history)
@@ -1278,11 +1276,7 @@ Position the cursor at its beginning, according to the current mode."
             nil)))
       (nconc (nreverse hidden) buffers (list (current-buffer))))))
 
-(use-package embark-consult
-  :after (embark consult) :demand
-  :hook (embark-collect-mode-hook . embark-consult-preview-minor-mode))
-
-(use-package embark
+(use-package embark :elpaca t
   :demand
   :general
   ("C-h b" #'embark-bindings)
@@ -1312,8 +1306,11 @@ Position the cursor at its beginning, according to the current mode."
   (setq! embark-indicators '(+embark--which-key-indicator
                              embark-highlight-indicator
                              embark-isearch-highlight-indicator)))
+(use-package embark-consult :elpaca t
+  :after (embark consult) :demand
+  :hook (embark-collect-mode-hook . embark-consult-preview-minor-mode))
 
-(use-package marginalia
+(use-package marginalia :elpaca t
   :demand
   :config
   (marginalia-mode))
@@ -1321,8 +1318,8 @@ Position the cursor at its beginning, according to the current mode."
 
 *** Completion
 #+begin_src emacs-lisp
-(use-package company)
-(use-package company-dabbrev :elpaca nil
+(use-package company :elpaca t)
+(use-package company-dabbrev
   :config
   (setq! company-dabbrev-downcase nil
          company-dabbrev-ignore-case nil
@@ -1334,7 +1331,7 @@ Position the cursor at its beginning, according to the current mode."
       (derived-mode-p 'pdf-view-mode 'doc-view-mode)))
   (setq! company-dabbrev-ignore-buffers #'+company-dabbrev-buffer-check))
 
-(use-package corfu
+(use-package corfu :elpaca t
   :init
   (global-corfu-mode)
 
@@ -1342,7 +1339,7 @@ Position the cursor at its beginning, according to the current mode."
     (when (where-is-internal #'completion-at-point (list (current-local-map)))
       (corfu-mode 1))))
 
-(use-package cape
+(use-package cape :elpaca t
   :general ("<tab>" #'completion-at-point)
   :init
   (setq! +cape-dabbrev      (cape-company-to-capf #'company-dabbrev))
@@ -1354,7 +1351,7 @@ Position the cursor at its beginning, according to the current mode."
 
 *** Project management
 #+BEGIN_SRC emacs-lisp
-(use-package projectile
+(use-package projectile :elpaca t
   :demand
   :general
   (:keymaps 'projectile-mode-map "C-c p" '(:keymap +projectile-map :wk "Projectile"))
@@ -1518,11 +1515,11 @@ Position the cursor at its beginning, according to the current mode."
 
 *** Electric
 #+BEGIN_SRC emacs-lisp
-(use-package electric :elpaca nil
+(use-package electric
   :init (electric-indent-mode)
   :config (setq! electric-indent-inhibit t))
 
-(use-package elec-pair :elpaca nil
+(use-package elec-pair
   :init
   (electric-pair-mode))
 #+END_SRC
@@ -1530,13 +1527,13 @@ Position the cursor at its beginning, according to the current mode."
 *** Selection
 **** Expand region
 #+BEGIN_SRC emacs-lisp
-(use-package expand-region
+(use-package expand-region :elpaca t
   :general ("C-=" 'er/expand-region))
 #+END_SRC
 
 **** Multiple cursors
 #+BEGIN_SRC emacs-lisp
-(use-package multiple-cursors
+(use-package multiple-cursors :elpaca t
   :general
   ("C-c l" 'mc/edit-lines
    "C-M-»" 'mc/mark-all-like-this
@@ -1608,7 +1605,7 @@ fundamental-mode) for performance sake."
 *** Search and replace
 **** wgrep
 #+begin_src emacs-lisp
-(use-package wgrep
+(use-package wgrep :elpaca t
   :general
   (:keymaps 'grep-mode-map
             "C-x C-q" #'wgrep-change-to-wgrep-mode))
@@ -1616,7 +1613,7 @@ fundamental-mode) for performance sake."
 
 *** Tree-sitter
 #+begin_src emacs-lisp
-(use-package treesit :elpaca nil
+(use-package treesit
   :config
   (setq! treesit-language-source-alist
          '((bash       . ("https://github.com/tree-sitter/tree-sitter-bash"))
@@ -1655,7 +1652,7 @@ fundamental-mode) for performance sake."
 ** Languages
 *** Assembly
 #+begin_src emacs-lisp
-(use-package asm-mode :elpaca nil
+(use-package asm-mode
   :config
   (defun asm-calculate-indentation ()
     (or
@@ -1669,13 +1666,13 @@ fundamental-mode) for performance sake."
 #+end_src
 *** (Ba)sh
 #+begin_src emacs-lisp
-(use-package sh-mode :elpaca nil
+(use-package sh-mode
   :init (add-to-list 'major-mode-remap-alist '(sh-mode . bash-ts-mode)))
 #+end_src
 
 *** C/C++
 #+BEGIN_SRC emacs-lisp
-(use-package c-ts-mode :elpaca nil
+(use-package c-ts-mode
   :mode (("\\.\\(c\\|h\\)\\(\\.inl\\)?\\'" . c-ts-mode)
          ("\\.\\(c\\|h\\)pp\\(\\.inl\\)?\\'" . c++-ts-mode))
   :init
@@ -1781,19 +1778,19 @@ fundamental-mode) for performance sake."
 
 *** Dockerfile & Containerfile
 #+begin_src emacs-lisp
-(use-package dockerfile-ts-mode :elpaca nil
+(use-package dockerfile-ts-mode
   :mode (("\\(?:Dockerfile\\(?:\\..*\\)?\\|\\.[Dd]ockerfile\\)\\'"       . dockerfile-ts-mode)
          ("\\(?:Containerfile\\(?:\\..*\\)?\\|\\.[Cc]ontainerfile\\)\\'" . dockerfile-ts-mode)))
 #+end_src
 
 *** GLSL
 #+begin_src emacs-lisp
-(use-package glsl-mode)
+(use-package glsl-mode :elpaca t)
 #+end_src
 
 *** Go
 #+BEGIN_SRC emacs-lisp
-(use-package go-mode
+(use-package go-mode :elpaca t
   :config
   (setq! gofmt-command "goimports")
   (add-hook! go-mode (add-hook! :local 'before-save-hook 'gofmt-before-save)))
@@ -1812,7 +1809,7 @@ fundamental-mode) for performance sake."
 
 *** Javascript (& JSON)
 #+begin_src emacs-lisp
-(use-package js :elpaca nil
+(use-package js
   :init
   (add-to-list 'major-mode-remap-alist '(js-mode      . js-ts-mode))
   (add-to-list 'major-mode-remap-alist '(js-json-mode . json-ts-mode))
@@ -1850,12 +1847,12 @@ fundamental-mode) for performance sake."
 
 *** Markdown
 #+begin_src emacs-lisp
-(use-package markdown-mode)
+(use-package markdown-mode :elpaca t)
 #+end_src
 
 *** MATLAB & Octave
 #+BEGIN_SRC emacs-lisp
-(use-package octave :elpaca nil
+(use-package octave
   :mode (("\\.m\\'" . octave-mode))
   :config
   (setq! inferior-octave-startup-args '("-i" "--line-editing")
@@ -1873,7 +1870,7 @@ fundamental-mode) for performance sake."
   :init   (setq! magic-mode-alist (assq-delete-all 'matlab-is-matlab-file magic-mode-alist))
   :config (setq! magic-mode-alist (assq-delete-all 'matlab-is-matlab-file magic-mode-alist)))
 
-(use-package matlab-shell :elpaca nil
+(use-package matlab-shell
   :config
   (setq! matlab-shell-command-switches '("-nodesktop" "-nosplash")
          matlab-shell-history-file "~/.matlab/%s/nox-history.m"
@@ -1906,7 +1903,7 @@ fundamental-mode) for performance sake."
 
 *** MIPS
 #+BEGIN_SRC emacs-lisp
-(use-package mips-mode :elpaca nil
+(use-package mips-mode
   :config
   (setq! mips-operator-column    (* tab-width 2)
          mips-operands-column (+ (* tab-width 2) mips-operator-column)
@@ -1915,7 +1912,7 @@ fundamental-mode) for performance sake."
 
 *** Python
 #+begin_src emacs-lisp
-(use-package python :elpaca nil
+(use-package python
   :init (add-to-list 'major-mode-remap-alist '(python-mode . python-ts-mode))
   :config
   (when (executable-find "ipython")
@@ -1934,7 +1931,7 @@ fundamental-mode) for performance sake."
 
 *** SPICE
 #+begin_src emacs-lisp
-(use-package spice-mode :elpaca nil
+(use-package spice-mode
   :mode (("\\.sp\\'"  . spice-mode)
          ("\\.cir\\'" . spice-mode)
          ("\\.cdl\\'" . spice-mode)
@@ -1947,7 +1944,7 @@ fundamental-mode) for performance sake."
 
 *** Verilog & VHDL
 #+begin_src emacs-lisp
-(use-package verilog-mode :elpaca nil
+(use-package verilog-mode
   :config
   (setq! verilog-auto-endcomments nil
          verilog-auto-lineup nil
@@ -1957,7 +1954,7 @@ fundamental-mode) for performance sake."
   ;; NOTE(nox): Prevent cluttering compilation regexp alist
   (remove-hook 'compilation-mode-hook #'verilog-error-regexp-add-emacs))
 
-(use-package vhdl-mode :elpaca nil
+(use-package vhdl-mode
   :config
   ;; NOTE(nox): Prevent cluttering compilation regexp alist
   (remove-hook 'compilation-mode-hook #'vhdl-error-regexp-add-emacs))
@@ -1965,14 +1962,14 @@ fundamental-mode) for performance sake."
 
 *** Web
 #+BEGIN_SRC emacs-lisp
-(use-package web-mode
+(use-package web-mode :elpaca t
   :mode (("\\.\\(go\\)?html?\\'" . web-mode)))
 #+END_SRC
 
 ** Org Mode
 *** Base configuration
 #+BEGIN_SRC emacs-lisp
-(use-package org
+(use-package org :elpaca t
   :general
   (nox-leader :infix "o"
     ""  '(:ignore t :wk "Org")
@@ -2270,7 +2267,7 @@ The next part was taken from DOOM themes
 
 **** Archiving
 #+begin_src emacs-lisp
-(use-package org-archive :elpaca nil
+(use-package org-archive
   :config
   (defun org-archive--compute-location (location)
     (let* ((current-file (buffer-file-name (buffer-base-buffer)))
@@ -2399,7 +2396,7 @@ parent."
 
 ***** MATLAB & Octave
 #+BEGIN_SRC emacs-lisp
-(use-package ob-octave :elpaca nil
+(use-package ob-octave
   :config
   (setq! org-babel-octave-wrapper-method
          "%s
@@ -2493,7 +2490,7 @@ that has the same language and session as the current block. ARG has same meanin
 
 **** Fix blank line insertion in lists
 #+BEGIN_SRC emacs-lisp
-(use-package org-list :elpaca nil
+(use-package org-list
   :config
   (defun org-list-separating-blank-lines-number (_pos struct _prevs)
     "Return number of blank lines that should separate items in list.
@@ -2555,14 +2552,14 @@ some heuristics to guess the result."
 #+BEGIN_SRC emacs-lisp
 ) ;; use-package
 
-(use-package org-element :elpaca nil :commands org-element-update-syntax)
+(use-package org-element :commands org-element-update-syntax)
 #+END_SRC
 
 *** Agenda
 [[https://raw.githubusercontent.com/weirdNox/dotfiles/screenshots/Agenda.png][https://raw.githubusercontent.com/weirdNox/dotfiles/screenshots/Agenda.png]]
 
 #+BEGIN_SRC emacs-lisp
-(use-package org-agenda :elpaca nil
+(use-package org-agenda
   :general
   (nox-leader "a" '(org-agenda :wk "Agenda"))
 
@@ -3132,7 +3129,7 @@ after removing the face property. This serves to restore the custom face set in 
 
 *** Attach
 #+BEGIN_SRC emacs-lisp
-(use-package org-attach :elpaca nil
+(use-package org-attach
   :config
   (setq! org-attach-directory "resources/attach/"
          org-attach-method 'mv
@@ -3141,9 +3138,9 @@ after removing the face property. This serves to restore the custom face set in 
 
 *** Capture and protocol
 #+BEGIN_SRC emacs-lisp
-(use-package org-protocol :elpaca nil :commands org-protocol-check-filename-for-protocol)
+(use-package org-protocol :commands org-protocol-check-filename-for-protocol)
 
-(use-package org-capture :elpaca nil
+(use-package org-capture
   :commands +capture-frame
   :config
   (defun +capture-frame (&optional org-protocol-url)
@@ -3261,7 +3258,7 @@ after removing the face property. This serves to restore the custom face set in 
 
 *** Clocking
 #+BEGIN_SRC emacs-lisp
-(use-package org-clock :elpaca nil
+(use-package org-clock
   :config
   (defun org-clock-get-clock-string ()
     "Form a clock-string, that will be shown in the mode line."
@@ -3302,14 +3299,14 @@ When optional argument is non-nil, refresh cached heading."
 
 *** Element
 #+begin_src emacs-lisp
-(use-package org-element :elpaca nil
+(use-package org-element
   :config
   (setq! org-element-use-cache nil))
 #+end_src
 
 *** Habit
 #+BEGIN_SRC emacs-lisp
-(use-package org-habit :elpaca nil
+(use-package org-habit
   :config
   (setq! org-habit-graph-column 75
          org-habit-preceding-days 30
@@ -3319,7 +3316,7 @@ When optional argument is non-nil, refresh cached heading."
 
 *** IDs
 #+BEGIN_SRC emacs-lisp
-(use-package org-id :elpaca nil
+(use-package org-id
   :config
   (setq! org-id-link-to-org-use-id 'create-if-interactive
          org-id-locations-file (concat nox-cache-dir "org-id-locations")))
@@ -3327,13 +3324,13 @@ When optional argument is non-nil, refresh cached heading."
 
 *** Latex editor and helpers
 #+BEGIN_SRC emacs-lisp
-(use-package org-edit-latex)
-(use-package cdlatex)
+(use-package org-edit-latex :elpaca t)
+(use-package cdlatex :elpaca t)
 #+END_SRC
 
 *** Org Noter
 #+BEGIN_SRC emacs-lisp
-(use-package org-noter
+(use-package org-noter :elpaca t
   :general
   (nox-local-leader :keymaps 'org-mode-map      "n" '(org-noter :wk "Org Noter"))
   (nox-local-leader :keymaps 'pdf-view-mode-map "n" '(org-noter :wk "Org Noter"))
@@ -3346,14 +3343,14 @@ When optional argument is non-nil, refresh cached heading."
 
 *** Persist
 #+begin_src emacs-lisp
-(use-package org-persist :elpaca nil
+(use-package org-persist
   :config
   (setq! org-persist-directory (concat nox-cache-dir "org-persist/")))
 #+end_src
 
 *** Source blocks
 #+BEGIN_SRC emacs-lisp
-(use-package org-src :elpaca nil
+(use-package org-src
   :config
   (setq! org-src-fontify-natively t
          org-src-tab-acts-natively t
@@ -3363,14 +3360,14 @@ When optional argument is non-nil, refresh cached heading."
 
 *** Contributed packages
 #+begin_src emacs-lisp
-(use-package org-contrib)
+(use-package org-contrib :elpaca t)
 #+end_src
 
 ** Tools and utilities
 *** BibTeX & BibLaTeX
 **** General
 #+BEGIN_SRC emacs-lisp
-(use-package bibtex :elpaca nil
+(use-package bibtex
   :init
   (defvar +bibtex-bibliography '("~/archive/literature/references.bib"))
 
@@ -3635,11 +3632,11 @@ Return the result as a string."
               ((bibtex-string= entry-type "string") (setq entry-type 'string))
               (t (bibtex-format-entry)))))))
 
-(use-package reftex :elpaca nil
+(use-package reftex
   :config
   (setq! reftex-default-bibliography +bibtex-bibliography))
 
-(use-package biblio
+(use-package biblio :elpaca t
   :demand
   :after biblio-core
   :config
@@ -3659,7 +3656,7 @@ Return the result as a string."
 
 **** Completion
 #+begin_src emacs-lisp
-(use-package bibtex-completion
+(use-package bibtex-completion :elpaca t
   :after embark
   :commands nox/bibtex +org-bibtex-open
   :config
@@ -3911,14 +3908,14 @@ Return the result as a string."
 
 *** Calc
 #+begin_src emacs-lisp
-(use-package calc :elpaca nil
+(use-package calc
   :config
   (setq! calc-float-format '(eng 0)))
 #+end_src
 
 *** CMake
 #+begin_src emacs-lisp
-(use-package cmake-ts-mode :elpaca nil
+(use-package cmake-ts-mode
   :mode (("CMakeLists\\.txt\\'" . cmake-ts-mode)
          ("\\.cmake\\'"         . cmake-ts-mode))
   :config
@@ -3937,7 +3934,7 @@ Return the result as a string."
 *** Compilation
 **** General settings and bindings
 #+BEGIN_SRC emacs-lisp
-(use-package compile :elpaca nil
+(use-package compile
   :general
   (nox-leader "c" '(+compile :wk "Compile"))
   ("M-g n" '(nox@error/next-error :wk "Next error")
@@ -4196,7 +4193,7 @@ Return the result as a string."
 *** Dired
 **** Base and utility functions
 #+BEGIN_SRC emacs-lisp
-(use-package dired :elpaca nil
+(use-package dired
   :config
   (after! dired+ ;; This overrides the keys, so only after loading
     (general-def :keymaps 'dired-mode-map
@@ -4389,7 +4386,7 @@ Return the result as a string."
 
 **** Diredfl and Dired+
 #+BEGIN_SRC emacs-lisp
-(use-package diredfl
+(use-package diredfl :elpaca t
   :after dired :demand
   :config (diredfl-global-mode))
 
@@ -4401,14 +4398,14 @@ Return the result as a string."
 *** Document viewers
 **** Doc View
 #+BEGIN_SRC emacs-lisp
-(use-package doc-view :elpaca nil
+(use-package doc-view
   :config
   (setq! doc-view-resolution 400))
 #+END_SRC
 
 **** PDF Tools
 #+BEGIN_SRC emacs-lisp
-(use-package pdf-tools
+(use-package pdf-tools :elpaca t
   :mode ("\\.pdf\\'" . pdf-view-mode)
   :commands (org-pdfview-open org-pdfview-store-link org-pdfview-complete-link)
   :general
@@ -4484,9 +4481,9 @@ and append it."
                             (:eval (number-to-string (pdf-cache-number-of-pages)))
                             "]")))))
 
-(use-package pdf-annot :elpaca nil :config (setq! pdf-annot-tweak-tooltips nil))
-(use-package pdf-cache :elpaca nil :config (setq! pdf-cache-image-limit 200))
-(use-package pdf-view :elpaca nil
+(use-package pdf-annot :config (setq! pdf-annot-tweak-tooltips nil))
+(use-package pdf-cache :config (setq! pdf-cache-image-limit 200))
+(use-package pdf-view
   :config
   (setq! pdf-view-display-size 'fit-page
          pdf-view-use-imagemagick t))
@@ -4494,7 +4491,7 @@ and append it."
 
 **** Nov.el
 #+BEGIN_SRC emacs-lisp
-(use-package nov
+(use-package nov :elpaca t
   :mode (("\\.epub\\'" . nov-mode))
   :config
   (setq! nov-save-place-file (concat nox-cache-dir "nov-places")))
@@ -4502,7 +4499,7 @@ and append it."
 
 *** Diff viewers and conflict resolvers
 #+BEGIN_SRC emacs-lisp
-(use-package ediff :elpaca nil
+(use-package ediff
   :config
   (setq! ediff-split-window-function #'split-window-horizontally
          ediff-window-setup-function #'ediff-setup-windows-plain
@@ -4522,7 +4519,7 @@ and append it."
                       (ediff-get-region-contents ediff-current-difference 'B ediff-control-buffer))))
   (add-hook! 'ediff-keymap-setup-hook (define-key ediff-mode-map "d" 'ediff/copy-both-to-C)))
 
-(use-package smerge-mode :elpaca nil
+(use-package smerge-mode
   :config
   (defhydra +smerge@commands
     (:color pink :hint nil :post (smerge-auto-leave))
@@ -4561,7 +4558,7 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 
 *** Eshell
 #+BEGIN_SRC emacs-lisp
-(use-package eshell :elpaca nil
+(use-package eshell
   :config
   (setq! eshell-directory-name (concat nox-cache-dir "eshell/")))
 #+END_SRC
@@ -4578,13 +4575,13 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 
 *** Git
 #+BEGIN_SRC emacs-lisp
-(use-package transient
+(use-package transient :elpaca t
   :init
   (setq! transient-levels-file  (concat nox-etc-dir   "transient/levels.el")
          transient-values-file  (concat nox-etc-dir   "transient/values.el")
          transient-history-file (concat nox-cache-dir "transient/history.el")))
 
-(use-package magit
+(use-package magit :elpaca t
   :when (executable-find "git")
   :config
   (setq! magit-diff-refine-hunk 'all
@@ -4616,14 +4613,14 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 *** Misc
 **** Apropos
 #+BEGIN_SRC emacs-lisp
-(use-package apropos :elpaca nil
+(use-package apropos
   :config
   (setq! apropos-do-all t))
 #+END_SRC
 
 **** Calendar and holidays
 #+BEGIN_SRC emacs-lisp
-(use-package calendar :elpaca nil
+(use-package calendar
   :config
   (setq! calendar-week-start-day 1
          calendar-location-name "Porto"
@@ -4631,7 +4628,7 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
          calendar-longitude -8.6291
          calendar-date-display-form calendar-european-date-display-form))
 
-(use-package holidays :elpaca nil
+(use-package holidays
   :config
   (setq! calendar-holidays
          '((holiday-fixed  1  1    "New Year's Day")
@@ -4652,14 +4649,14 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 
 **** Help
 #+BEGIN_SRC emacs-lisp
-(use-package help :elpaca nil
+(use-package help
   :config
   (setq! help-window-select t))
 #+END_SRC
 
 **** Spelling
 #+BEGIN_SRC emacs-lisp
-(use-package ispell :elpaca nil
+(use-package ispell
   :config
   (setq! ispell-program-name (or (executable-find "hunspell")
                                  (executable-find "aspell")
@@ -4669,7 +4666,7 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 
 **** Uniquify
 #+BEGIN_SRC emacs-lisp
-(use-package uniquify :elpaca nil
+(use-package uniquify
   :config
   (setq! uniquify-buffer-name-style 'forward
          uniquify-separator "/"
@@ -4678,7 +4675,7 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 
 **** Time
 #+BEGIN_SRC emacs-lisp
-(use-package time :elpaca nil
+(use-package time
   :init
   (setq! display-time-24hr-format t
          display-time-default-load-average nil)
@@ -4687,14 +4684,14 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 
 *** SageMath
 #+begin_src emacs-lisp
-(use-package sage-shell-mode
+(use-package sage-shell-mode :elpaca t
   :init
   (sage-shell:define-alias))
 #+end_src
 
 *** Tramp
 #+BEGIN_SRC emacs-lisp
-(use-package tramp :elpaca nil
+(use-package tramp
   :config
   (setq! tramp-default-method "ssh"
          tramp-remote-path '(tramp-own-remote-path "/usr/bin" "/usr/sbin" "/bin" "/sbin")
@@ -4734,7 +4731,7 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 
 *** Which-key
 #+BEGIN_SRC emacs-lisp
-(use-package which-key
+(use-package which-key :elpaca t
   :defer 1
   :after-call pre-command-hook
   :config
