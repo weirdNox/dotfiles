@@ -1307,7 +1307,7 @@ Position the cursor at its beginning, according to the current mode."
                              embark-highlight-indicator
                              embark-isearch-highlight-indicator)))
 (use-package embark-consult :elpaca t
-  :after (embark consult) :demand
+  :after embark consult :demand
   :hook (embark-collect-mode-hook . embark-consult-preview-minor-mode))
 
 (use-package marginalia :elpaca t
@@ -2530,8 +2530,9 @@ some heuristics to guess the result."
 
 **** File associations
 #+begin_src emacs-lisp
-(setq! org-file-apps '(("pdf" . emacs))
-       org-file-apps-gnu '((remote . emacs) (system . "setsid -w xdg-open %s") (t . system)))
+(setq! org-file-apps '((auto-mode . emacs)
+                       (directory . emacs)
+                       ("\\.x?html?\\'" . default)))
 #+end_src
 
 ***** PDF Tools support
@@ -3364,77 +3365,19 @@ When optional argument is non-nil, refresh cached heading."
 #+end_src
 
 ** Tools and utilities
-*** BibTeX & BibLaTeX
-**** General
-#+BEGIN_SRC emacs-lisp
+*** Bibliography (BibTeX, BibLaTeX, etc)
+#+begin_src emacs-lisp
+(defvar nox-bibliography-root "~/archive/literature")
+(defvar nox-bibliography-refs-file (expand-file-name "references.bib" nox-bibliography-root))
+(defvar nox-bibliography-files-dir (expand-file-name "files"          nox-bibliography-root))
+(defvar nox-bibliography-notes-dir (expand-file-name "notes"          nox-bibliography-root))
+
 (use-package bibtex
-  :init
-  (defvar +bibtex-bibliography '("~/archive/literature/references.bib"))
-
-  (defvar-local +bibtex-pdf-relative-dir "pdfs/")
-  (defsubst +bibtex-pdf-dir (bib-file-path)
-    (expand-file-name +bibtex-pdf-relative-dir (file-name-directory (or (car-safe bib-file-path) bib-file-path))))
-
-  (defvar-local +bibtex-notes-relative-dir "notes/")
-  (defsubst +bibtex-notes-dir (bib-file-path)
-    (expand-file-name +bibtex-notes-relative-dir (file-name-directory (or (car-safe bib-file-path) bib-file-path))))
-
-  (add-hook 'bibtex-mode-hook #'+tex*set-auto-location)
-
   :config
   (setq! bibtex-dialect 'biblatex
          bibtex-entry-format '(numerical-fields page-dashes whitespace inherit-booktitle realign
-                                                last-comma delimiters unify-case braces strings sort-fields)
+                               last-comma delimiters unify-case braces strings sort-fields)
          bibtex-align-at-equal-sign t)
-
-  (defun +bibtex-assoc-pdf (&optional prefix)
-    "Prompt for a PDF to associate with entry at point.
-If an associated PDF already exists in the corresponding PDFs folder:
-- When called interactively, it will ask if you want to replace it.
-- Else, it will return without doing anything (useful for batch functions)
-The PDF file will be moved to the PDFs folder by default.
-Optional PREFIX argument toggles between `rename-file' and `copy-file'."
-    (interactive "P")
-    (save-excursion
-      (bibtex-beginning-of-entry)
-      (let* ((bibtex-expand-strings t)
-             (entry (bibtex-parse-entry t))
-             (key (cdr (assoc "=key=" entry)))
-             (pdf-dir (+bibtex-pdf-dir buffer-file-name))
-             (target-pdf (expand-file-name (concat key ".pdf") pdf-dir))
-             (target-exists (file-exists-p target-pdf))
-             (file-move-func (if prefix #'copy-file #'rename-file)))
-        (when (or (not target-exists)
-                  (and (called-interactively-p 'any)
-                       (y-or-n-p
-                        (format "A file named %s already exists. Do you want to replace it anyway? "
-                                target-pdf))))
-          (when target-exists
-            (message "Moving old %s to trash..." (concat key ".pdf"))
-            (move-file-to-trash target-pdf))
-
-          (funcall file-move-func
-                   (read-file-name (format "Select file associated with entry %s: " key)
-                                   (and (fboundp #'dired-dwim-target-directory)
-                                        (dired-dwim-target-directory)))
-                   target-pdf)
-
-          (message "Created file %s" target-pdf)))))
-
-  (defun +bibtex-assoc-pdf-global (&optional prefix)
-    "Associate PDFs with all the entries that don't already have one.
-If you don't want to associate a specific entry with any PDF, you
-may quit with \\[keyboard-quit] and it will continue to the next
-one.
-See `+bibtex-assoc-pdf' for more information about associating with PDFs."
-    (interactive "P")
-    (save-excursion
-      (goto-char (point-min))
-      (bibtex-map-entries (lambda (key begin end)
-                            (let ((inhibit-quit t))
-                              (cl-letf (((symbol-function 'message) (lambda (&rest _))))
-                                (with-local-quit (+bibtex-assoc-pdf prefix))
-                                (setq quit-flag nil)))))))
 
   ;; NOTE(nox): Key generation
   (setq! bibtex-autokey-names 2
@@ -3453,8 +3396,7 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
 
   (defun +bibtex-replace-key ()
     "Replace the key in the entry."
-    (let ((new-key (bibtex-generate-autokey))
-          old-key duplicate-pos)
+    (let ((new-key (bibtex-generate-autokey)) old-key duplicate-pos)
       (bibtex-beginning-of-entry)
 
       (re-search-forward bibtex-entry-maybe-empty-head)
@@ -3478,7 +3420,8 @@ See `+bibtex-assoc-pdf' for more information about associating with PDFs."
         (insert new-key)
         (kill-new new-key)
 
-        (let* ((pdf-dir (+bibtex-pdf-dir buffer-file-name))
+        (let* ((pdf-dir (expand-file-name (file-name-nondirectory nox-bibliography-files-dir)
+                                          (file-name-directory buffer-file-name)))
                (old-pdf (and old-key (expand-file-name (concat old-key ".pdf") pdf-dir)))
                (old-exists (and old-pdf (file-exists-p old-pdf)))
                (new-pdf (expand-file-name (concat new-key ".pdf") pdf-dir))
@@ -3632,278 +3575,21 @@ Return the result as a string."
               ((bibtex-string= entry-type "string") (setq entry-type 'string))
               (t (bibtex-format-entry)))))))
 
-(use-package reftex
+(use-package reftex :config (setq! reftex-default-bibliography nox-bibliography-refs-file))
+
+(use-package citar :elpaca t
   :config
-  (setq! reftex-default-bibliography +bibtex-bibliography))
+  (setq! citar-bibliography  (list nox-bibliography-refs-file)
+         citar-library-paths (list nox-bibliography-files-dir)
+         citar-notes-paths   (list nox-bibliography-notes-dir)
+         citar-file-additional-files-separator "-"
+         citar-indicators (list (citar-indicator-create :symbol "" :function #'citar-has-files :tag "has:files")
+                                (citar-indicator-create :symbol "" :function #'citar-has-links :tag "has:links")
+                                (citar-indicator-create :symbol "" :function #'citar-has-notes :tag "has:notes"))))
 
-(use-package biblio :elpaca t
-  :demand
-  :after biblio-core
-  :config
-  (defun +biblio-cleanup-bibtex (_)
-    (save-excursion (when (search-forward "@data{" nil t) (replace-match "@misc{")))
-    (ignore-errors
-      (condition-case _
-          (progn
-            (bibtex-set-dialect 'biblatex t)
-            (bibtex-clean-entry))
-        (error
-         (bibtex-set-dialect 'BibTeX t)
-         (bibtex-clean-entry)))))
-
-  (setq! biblio-cleanup-bibtex-function #'+biblio-cleanup-bibtex))
-#+END_SRC
-
-**** Completion
-#+begin_src emacs-lisp
-(use-package bibtex-completion :elpaca t
-  :after embark
-  :commands nox/bibtex +org-bibtex-open
-  :config
-  (setq!
-   bibtex-completion-bibliography +bibtex-bibliography
-   bibtex-completion-additional-search-fields '("searchtitle" "maintitle" "volume" "keywords" "url")
-
-   bibtex-completion-find-additional-pdfs t
-   bibtex-completion-pdf-extension '(".pdf" ".djvu")
-   bibtex-completion-notes-extension ".org"
-
-   bibtex-completion-pdf-symbol   ""
-   bibtex-completion-notes-symbol ""
-   bibtex-completion-link-symbol  "")
-
-  (setq! +bibtex-completion-templates
-         '((t . "${=has-pdf=}${=has-note=}${=has-link=} ${author:36} │ ${title:*} ${year:4} ${=type=:7}"))
-         bibtex-completion-notes-template-multiple-files (format "#+TITLE: ${title} (${year})
-,#+AUTHOR: ${author-or-editor}
-
-,* Notes
-:PROPERTIES:
-:Custom_ID: ${=key=}
-:NOTER_DOCUMENT: %s${=key=}.pdf
-:END:
-"
-                                                                 (concat "../" +bibtex-pdf-relative-dir)))
-
-  (setq! +bibtex-completion--candidates-hash  ""
-         +bibtex-completion--candidates-cache nil)
-
-  (defun +bibtex-completion--process-templates (templates)
-    (cl-loop for template in templates
-             collect
-             (let* ((template-string (cdr template))
-                    (fields-width 0)
-                    (string-width
-                     (string-width
-                      (s-format template-string
-                                (lambda (field)
-                                  (setq fields-width
-                                        (+ fields-width
-                                           (string-to-number (or (cadr (split-string field ":")) ""))))
-                                  "")))))
-               (-cons* (car template) template-string (+ fields-width string-width)))))
-
-  (defun +bibtex-completion--format-entry (entry width formats)
-    (let* ((type (bibtex-completion-get-value "=type=" entry))
-           (format (or (assoc-string type formats 'case-fold) (assoc t formats)))
-           (format-string (cadr format)))
-      (concat
-       (s-format
-        format-string
-        (lambda (field)
-          (let* ((field (split-string field ":"))
-                 (field-name (car field))
-                 (field-width (cadr field))
-                 field-value)
-            (cond
-             ((string= field-name "title")
-              (let ((title (bibtex-completion-get-value "title" entry))
-                    (searchtitle (bibtex-completion-get-value "searchtitle" entry))
-                    (maintitle (bibtex-completion-get-value "maintitle" entry))
-                    (volume (bibtex-completion-get-value "volume" entry)))
-                (setq field-value
-                      (or searchtitle
-                          (concat (when maintitle (concat maintitle
-                                                          (when volume ", Vol. ") volume
-                                                          (when title ": ")))
-                                  title)))))
-
-             ((string= field-name "author")
-              (setq field-value (or (bibtex-completion-get-value "author" entry)
-                                    (bibtex-completion-get-value "editor" entry))))
-
-             ((string= field-name "year")
-              (setq field-value (or (bibtex-completion-get-value "year" entry)
-                                    (car (split-string (bibtex-completion-get-value "date" entry "") "-")))))
-
-             ((string= field-name "=has-link=")
-              (setq field-value (and (bibtex-completion-get-value "url" entry)
-                                     bibtex-completion-link-symbol)))
-
-             (t (setq field-value (bibtex-completion-get-value field-name entry))))
-
-            (when (member field-name '("=has-pdf=" "=has-note=" "=has-link="))
-              (setq field-value (or field-value "  ")))
-
-            (setq field-value (if field-value (replace-regexp-in-string "[\"{}]+" "" field-value) " "))
-
-            (when (member field-name '("author" "editor"))
-              (setq field-value (bibtex-completion-shorten-authors field-value)))
-
-            (if (not field-width)
-                field-value
-              (setq field-width (string-to-number field-width))
-              (when (<= field-width 0) (setq field-width (- width (cddr format))))
-              (truncate-string-to-width field-value field-width 0 ?\s)))))
-       " "
-       (propertize
-        (let ((author (bibtex-completion-get-value "author" entry))
-              (keywords (bibtex-completion-get-value "keywords" entry))
-              (pdf  (and (assoc "=has-pdf="  (cdr entry)) "has:pdf"))
-              (note (and (assoc "=has-note=" (cdr entry)) "has:note"))
-              (link (and (assoc "url"        (cdr entry)) "has:link"))
-              (citekey (bibtex-completion-get-value "=key=" entry)))
-          ;; NOTE(nox): citekey must be last!
-          (s-join " " (list author keywords pdf note link citekey)))
-        'invisible t))))
-
-  (defun +bibtex-completion--format-candidates (candidates)
-    (let ((formats (+bibtex-completion--process-templates +bibtex-completion-templates))
-          (width (- (frame-width) 6)))
-      (cl-loop for candidate in candidates
-               collect (cons (s-trim-right (+bibtex-completion--format-entry candidate width formats))
-                             (bibtex-completion-get-value "=key=" candidate)))))
-
-  (defun +bibtex-completion--hash-candidates (candidates)
-    (secure-hash 'sha256 (cl-loop for candidate in candidates
-                                  concat (car candidate))))
-
-  (defun +bibtex-completion--get-formatted-candidates (&optional rebuild-cache)
-    (when rebuild-cache (bibtex-completion-clear-cache))
-
-    (let* ((candidates (bibtex-completion-candidates))
-           (candidates-hash (+bibtex-completion--hash-candidates candidates)))
-      (when (or rebuild-cache
-                (not (string= +bibtex-completion--candidates-hash candidates-hash)))
-        (setq +bibtex-completion--candidates-hash candidates-hash
-              +bibtex-completion--candidates-cache (+bibtex-completion--format-candidates candidates))))
-
-    +bibtex-completion--candidates-cache)
-
-  (defun +bibtex-completion--get-default ()
-    (when-let ((at-point (bibtex-completion-key-at-point))
-               (entry (bibtex-completion-get-entry at-point))
-               (formatted (+bibtex-completion--format-candidates (list entry))))
-      (car formatted)))
-
-  (defun +bibtex-completion--prompt (&optional local-bib rebuild-cache)
-    (when-let ((candidates (+bibtex-completion--get-formatted-candidates rebuild-cache))
-               (chosen (consult--read candidates
-                                      :prompt (format "Entries%s: " (if local-bib " (local)" ""))
-                                      :category 'bibtex
-                                      :require-match t
-                                      :default (+bibtex-completion--get-default)
-                                      :sort nil)))
-      (list (cdr (assoc chosen candidates)))))
-
-  (defun nox/bibtex (&optional arg)
-    (interactive "P")
-    (let* ((local-bib (and (not (and (numberp arg) (= arg 0)))
-                           (eq major-mode 'bibtex-mode)
-                           (bibtex-completion-find-local-bibliography)))
-           (bibtex-completion-bibliography (or local-bib
-                                               bibtex-completion-bibliography))
-           (bibtex-completion-library-path (+bibtex-pdf-dir bibtex-completion-bibliography))
-           (bibtex-completion-notes-path (+bibtex-notes-dir bibtex-completion-bibliography)))
-      (bibtex-completion-open-any (+bibtex-completion--prompt local-bib arg))))
-
-  (defun bibtex-completion-apa-get-value (field entry &optional default)
-    (pcase field
-      ("author-or-editor"
-       (if-let (value (bibtex-completion-get-value "author" entry))
-           (bibtex-completion-apa-format-authors value)
-         (bibtex-completion-apa-format-editors (bibtex-completion-get-value "editor" entry))))
-      ("author-or-editor-abbrev"
-       (if-let (value (bibtex-completion-get-value "author" entry))
-           (bibtex-completion-apa-format-authors-abbrev value)
-         (bibtex-completion-apa-format-editors-abbrev (bibtex-completion-get-value "editor" entry))))
-      ("author-abbrev"
-       (when-let (value (bibtex-completion-get-value "author" entry))
-         (bibtex-completion-apa-format-authors-abbrev value)))
-      ("editor-abbrev"
-       (when-let (value (bibtex-completion-get-value "editor" entry))
-         (bibtex-completion-apa-format-editors-abbrev value)))
-      (_
-       (if-let (value (bibtex-completion-get-value field entry))
-           (pcase field
-             ("author" (bibtex-completion-apa-format-authors value))
-             ("editor" (bibtex-completion-apa-format-editors value))
-             ("title" (replace-regexp-in-string
-                       "[{}]"
-                       ""
-                       (replace-regexp-in-string
-                        "\\\\[[:alpha:]]+{"
-                        ""
-                        (s-replace "\\" "\\\\" value))))
-             ("booktitle" value)
-             ("pages" (s-join "–" (s-split "[^0-9]+" value t)))
-             ("doi" (s-concat " http://dx.doi.org/" value))
-             ("year" (or value
-                         (car (split-string (bibtex-completion-get-value "date" entry "") "-"))))
-             (_ value))
-         ""))))
-
-  (defun nox*disable-completion-notes-mode (&optional _) (widen))
-  (advice-add #'bibtex-completion-notes-mode :override #'nox*disable-completion-notes-mode)
-
-  ;; NOTE(nox): Integrations
-  (defvar +bibtex-completion-external-key nil)
-  (defun +bibtex-completion-get-key-external () +bibtex-completion-external-key)
-  (add-to-list 'bibtex-completion-key-at-point-functions #'+bibtex-completion-get-key-external)
-
-  ;; NOTE(nox): Integration with org-mode
-  (defun +org-bibtex-open (path _)
-    (let ((+bibtex-completion-external-key path))
-      (nox/bibtex)))
-
-  ;; NOTE(nox): Embark actions
-  (defsubst +bibtex-completion--get-key-from-string (entry-str)
-    (substring-no-properties (replace-regexp-in-string ".* " "" entry-str)))
-
-  (defun +bibtex-completion--insert-key (entry-str)
-    (when-let (key (+bibtex-completion--get-key-from-string entry-str))
-      (bibtex-completion-insert-key (list key))))
-
-  (defun +bibtex-completion--insert-bibtex (entry-str)
-    (when-let (key (+bibtex-completion--get-key-from-string entry-str))
-      (bibtex-completion-insert-bibtex (list key))))
-
-  (defun +bibtex-completion--insert-citation (entry-str)
-    (when-let (key (+bibtex-completion--get-key-from-string entry-str))
-      (bibtex-completion-insert-citation (list key))))
-
-  (defun +bibtex-completion--show-entry (entry-str)
-    (when-let (key (+bibtex-completion--get-key-from-string entry-str))
-      (bibtex-completion-show-entry (list key))))
-
-  (defun +bibtex-completion--open-link (entry-str)
-    (when-let (key (+bibtex-completion--get-key-from-string entry-str))
-      (bibtex-completion-open-url-or-doi (list key))))
-
-  (defun +bibtex-completion--insert-org-link (entry-str)
-    (when-let ((key (+bibtex-completion--get-key-from-string entry-str))
-               (entry (bibtex-completion-get-entry key))
-               (title (bibtex-completion-apa-get-value "title" entry)))
-      (insert (format "[[bibtex:%s][%s]]" key title))))
-
-  (defvar-keymap embark-bibtex-map
-    "k" #'+bibtex-completion--insert-key
-    "b" #'+bibtex-completion--insert-bibtex
-    "c" #'+bibtex-completion--insert-citation
-    "s" #'+bibtex-completion--show-entry
-    "l" #'+bibtex-completion--open-link
-    "O" #'+bibtex-completion--insert-org-link)
-  (add-to-list 'embark-keymap-alist '(bibtex . embark-bibtex-map)))
+(use-package citar-embark :elpaca t
+  :after citar embark :demand
+  :config (citar-embark-mode))
 #+end_src
 
 *** Calc
@@ -4189,6 +3875,46 @@ Return the result as a string."
 #+BEGIN_SRC emacs-lisp
 ) ;; (use-package compile)
 #+END_SRC
+
+*** Denote
+#+begin_src emacs-lisp
+(use-package denote :elpaca t
+  :general
+  (:prefix "C-c n"
+           "n"   #'denote-open-or-create
+           "s"   #'+denote/search-in-all-notes
+           "N"   #'denote-type
+           "d"   #'denote-date
+           "t"   #'denote-template
+           "i"   #'denote-link
+           "I"   #'denote-add-links
+           "b"   #'denote-backlinks
+           "f f" #'denote-find-link
+           "f b" #'denote-find-backlink
+           "r"   #'denote-rename-file
+           "R"   #'denote-rename-file-using-front-matter)
+  (:prefix "C-c n" :keymaps 'dired-mode-map
+           "C-i" #'denote-link-dired-marked-notes
+           "C-r" #'denote-dired-rename-marked-files
+           "C-R" #'denote-dired-rename-marked-files-using-front-matter)
+  :init
+  (add-hook! dired-mode #'denote-dired-mode-in-directories)
+  (after! org-capture
+    (add-to-list 'org-capture-templates
+                 '("n" "New denote" plain (file denote-last-path) #'denote-org-capture
+                   :no-save t :immediate-finish nil :kill-buffer t :jump-to-captured t)))
+
+  :config
+  (setq! denote-directory "~/archive/notes"
+         denote-known-keywords '()
+         denote-date-prompt-use-org-read-date t
+         denote-allow-multi-word-keywords t
+         denote-backlinks-show-context t)
+
+  (defun +denote/search-in-all-notes ()
+    (interactive)
+    (consult-ripgrep denote-directory)))
+#+end_src
 
 *** Dired
 **** Base and utility functions
