@@ -470,62 +470,6 @@ symbols.
 (add-to-list 'load-path nox-repo-packages-dir)
 #+end_src
 
-*** Hooks
-**** Window and buffer switch
-#+BEGIN_SRC emacs-lisp
-(defvar nox-exit-window-hook nil
-  "Hook run before `switch-window' or `switch-frame' are called. See
-`nox-enter-window-hook'.")
-
-(defvar nox-enter-window-hook nil
-  "Hook run after `switch-window' or `switch-frame' are called. See
-`nox-exit-window-hook'.")
-
-(defvar nox-exit-buffer-hook nil
-  "Hook run before `switch-to-buffer', `pop-to-buffer' or `display-buffer' are
-called. The buffer to be switched to is current when these hooks run.")
-
-(defvar nox-enter-buffer-hook nil
-  "Hook run after `switch-to-buffer', `pop-to-buffer' or `display-buffer' are
-called. The buffer to be switched to is current when these hooks run.")
-
-(defvar nox-inhibit-switch-buffer-hooks nil)
-(defvar nox-inhibit-switch-window-hooks nil)
-
-(defun nox*switch-window-hooks (orig-fn window &optional norecord)
-  (if (or nox-inhibit-switch-window-hooks
-          (null window)
-          (eq window (selected-window))
-          (window-minibuffer-p)
-          (window-minibuffer-p window))
-      (funcall orig-fn window norecord)
-    (let ((nox-inhibit-switch-window-hooks t))
-      (run-hooks 'nox-exit-window-hook)
-      (prog1 (funcall orig-fn window norecord)
-        (with-selected-window window
-          (run-hooks 'nox-enter-window-hook))))))
-
-(defun nox*switch-buffer-hooks (orig-fn buffer-or-name &rest args)
-  (if (or nox-inhibit-switch-buffer-hooks
-          (eq (get-buffer buffer-or-name) (current-buffer)))
-      (apply orig-fn buffer-or-name args)
-    (let ((nox-inhibit-switch-buffer-hooks t))
-      (run-hooks 'nox-exit-buffer-hook)
-      (prog1 (apply orig-fn buffer-or-name args)
-        (with-current-buffer buffer-or-name
-          (run-hooks 'nox-enter-buffer-hook))))))
-
-(defun nox|setup-switch-hooks (&optional disable)
-  (dolist (spec '((select-window . nox*switch-window-hooks)
-                  (switch-to-buffer . nox*switch-buffer-hooks)
-                  (display-buffer . nox*switch-buffer-hooks)
-                  (pop-to-buffer . nox*switch-buffer-hooks)))
-    (if disable
-        (advice-remove (car spec) (cdr spec))
-      (advice-add (car spec) :around (cdr spec)))))
-(add-hook 'elpaca-after-init-hook #'nox|setup-switch-hooks)
-#+END_SRC
-
 *** Packages
 **** General
 #+BEGIN_SRC emacs-lisp
@@ -2104,7 +2048,6 @@ The next part was taken from DOOM themes
 **** Behavior
 #+BEGIN_SRC emacs-lisp
 (setq! org-tags-column -110
-       org-catch-invisible-edits 'smart
        org-return-follows-link t
        org-list-allow-alphabetical t
        org-loop-over-headlines-in-active-region t
@@ -2239,9 +2182,8 @@ The next part was taken from DOOM themes
        org-refile-target-verify-function #'+org|refile-target-check
        org-refile-targets `((nil . (:maxlevel . 9))
                             (,nox-org-agenda-file .  (:maxlevel . 9))
-                            (,nox-org-tickler-file . (:maxlevel . 2))
-                            (,nox-org-tracker-file . (:level    . 1))
-                            (,nox-org-someday-file . (:maxlevel . 1))))
+                            (,nox-org-tickler-file . (:maxlevel . 9))
+                            (,nox-org-someday-file . (:maxlevel . 9))))
 
 (add-hook! 'org-after-refile-insert-hook
   (org-up-heading-safe)
@@ -3297,13 +3239,6 @@ When optional argument is non-nil, refresh cached heading."
          org-clock-history-length 25)
   (org-clock-persistence-insinuate))
 #+END_SRC
-
-*** Element
-#+begin_src emacs-lisp
-(use-package org-element
-  :config
-  (setq! org-element-use-cache nil))
-#+end_src
 
 *** Habit
 #+BEGIN_SRC emacs-lisp
