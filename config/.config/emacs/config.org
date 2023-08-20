@@ -999,9 +999,10 @@ Disable fringes in the minibuffer window.
                     "j" #'xref-find-definitions
                     "o" #'xref-find-definitions-other-window)
   :config
-  (setq! dumb-jump-prefer-searcher 'rg
+  (setq! dumb-jump-force-searcher 'rg
          dumb-jump-default-project "."
-         dumb-jump-fallback-search nil))
+         dumb-jump-fallback-search nil
+         dumb-jump-find-rules nil))
 #+END_SRC
 
 **** Imenu
@@ -1717,7 +1718,21 @@ fundamental-mode) for performance sake."
       ((+c-ts-mode--parent-is "case_statement") standalone-parent c-ts-mode-indent-offset)
 
       ((node-is "field_initializer_list") parent-bol ,(* c-ts-mode-indent-offset 2))))
-  (setq! c-ts-mode-indent-style #'+c-ts-mode--indent-style))
+  (setq! c-ts-mode-indent-style #'+c-ts-mode--indent-style)
+
+  (after! dumb-jump
+    (add-to-list 'dumb-jump-find-rules
+                 '(:type "function" :supports ("ag" "rg") :language "c++"
+                         :regex "\\w+[*\\s]+JJJ\\s*\\((?s:.)*?\\)[^;\\{]\\{"))
+    (add-to-list 'dumb-jump-find-rules
+                 '(:type "define" :supports ("ag" "rg") :language "c++"
+                         :regex "^\s*#define\\s+JJJ\\b"))
+    (add-to-list 'dumb-jump-find-rules
+                 '(:type "type" :supports ("ag" "rg") :language "c++"
+                         :regex "(struct|union|class)\\b.+\\bJJJ\\s*\\{"))
+    (add-to-list 'dumb-jump-find-rules
+                 '(:type "type" :supports ("ag" "rg") :language "c++"
+                         :regex "(typedef\\b|\\}).+\\bJJJ\\s*;"))))
 #+END_SRC
 
 *** Dockerfile & Containerfile
@@ -1748,7 +1763,7 @@ fundamental-mode) for performance sake."
   (after! dumb-jump
     (add-to-list 'dumb-jump-language-file-exts '(:language "jai" :ext "jai" :agtype nil :rgtype "jai"))
     (add-to-list 'dumb-jump-find-rules
-                 '(:type "constant" :supports ("ag" "grep" "rg" "git-grep") :language "jai" :regex "\\bJJJ\\s+::"))))
+                 '(:type "constant" :supports ("ag" "rg" "git-grep") :language "jai" :regex "\\bJJJ\\s+::"))))
 #+end_src
 
 *** Javascript (& JSON)
