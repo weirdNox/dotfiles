@@ -1723,7 +1723,7 @@ fundamental-mode) for performance sake."
   (after! dumb-jump
     (add-to-list 'dumb-jump-find-rules
                  '(:type "function" :supports ("ag" "rg") :language "c++"
-                         :regex "\\w+[*\\s]+JJJ\\s*\\((?s:.)*?\\)[^;\\{]\\{"))
+                         :regex "\\w+[*\\s]+JJJ\\s*\\((?>[^()]+|(?1))*\\)[^;\\{]\\{"))
     (add-to-list 'dumb-jump-find-rules
                  '(:type "define" :supports ("ag" "rg") :language "c++"
                          :regex "^\s*#define\\s+JJJ\\b"))
