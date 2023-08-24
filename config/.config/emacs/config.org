@@ -1800,12 +1800,11 @@ fundamental-mode) for performance sake."
 *** Javascript (& JSON)
 #+begin_src emacs-lisp
 (use-package js
-  :init
-  (add-to-list 'major-mode-remap-alist '(js-mode      . js-ts-mode))
-  (add-to-list 'major-mode-remap-alist '(js-json-mode . json-ts-mode))
+  :init (add-to-list 'major-mode-remap-alist '(js-mode . js-ts-mode)))
 
-  :config
-  (setq! json-ts-mode-indent-offset 4))
+(use-package json-ts-mode
+  :init (add-to-list 'major-mode-remap-alist '(js-json-mode . json-ts-mode))
+  :config (setq! json-ts-mode-indent-offset 4))
 #+end_src
 
 *** LaTeX
