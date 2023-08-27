@@ -547,7 +547,7 @@ symbols.
 #+BEGIN_SRC emacs-lisp
 (setq! delete-by-moving-to-trash t
        delete-old-versions t
-       history-length 500
+       history-length 5000000
        kept-new-versions 10
        kept-old-versions 2
        version-control t)
@@ -1317,7 +1317,6 @@ Position the cursor at its beginning, according to the current mode."
          projectile-dynamic-mode-line nil
          projectile-globally-ignored-file-suffixes '(".elc" ".pyc" ".o")
          projectile-globally-ignored-files '(".DS_Store" "TAGS")
-         projectile-indexing-method (if IS-WINDOWS 'native 'alien)
          projectile-other-file-alist (append projectile-other-file-alist
                                              '(("css"  "scss" "sass" "less" "styl")
                                                ("scss" "css")
@@ -1325,6 +1324,10 @@ Position the cursor at its beginning, according to the current mode."
                                                ("less" "css")
                                                ("styl" "css"))))
   (push ".project" projectile-project-root-files-bottom-up)
+
+  (defvar +projectile-root nil) ;; NOTE(nox): To be let-bound
+  (defun +projectile*root-override (orig &rest args) (or +projectile-root (apply orig args)))
+  (advice-add #'projectile-project-root :around #'+projectile*root-override)
 
   (defun +projectile-ignored-project-p (path)
     (string-prefix-p nox-emacs-dir path))
@@ -3626,9 +3629,7 @@ Return the result as a string."
 
   (setq! compilation-always-kill t
          compilation-scroll-output 'first-error
-         compilation-context-lines 2
-         compilation-error-regexp-alist       nil
-         compilation-error-regexp-alist-alist nil)
+         compilation-context-lines 2)
 
   (put 'compilation-error-regexp-alist 'safe-local-variable 'listp)
 
@@ -3646,217 +3647,161 @@ Return the result as a string."
 
 **** Error matching
 #+begin_src emacs-lisp
-;; ====================================================================================================
-;; NOTE(nox): C/C++ (and Go)
-;;
-(add-to-list 'compilation-error-regexp-alist 'cc t)
-(add-to-list 'compilation-error-regexp-alist-alist
-             `(cc ,(rx bol (group-n 1 (*? nonl))
-                       (: ":" (* " ") (group-n 2 (+ num)))
-                       (? ":" (* " ") (group-n 4 (+ num)))
-                       ": " (* " ")
-                       (? (| (group-n 6 (| "warning"))
-                             (group-n 7 (| "info" "information" "informational" "instantiated from"
-                                           "required from" "note")))))
-                  1 (2 . 3) (4 . 5) (6 . 7)))
+(setq! compilation-error-regexp-alist-alist nil
+       compilation-transform-file-match-alist nil
 
-;; ====================================================================================================
-;; NOTE(nox): Jai
-;;
-(add-to-list 'compilation-error-regexp-alist 'jai t)
-(add-to-list 'compilation-error-regexp-alist-alist
-             `(jai ,(rx bol (* space) (group-n 1 (*? nonl))
-                        (: ":" (group-n 2 (+ num)))
-                        (? "," (group-n 4 (+ num)))
-                        ": " (* " ") (? (| "Error" (group-n 6 (| "Warning"))) ":"))
-                   1 (2 . 3) (4 . 5) (6 . 7)))
+       compilation-error-regexp-alist
+       `(;; NOTE(nox): C/C++ (and Go)
+         (,(rx bol (group-n 1 (*? nonl))
+               (: ":" (* " ") (group-n 2 (+ num)))
+               (? ":" (* " ") (group-n 4 (+ num)))
+               ": " (* " ")
+               (? (| (group-n 6 (| "warning"))
+                     (group-n 7 (| "info" "information" "informational" "instantiated from"
+                                   "required from" "note")))))
+          1 (2 . 3) (4 . 5) (6 . 7))
 
-;; ====================================================================================================
-;; NOTE(nox): NVCC
-;;
-(add-to-list 'compilation-error-regexp-alist 'nvcc t)
-(add-to-list 'compilation-error-regexp-alist-alist
-             `(nvcc ,(rx bol (group-n 1 (*? nonl))
-                         (: "(" (group-n 2 (+ num)) ")")
-                         ":" (* " ") (: (| (group-n 6 (| "warning")) "error") (* nonl) ":"))
-                    1 (2 . 3) (4 . 5) (6 . 7)))
+         ;; NOTE(nox): Jai
+         (,(rx bol (* space) (group-n 1 (*? nonl))
+               (: ":" (group-n 2 (+ num)))
+               (? "," (group-n 4 (+ num)))
+               ": " (* " ") (? (| "Error" (group-n 6 (| "Warning"))) ":"))
+          1 (2 . 3) (4 . 5) (6 . 7))
 
-;; ====================================================================================================
-;; NOTE(nox): IAR
-;;
-(add-to-list 'compilation-error-regexp-alist 'iar t)
-(add-to-list 'compilation-error-regexp-alist-alist
-             `(iar ,(rx (? "\"" (group-n 1 (*? nonl)) "\"," (*? space) (group-n 2 (+ num)))
-                        (*? space) (| "Fatal error" "Error" (group-n 6 "Warning") (group-n 7 "Remark"))
-                        "[" (+ alnum) "]:")
-                   1 2 nil (6 . 7)))
+         ;; NOTE(nox): NVCC
+         (,(rx bol (group-n 1 (*? nonl))
+               (: "(" (group-n 2 (+ num)) ")")
+               ":" (* " ") (: (| (group-n 6 (| "warning")) "error") (* nonl) ":"))
+          1 (2 . 3) (4 . 5) (6 . 7))
 
-;; ====================================================================================================
-;; NOTE(nox): Keil
-;;
-(add-to-list 'compilation-error-regexp-alist 'keil t)
-(add-to-list 'compilation-error-regexp-alist-alist
-             `(keil ,(rx "*** "
-                         (| "ERROR" (group-n 6 "WARNING"))
-                         " C" (+ num)
-                         " IN LINE " (group-n 2 (+ num))
-                         " OF " (group-n 1 (*? nonl)) ":")
-                    1 2 nil (6 . 7)))
+         ;; NOTE(nox): IAR
+         (,(rx (? "\"" (group-n 1 (*? nonl)) "\"," (*? space) (group-n 2 (+ num)))
+               (*? space) (| "Fatal error" "Error" (group-n 6 "Warning") (group-n 7 "Remark"))
+               "[" (+ alnum) "]:")
+          1 2 nil (6 . 7))
 
-;; ====================================================================================================
-;; NOTE(nox): Cadence Spectre
-;;
-(add-to-list 'compilation-error-regexp-alist-alist
-             '(cadence-spectre "^ *\\(?:ERROR\\|\\(WARNING\\)\\) (.+): \"\\(.+\\)\" \\([0-9]+\\)" 2 3 nil (1)))
+         ;; NOTE(nox): Keil
+         (,(rx "*** "
+               (| "ERROR" (group-n 6 "WARNING"))
+               " C" (+ num)
+               " IN LINE " (group-n 2 (+ num))
+               " OF " (group-n 1 (*? nonl)) ":")
+          1 2 nil (6 . 7))))
 #+end_src
 
 **** Compilation command
 #+BEGIN_SRC emacs-lisp
-(defconst +compile-sh-names (let ((extension (if (eq system-type 'windows-nt) ".bat" ".sh")))
-                              (mapcar (lambda (str) (concat str extension)) '("build-nox" "build"))))
-(defconst +compile-jai-names '("build.jai" "first.jai" "main.jai"))
-(defconst +compile-makefile-names '("makefile" "Makefile"))
-(defconst +compile-script-names (append +compile-sh-names +compile-jai-names +compile-makefile-names))
+(defconst +compile-sh-names   '("build_nox.sh"  "build.sh"))
+(defconst +compile-jai-names  '("build_nox.jai" "build.jai" "first.jai" "main.jai"))
+(defconst +compile-make-names '("GNUmakefile" "makefile" "Makefile"))
+(defconst +compile-look-for (append (cl-loop for f in +compile-sh-names   collect (cons f 'sh))
+                                    (cl-loop for f in +compile-jai-names  collect (cons f 'jai))
+                                    (cl-loop for f in +compile-make-names collect (cons f 'make))))
 
-(cl-defstruct +compile-info type path (last-time '(0 0 0 0)) args should-delete-window)
 (defvar-local +compile-info nil)
+(cl-defstruct +compile-info type path cmd (last-time '(0 0 0 1)) (rank-time '(0 0 0 1)) delete-window)
 (defvar +compile-info-table (make-hash-table :test 'equal))
-(defvar +compile-buffer-name) ;; NOTE(nox): Let-bound
 
-(defsubst +compile-is-jai (file-name) (string-equal (file-name-extension file-name) "jai"))
+(defvar +compile-cmd-history nil)
 
-(defun +compile-info (script-name path)
-  (make-+compile-info :type (cond
-                             ((+compile-is-jai script-name) 'jai)
-                             ((member script-name +compile-sh-names) 'sh)
-                             ((member script-name +compile-makefile-names) 'make))
-                      :path path))
-
-(defsubst +compile-info-relative-path-for-shell (info)
-  (shell-quote-argument (concat "./" (file-name-nondirectory (+compile-info-path info)))))
-(defsubst +compile-get-buffer-name (&rest _) (or +compile-buffer-name "*Compile*"))
+(defsubst +compile-builder (path &optional type)
+  (let ((info (or (gethash path +compile-info-table)
+                  (and type (make-+compile-info :type type :path path
+                                                :cmd (cond ((eq type 'sh)   "%s")
+                                                           ((eq type 'jai)  "jai %s")
+                                                           ((eq type 'make) "make -k")
+                                                           (t "")))))))
+    (and info (cons path info))))
 
 (defun +compile (arg)
   (interactive "P")
-  ;; NOTE(nox): When running in a compilation buffer, use the script that created it.
-  (let ((chosen-cons (and +compile-info (cons (+compile-info-path +compile-info) +compile-info)))
-        (calling-file-name (or (buffer-file-name) default-directory ""))
-        (set-default (equal arg '(16)))
-        (num-windows-before (length (window-list)))
-        existing-window cons-list)
+  (let* ((override-cmd (and arg t))
+         (set-default (equal arg '(16)))
+         (calling-from (or (buffer-file-name) default-directory ""))
+         (candidates (cl-loop for dir = default-directory then next
+                              for next = (file-name-directory (directory-file-name dir))
+                              until (string= dir next)
+                              for custom-builder = (+compile-builder dir) if custom-builder collect custom-builder into list
+                              nconc (cl-loop with builder
+                                             for lf in +compile-look-for
+                                             for path = (expand-file-name (car lf) dir)
+                                             if (file-exists-p path) collect (+compile-builder path (cdr lf)))
+                              into list
+                              finally return
+                              (cl-nreconc list (append (and (string= (file-name-extension calling-from) "jai")
+                                                            (not (assoc calling-from list))
+                                                            (list (+compile-builder calling-from 'jai)))
+                                                       (and set-default
+                                                            (list (+compile-builder "Add custom builder..." 'new-custom)))))))
+         chosen)
+    (unless candidates (error "No builder found"))
 
-    ;; NOTE(nox): Find script files in parent folders
-    (dolist (script-name +compile-script-names)
-      (let ((start-directory default-directory)
-            found-script-directory path info script-cons)
-        (while (setq found-script-directory (locate-dominating-file start-directory script-name))
-          (setq start-directory (file-name-directory (directory-file-name found-script-directory))
-                path (expand-file-name script-name found-script-directory)
-                script-cons (cons path script-name))
-          (push script-cons cons-list))))
+    (setq chosen (or (and (not set-default) +compile-info)
+                     (cdr (if set-default
+                              (assoc (completing-read "Which builder? " candidates nil t nil nil nil) candidates)
+                            (cl-loop with result = (car candidates)
+                                     for builder in candidates
+                                     if (time-less-p (+compile-info-rank-time (cdr result))
+                                                     (+compile-info-rank-time (cdr builder)))
+                                     do (setq result builder)
+                                     finally return result)))))
 
-    (when (+compile-is-jai calling-file-name) ; Jai programs may be just a single file
-      (push (cons calling-file-name (file-name-nondirectory calling-file-name)) cons-list))
+    (when (eq (+compile-info-type chosen) 'new-custom)
+      (setf (+compile-info-type chosen) 'custom)
+      (setf (+compile-info-path chosen) (read-directory-name "Base directory: " nil nil t))
+      (unless (string-prefix-p (+compile-info-path chosen) calling-from)
+        (error "Directory '%s' isn't a prefix of '%s'" (+compile-info-path chosen) calling-from))
+      (setq override-cmd t set-default t))
 
-    (setq cons-list (nreverse cons-list))
+    (let* ((path (+compile-info-path chosen))
+           (dir (file-name-directory path))
 
-    (unless cons-list (error "No build script found"))
+           (real-root (projectile-project-root dir))
+           (+projectile-root (or real-root dir))
 
-    (dolist (script-cons cons-list)
-      (let ((info (or (gethash (car script-cons) +compile-info-table)
-                      (+compile-info (cdr script-cons) (car script-cons)))))
-        (setcdr script-cons info)
+           (buffer-name (format "*[%s] - Compile %s*"
+                                (if real-root (projectile-project-name) (directory-file-name dir))
+                                (file-relative-name path +projectile-root)))
+           (buffer (get-buffer-create buffer-name))
+           (existing-window (get-buffer-window buffer))
+           (num-windows-before (length (window-list)))
 
-        (when (and (not +compile-info)
-                   (or (not chosen-cons)
-                       (time-less-p (+compile-info-last-time (cdr chosen-cons))
-                                    (+compile-info-last-time info))))
-          (setq chosen-cons script-cons))))
+           (cmd (+compile-info-cmd chosen)))
 
-    (let* ((info (if (and set-default (> (length cons-list) 1))
-                     (cdr (assoc (completing-read "Which build script? " cons-list nil t nil nil (car chosen-cons))
-                                 cons-list))
-                   (cdr chosen-cons)))
-           +compile-buffer-name buffer command command-args)
+      (when override-cmd (setq cmd (read-string "Command: " cmd '+compile-cmd-history)))
+      (setf (+compile-info-last-time chosen) (current-time))
 
-      (cond
-       ((projectile-project-p)
-        (projectile-save-project-buffers)
-        (setq +compile-buffer-name
-              (format "*[%s] - Compile %s*"
-                      (projectile-project-name)
-                      (file-name-nondirectory (+compile-info-path info)))))
-       (t
-        (save-some-buffers t)
-        (setq +compile-buffer-name (format "*Compile %s*" (+compile-info-path info)))))
+      (when set-default
+        (setf (+compile-info-cmd chosen) cmd)
+        (setf (+compile-info-rank-time chosen) (+compile-info-last-time chosen)))
 
-      (setq buffer (get-buffer-create +compile-buffer-name)
-            existing-window (get-buffer-window buffer))
+      (projectile-save-project-buffers)
 
-      (cond ((eq (+compile-info-type info) 'jai)
-             (setq command "jai"
-                   command-args (or (+compile-info-args info) "%s")))
-            ((eq (+compile-info-type info) 'make)
-             (setq command "make"
-                   command-args (or (+compile-info-args info) "-k")))
-            (t
-             (setq command (+compile-info-relative-path-for-shell info)
-                   command-args (or (+compile-info-args info) "%f"))))
-
-
-      (when arg (setq command-args (read-string "Arguments: " command-args)))
-      (when (or (not (+compile-info-args info)) set-default) (setf (+compile-info-args info) command-args))
-
-      (setq command-args (replace-regexp-in-string (regexp-quote "%s")
-                                                   (+compile-info-relative-path-for-shell info)
-                                                   command-args nil t))
-
-      (setq command-args (replace-regexp-in-string (regexp-quote "%f")
-                                                   (shell-quote-argument
-                                                    (or (file-remote-p calling-file-name 'localname) calling-file-name))
-                                                   command-args nil t))
-
-      (setf (+compile-info-last-time info) (current-time))
+      (setq cmd (string-replace "%s" (shell-quote-argument path) cmd))
+      (setq cmd (string-replace "%f" (shell-quote-argument (or (file-remote-p calling-from 'localname) calling-from)) cmd))
 
       (with-current-buffer buffer
-        (cd (file-name-directory (+compile-info-path info)))
-        (let* ((error-regexp-alist
-                (with-temp-buffer
-                  (insert-file-contents (+compile-info-path info))
-                  (hack-local-variables)
-                  compilation-error-regexp-alist))
-               (compilation-start-hook
-                (append compilation-start-hook
-                        (list (lambda (_)
-                                (setq-local compilation-error-regexp-alist error-regexp-alist))))))
-          (compilation-start (concat command " " command-args) nil #'+compile-get-buffer-name)
-          (setq-local +compile-info info)))
+        (cd dir)
+        (compilation-start cmd nil (lambda (&rest _) (buffer-name)))
+        (setq-local +compile-info chosen))
 
-      (if (= (length (window-list)) num-windows-before)
-          (unless existing-window (setf (+compile-info-should-delete-window info) nil))
-        (setf (+compile-info-should-delete-window info) t))
+      (unless existing-window (setf (+compile-info-delete-window chosen) (/= (length (window-list)) num-windows-before)))
+      (puthash (+compile-info-path chosen) chosen +compile-info-table))))
 
-      (puthash (+compile-info-path info) info +compile-info-table))))
-#+END_SRC
-
-**** Bury the compilation buffer
-#+BEGIN_SRC emacs-lisp
 (defun +compile|bury-buffer (buffer string)
   "Bury compilation buffer if it succeeded."
   (with-current-buffer buffer
-    (when +compile-info
-      (message "Compilation time: %.3fs"
-               (float-time (time-subtract (current-time) (+compile-info-last-time +compile-info))))
+    (when-let ((info +compile-info))
+      (message "Compilation time: %.3fs" (float-time (time-subtract (current-time) (+compile-info-last-time info))))
       (when (and (string= string "finished\n")
                  (save-excursion (not (ignore-errors (compilation-next-error 1 nil 1)))))
         (let ((windows (get-buffer-window-list buffer t)))
           (dolist (window windows)
             (if (and (> (length (window-list (window-frame window))) 1)
-                     (+compile-info-should-delete-window +compile-info))
+                     (+compile-info-delete-window info))
                 (delete-window window)
               (switch-to-prev-buffer window))))
         (bury-buffer buffer)))))
-
 (add-hook 'compilation-finish-functions '+compile|bury-buffer)
 #+END_SRC
 
