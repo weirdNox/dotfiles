@@ -1251,8 +1251,7 @@ Position the cursor at its beginning, according to the current mode."
                              embark-highlight-indicator
                              embark-isearch-highlight-indicator)))
 (use-package embark-consult :elpaca t
-  :after embark consult :demand
-  :hook (embark-collect-mode-hook . embark-consult-preview-minor-mode))
+  :hook (embark-collect-mode . consult-preview-at-point-mode))
 
 (use-package marginalia :elpaca t
   :demand
