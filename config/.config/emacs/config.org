@@ -3715,8 +3715,8 @@ Return the result as a string."
   (interactive "P")
   (let* ((override-cmd (and arg t))
          (set-default (equal arg '(16)))
-         (calling-from (or (buffer-file-name) default-directory ""))
-         (candidates (cl-loop for dir = default-directory then next
+         (calling-from (expand-file-name (or (buffer-file-name) "./")))
+         (candidates (cl-loop for dir = (expand-file-name "./") then next
                               for next = (file-name-directory (directory-file-name dir))
                               until (string= dir next)
                               for custom-builder = (+compile-builder dir) if custom-builder collect custom-builder into list
