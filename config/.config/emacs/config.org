@@ -1971,11 +1971,9 @@ fundamental-mode) for performance sake."
   (after! dumb-jump
     (add-to-list 'dumb-jump-language-file-exts '(:language "python" :ext "py" :rgtype "py"))
     (add-to-list 'dumb-jump-find-rules '(:type "assignment" :supports ("rg") :language "python"
-                                               :regex "\\bJJJ\\s*=[^=\\n]"))
-    (add-to-list 'dumb-jump-find-rules '(:type "function" :supports ("rg") :language "python"
-                                               :regex "def\\s+JJJ\\b\\s*\\("))
-    (add-to-list 'dumb-jump-find-rules '(:type "type" :supports ("rg") :language "python"
-                                               :regex "class\\s+JJJ\\b\\s*\\("))))
+                                               :regex "(^|[,;])\\s*JJJ\\s*(:[\\s\\w\\[\\]|,]+)?=[^=\\n]"))
+    (add-to-list 'dumb-jump-find-rules '(:type "definition" :supports ("rg") :language "python"
+                                               :regex "(def|class)\\s+JJJ\\b\\s*\\("))))
 #+end_src
 
 *** SPICE
