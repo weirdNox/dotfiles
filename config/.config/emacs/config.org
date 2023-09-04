@@ -1680,6 +1680,8 @@ fundamental-mode) for performance sake."
   :config
   (setq! c-ts-mode-indent-offset 4)
 
+  (defvar +c-ts-mode--column-offset 0) ;; NOTE(nox): Set by the anchor functions
+
   ;; NOTE(nox): Same as parent-is, but skips preproc
   (defun +c-ts-mode--parent-is (type)
     `(lambda (_n parent &rest _)
@@ -1703,10 +1705,24 @@ fundamental-mode) for performance sake."
           (setq parent (or (treesit-node-prev-sibling parent)
                            (treesit-node-parent parent)))))))
 
+  (defun +c-ts-mode--parenthesized-indent (search-for)
+    `(lambda (child parent &rest _)
+       (cl-loop for is-first = (= (treesit-node-index child) 1) then nil
+                until (string= ,search-for (treesit-node-type parent))
+                do (setq child parent parent (treesit-node-parent parent))
+                finally return
+                (cond (is-first
+                       (setq +c-ts-mode--column-offset c-ts-mode-indent-offset)
+                       (save-excursion (goto-char (treesit-node-start (treesit-node-child parent 0)))
+                                       (back-to-indentation) (point)))
+                      (t (setq +c-ts-mode--column-offset 0)
+                         (treesit-node-start (treesit-node-child parent 1)))))))
+
   (defun +c-ts-mode--indent-style ()
     `(((n-or-p-is "preproc_arg") no-indent)
       ((+c-ts-mode--parent-is "translation_unit") column-0 0)
-      ((node-is ")") parent 0)
+      ((node-is ")") +c-ts-mode--standalone-parent-or-uncle 0)
+      ((node-is "}") +c-ts-mode--standalone-parent-or-uncle 0)
       ((node-is "]") +c-ts-mode--standalone-parent-or-uncle 0)
       ((node-is "else") parent-bol 0)
       ((node-is "case") parent-bol c-ts-mode-indent-offset)
@@ -1731,15 +1747,11 @@ fundamental-mode) for performance sake."
       ((+c-ts-mode--parent-is "concatenated_string") first-sibling 0)
       ((+c-ts-mode--parent-is "comma_expression") first-sibling 0)
       ((+c-ts-mode--parent-is "init_declarator") parent-bol c-ts-mode-indent-offset)
-      ((any-parent-is "parenthesized_expression") (any-parent-nth-child "parenthesized_expression") 1)
-      ((+c-ts-mode--parent-is "argument_list") first-sibling 1)
-      ((+c-ts-mode--parent-is "parameter_list") first-sibling 1)
+      ((any-parent-is "parenthesized_expression") (+c-ts-mode--parenthesized-indent "parenthesized_expression") +c-ts-mode--column-offset)
+      ((+c-ts-mode--parent-is "argument_list")    (+c-ts-mode--parenthesized-indent "argument_list")            +c-ts-mode--column-offset)
+      ((+c-ts-mode--parent-is "parameter_list")   (+c-ts-mode--parenthesized-indent "parameter_list")           +c-ts-mode--column-offset)
       ((+c-ts-mode--parent-is "binary_expression") parent 0)
       ((+c-ts-mode--parent-is "call_expression") parent 0)
-      ;; Closing bracket.  This should be before initializer_list
-      ;; (and probably others) rule because that rule (and other
-      ;; similar rules) will match the closing bracket.  (Bug#61398)
-      ((node-is "}") +c-ts-mode--standalone-parent-or-uncle 0)
       ((node-is "access_specifier") parent-bol 0)
       ;; Indent the body of namespace definitions.
       ((+c-ts-mode--parent-is "declaration_list") parent-bol c-ts-mode-indent-offset)
