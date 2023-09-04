@@ -1001,7 +1001,29 @@ Disable fringes in the minibuffer window.
   (setq! dumb-jump-force-searcher 'rg
          dumb-jump-default-project "."
          dumb-jump-fallback-search nil
-         dumb-jump-find-rules nil))
+         dumb-jump-find-rules nil)
+
+  ;; Speed it up by filtering first and then searching just the relevant files
+  (defun dumb-jump-generate-rg-command (look-for _cur-file proj regexes lang exclude-paths)
+    "Generate the rg response based on the needle LOOK-FOR in the directory PROJ."
+    (let* ((filled-regexes (dumb-jump-populate-regexes look-for regexes 'rg))
+           (rgtypes (dumb-jump-get-rg-type-by-language lang))
+           (proj-dir (file-name-as-directory proj))
+           (cmd (concat dumb-jump-rg-cmd
+                        " -0l"
+                        " " (shell-quote-argument (format "\\b%s\\b" (regexp-quote look-for)))
+                        " " (shell-quote-argument proj)
+                        " | xargs -0 "
+                        dumb-jump-rg-cmd " --color never --no-heading --line-number -U"
+                        (when (not (s-blank? dumb-jump-rg-search-args))
+                          (concat " " dumb-jump-rg-search-args))
+                        (s-join "" (--map (format " --type %s" it) rgtypes))))
+           (exclude-args (dumb-jump-arg-joiner
+                          "-g" (--map (shell-quote-argument (concat "!" (s-replace proj-dir "" it))) exclude-paths)))
+           (regex-args (shell-quote-argument (s-join "|" filled-regexes))))
+      (if (= (length regexes) 0)
+          ""
+        (dumb-jump-concat-command cmd exclude-args regex-args)))))
 #+END_SRC
 
 **** Imenu
