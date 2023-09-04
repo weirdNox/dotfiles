@@ -1001,6 +1001,7 @@ Disable fringes in the minibuffer window.
   (setq! dumb-jump-force-searcher 'rg
          dumb-jump-default-project "."
          dumb-jump-fallback-search nil
+         dumb-jump-language-file-exts nil
          dumb-jump-find-rules nil)
 
   ;; Speed it up by filtering first and then searching just the relevant files
@@ -1772,18 +1773,23 @@ fundamental-mode) for performance sake."
   (setq! c-ts-mode-indent-style #'+c-ts-mode--indent-style)
 
   (after! dumb-jump
-    (add-to-list 'dumb-jump-find-rules
-                 '(:type "function" :supports ("ag" "rg") :language "c++"
-                         :regex "\\w+[*\\s]+JJJ\\s*\\((?>[^()]+|(?1))*\\)[^;\\{]\\{"))
-    (add-to-list 'dumb-jump-find-rules
-                 '(:type "define" :supports ("ag" "rg") :language "c++"
-                         :regex "^\s*#define\\s+JJJ\\b"))
-    (add-to-list 'dumb-jump-find-rules
-                 '(:type "type" :supports ("ag" "rg") :language "c++"
-                         :regex "(struct|union|class)\\b.+\\bJJJ\\s*\\{"))
-    (add-to-list 'dumb-jump-find-rules
-                 '(:type "type" :supports ("ag" "rg") :language "c++"
-                         :regex "(typedef\\b|\\}).+\\bJJJ\\s*;"))))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "c"   :rgtype "cpp"))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "C"   :rgtype "cpp"))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "cc"  :rgtype "cpp"))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "cpp" :rgtype "cpp"))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "cxx" :rgtype "cpp"))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "h"   :rgtype "cpp"))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "H"   :rgtype "cpp"))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "hh"  :rgtype "cpp"))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "hpp" :rgtype "cpp"))
+    (add-to-list 'dumb-jump-find-rules '(:type "function" :supports ("rg") :language "c++"
+                                               :regex "\\w+[*\\s]+JJJ\\s*\\((?>[^()]+|(?1))*\\)[^;\\{]\\{"))
+    (add-to-list 'dumb-jump-find-rules '(:type "define" :supports ("rg") :language "c++"
+                                               :regex "^\s*#define\\s+JJJ\\b"))
+    (add-to-list 'dumb-jump-find-rules '(:type "type" :supports ("rg") :language "c++"
+                                               :regex "(struct|union|class)\\b.+\\bJJJ\\s*\\{"))
+    (add-to-list 'dumb-jump-find-rules '(:type "type" :supports ("rg") :language "c++"
+                                               :regex "(typedef\\b|\\}).+\\bJJJ\\s*;"))))
 #+END_SRC
 
 *** Dockerfile & Containerfile
@@ -1812,10 +1818,9 @@ fundamental-mode) for performance sake."
                                         :files ("*.el"))
   :config
   (after! dumb-jump
-    (add-to-list 'dumb-jump-language-file-exts '(:language "jai" :ext "jai" :agtype nil :rgtype "jai"))
-    (add-to-list 'dumb-jump-find-rules
-                 '(:type "constant" :supports ("ag" "rg") :language "jai"
-                         :regex "\\bJJJ\\s*::"))))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "jai" :ext "jai" :rgtype "jai"))
+    (add-to-list 'dumb-jump-find-rules '(:type "constant" :supports ("rg") :language "jai"
+                                               :regex "\\bJJJ\\s*::"))))
 #+end_src
 
 *** Javascript (& JSON)
@@ -1854,6 +1859,19 @@ fundamental-mode) for performance sake."
   (advice-add #'TeX-tex-mode :after #'+tex*set-auto-location)
   (make-directory TeX-auto-local t))
 #+END_SRC
+
+*** (Emacs) Lisp
+#+begin_src emacs-lisp
+(use-package lisp-mode
+  :config
+  (after! dumb-jump
+    (add-to-list 'dumb-jump-language-file-exts '(:language "lisp" :ext "el"    :rgtype "lisp"))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "lisp" :ext "el.gz" :rgtype "lisp"))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "lisp" :ext "lisp"  :rgtype "lisp"))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "lisp" :ext "lsp"   :rgtype "lisp"))
+    (add-to-list 'dumb-jump-find-rules '(:type "definition" :supports ("rg") :language "lisp"
+                                               :regex "\\((cl-)?def(fun|macro|var|custom)\\s+JJJ\\j"))))
+#+end_src
 
 *** Markdown
 #+begin_src emacs-lisp
@@ -1939,15 +1957,13 @@ fundamental-mode) for performance sake."
      (t (backward-delete-char-untabify arg))))
 
   (after! dumb-jump
-    (add-to-list 'dumb-jump-find-rules
-                 '(:type "assignment" :supports ("ag" "rg") :language "python"
-                         :regex "\\bJJJ\\s*=[^=\\n]"))
-    (add-to-list 'dumb-jump-find-rules
-                 '(:type "function" :supports ("ag" "rg") :language "python"
-                         :regex "def\\s+JJJ\\b\\s*\\("))
-    (add-to-list 'dumb-jump-find-rules
-                 '(:type "type" :supports ("ag" "rg") :language "python"
-                         :regex "class\\s+JJJ\\b\\s*\\("))))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "python" :ext "py" :rgtype "py"))
+    (add-to-list 'dumb-jump-find-rules '(:type "assignment" :supports ("rg") :language "python"
+                                               :regex "\\bJJJ\\s*=[^=\\n]"))
+    (add-to-list 'dumb-jump-find-rules '(:type "function" :supports ("rg") :language "python"
+                                               :regex "def\\s+JJJ\\b\\s*\\("))
+    (add-to-list 'dumb-jump-find-rules '(:type "type" :supports ("rg") :language "python"
+                                               :regex "class\\s+JJJ\\b\\s*\\("))))
 #+end_src
 
 *** SPICE
