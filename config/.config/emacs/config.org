@@ -1661,7 +1661,15 @@ fundamental-mode) for performance sake."
 *** (Ba)sh
 #+begin_src emacs-lisp
 (use-package sh-mode
-  :init (add-to-list 'major-mode-remap-alist '(sh-mode . bash-ts-mode)))
+  :init (add-to-list 'major-mode-remap-alist '(sh-mode . bash-ts-mode))
+  :config
+  (after! dumb-jump
+    (add-to-list 'dumb-jump-language-file-exts '(:language "sh" :ext "sh"   :rgtype "sh"))
+    (add-to-list 'dumb-jump-language-file-exts '(:language "sh" :ext "bash" :rgtype "sh"))
+    (add-to-list 'dumb-jump-find-rules '(:type "function" :supports ("rg") :language "sh"
+                                               :regex "(function\\s+JJJ\\b|\\bJJJ\\s*\\()"))
+    (add-to-list 'dumb-jump-find-rules '(:type "variable" :supports ("rg") :language "sh"
+                                               :regex "\\bJJJ=[^=]"))))
 #+end_src
 
 *** C/C++
@@ -1790,7 +1798,7 @@ fundamental-mode) for performance sake."
     (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "hh"  :rgtype "cpp"))
     (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "hpp" :rgtype "cpp"))
     (add-to-list 'dumb-jump-find-rules '(:type "function" :supports ("rg") :language "c++"
-                                               :regex "\\w+[*\\s]+JJJ\\s*\\((?>[^()]+|(?1))*\\)[^;\\{]\\{"))
+                                               :regex "\\w+[*\\s]+JJJ\\s*\\((?>[^()]+|(?1))*\\)[^;\\{]*\\{"))
     (add-to-list 'dumb-jump-find-rules '(:type "define" :supports ("rg") :language "c++"
                                                :regex "^\s*#define\\s+JJJ\\b"))
     (add-to-list 'dumb-jump-find-rules '(:type "type" :supports ("rg") :language "c++"
@@ -1968,7 +1976,7 @@ fundamental-mode) for performance sake."
     (add-to-list 'dumb-jump-find-rules '(:type "assignment" :supports ("rg") :language "python"
                                                :regex "(^|[,;])\\s*JJJ\\s*(:[\\s\\w\\[\\]|,]+)?=[^=\\n]"))
     (add-to-list 'dumb-jump-find-rules '(:type "definition" :supports ("rg") :language "python"
-                                               :regex "(def|class)\\s+JJJ\\b\\s*\\("))))
+                                               :regex "(def|class)\\s+JJJ\\s*[(:]"))))
 #+end_src
 
 *** SPICE
