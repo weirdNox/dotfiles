@@ -1610,18 +1610,16 @@ fundamental-mode) for performance sake."
                (cons 'any-parent-is
                      (lambda (type)
                        (lambda (_n parent &rest _)
-                         (catch 'term
-                           (while parent
-                             (let ((match (string-match-p type (treesit-node-type parent))))
-                               (when match (throw 'term match))
-                               (setq parent (treesit-node-parent parent)))))))))
+                         (cl-loop for p = parent then (treesit-node-parent p) while p
+                                  for ptype = (treesit-node-type p)
+                                  if (string-match-p type ptype) return t)))))
 
   (add-to-list 'treesit-simple-indent-presets
-               (cons 'is-named-child
+               (cons 'is-named-child ;; NOTE(nox): Like field-is but allows specifying parent type
                      (lambda (name &optional parent-type)
                        (lambda (node parent &rest _)
                          (and (or (null parent-type) (string-match-p parent-type (treesit-node-type parent)))
-                              (string-match-p name (or (treesit-node-field-name-for-child parent (treesit-node-index node)) "")))))))
+                              (string-match-p name (or (treesit-node-field-name node) "")))))))
 
   ;; ====================================================================================================
   ;; Anchors
@@ -1629,22 +1627,20 @@ fundamental-mode) for performance sake."
                (cons 'standalone-parent-or-uncle
                      (lambda (_n parent &rest _)
                        (save-excursion
-                         (catch 'term
-                           (while parent
-                             (goto-char (treesit-node-start parent))
-                             (when (looking-back (rx bol (* whitespace)) (line-beginning-position)) (throw 'term (point)))
-                             (setq parent (or (treesit-node-prev-sibling parent)
-                                              (treesit-node-parent parent)))))))))
+                         (cl-loop for p-or-u = parent then (or (treesit-node-prev-sibling p-or-u)
+                                                               (treesit-node-parent       p-or-u))
+                                  while p-or-u
+                                  for np = (goto-char (treesit-node-start p-or-u))
+                                  if (looking-back (rx bol (* whitespace)) (line-beginning-position)) return np)))))
 
   (add-to-list 'treesit-simple-indent-presets
                (cons 'any-parent-nth-child ; NOTE(nox): To be used with any-parent-is
                      (lambda (type &optional child-idx)
                        (lambda (_n parent &rest _)
-                         (let ((parent (catch 'term
-                                         (while parent
-                                           (when (string-match-p type (treesit-node-type parent)) (throw 'term parent))
-                                           (setq parent (treesit-node-parent parent))))))
-                           (treesit-node-start (treesit-node-child parent (or child-idx 0)))))))))
+                         (cl-loop for p = parent then (treesit-node-parent p) while p
+                                  for ptype = (treesit-node-type p)
+                                  if (string-match-p type ptype)
+                                  return (treesit-node-start (treesit-node-child parent (or child-idx 0)))))))))
 #+end_src
 
 ** Languages
@@ -1682,41 +1678,40 @@ fundamental-mode) for performance sake."
 
   (defvar +c-ts-mode--column-offset 0) ;; NOTE(nox): Set by the anchor functions
 
+  (defsubst +c-ts-mode--skip-preproc (in-node)
+    (cl-loop for node = in-node then (treesit-node-parent node)
+             for type =              (treesit-node-type   node)
+             while (and node (string-match-p "preproc" type))
+             finally return node))
+
   ;; NOTE(nox): Same as parent-is, but skips preproc
   (defun +c-ts-mode--parent-is (type)
     `(lambda (_n parent &rest _)
-       (catch 'term
-         (while parent
-           (let ((ptype (treesit-node-type parent)))
-             (if (string-match-p ptype "preproc")
-                 (setq parent (treesit-node-parent parent))
-               (throw 'term (string-match-p ,type ptype))))))))
+       (setq parent (+c-ts-mode--skip-preproc parent))
+       (and parent (string-match-p ,type (treesit-node-type parent)))))
 
   ;; NOTE(nox): Same as standalone-parent-or-uncle, but skips preproc
   (defun +c-ts-mode--standalone-parent-or-uncle (_n parent &rest _)
     (save-excursion
-      (catch 'term
-        (while parent
-          (while (string-match-p (treesit-node-type parent) "preproc")
-            (setq parent (treesit-node-parent parent)))
-          (goto-char (treesit-node-start parent))
-          (when (looking-back (rx bol (* whitespace)) (line-beginning-position))
-            (throw 'term (point)))
-          (setq parent (or (treesit-node-prev-sibling parent)
-                           (treesit-node-parent parent)))))))
+      (cl-loop for p-or-u = parent then (or (treesit-node-prev-sibling p-or-u)
+                                            (treesit-node-parent       p-or-u))
+               while (setq p-or-u (+c-ts-mode--skip-preproc p-or-u))
+               if (and (goto-char (treesit-node-start p-or-u))
+                       (looking-back (rx bol (* whitespace)) (line-beginning-position)))
+               return (point))))
 
   (defun +c-ts-mode--parenthesized-indent (search-for)
     `(lambda (child parent &rest _)
        (cl-loop for is-first = (= (treesit-node-index child) 1) then nil
-                until (string= ,search-for (treesit-node-type parent))
-                do (setq child parent parent (treesit-node-parent parent))
+                for p = parent then (treesit-node-parent p)
+                until (string= ,search-for (treesit-node-type p))
                 finally return
                 (cond (is-first
                        (setq +c-ts-mode--column-offset c-ts-mode-indent-offset)
-                       (save-excursion (goto-char (treesit-node-start (treesit-node-child parent 0)))
+                       (save-excursion (goto-char (treesit-node-start (treesit-node-child p 0)))
                                        (back-to-indentation) (point)))
                       (t (setq +c-ts-mode--column-offset 0)
-                         (treesit-node-start (treesit-node-child parent 1)))))))
+                         (treesit-node-start (treesit-node-child p 1)))))))
 
   (defun +c-ts-mode--indent-style ()
     `(((n-or-p-is "preproc_arg") no-indent)
@@ -1741,7 +1736,7 @@ fundamental-mode) for performance sake."
       ((node-is "#endif") column-0 0)
 
       ((+c-ts-mode--parent-is "function_definition") parent-bol 0)
-      ((is-named-child "alternative" "conditional_expression") (nth-sibling 2) 0)
+      ((n-p-gp ":" "conditional_expression" nil) (nth-sibling 1) 0)
       ((+c-ts-mode--parent-is "conditional_expression") first-sibling 0)
       ((+c-ts-mode--parent-is "assignment_expression") parent-bol c-ts-mode-indent-offset)
       ((+c-ts-mode--parent-is "concatenated_string") first-sibling 0)
@@ -1757,7 +1752,7 @@ fundamental-mode) for performance sake."
       ((+c-ts-mode--parent-is "declaration_list") parent-bol c-ts-mode-indent-offset)
 
       ;; int[5] a = { 0, 0, 0, 0 };
-      ((+c-ts-mode--parent-is "initializer_list") +c-ts-mode--standalone-parent-or-uncle c-ts-mode-indent-offset)
+      ((any-parent-is "initializer_list") (+c-ts-mode--parenthesized-indent "initializer_list") +c-ts-mode--column-offset)
       ;; Statement in enum.
       ((match nil "enumerator_list" nil 1 1) standalone-parent c-ts-mode-indent-offset)
       ((+c-ts-mode--parent-is "enumerator_list") c-ts-mode--anchor-prev-sibling 0)
