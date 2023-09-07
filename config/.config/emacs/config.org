@@ -990,42 +990,18 @@ Disable fringes in the minibuffer window.
          avy-timeout-seconds .3))
 #+END_SRC
 
-**** Dumb jump
-#+BEGIN_SRC emacs-lisp
-(use-package dumb-jump :elpaca t
-  :hook (xref-backend-functions . dumb-jump-xref-activate)
+**** xref and simple jump
+#+begin_src emacs-lisp
+(use-package xref
   :general (:prefix "M-g j"
                     "j" #'xref-find-definitions
-                    "o" #'xref-find-definitions-other-window)
-  :config
-  (setq! dumb-jump-force-searcher 'rg
-         dumb-jump-default-project "."
-         dumb-jump-fallback-search nil
-         dumb-jump-language-file-exts nil
-         dumb-jump-find-rules nil)
+                    "o" #'xref-find-definitions-other-window
+                    "r" #'xref-find-references
+                    "p" #'xref-find-apropos)
+  :config (setq! xref-backend-functions '(simple-jump-xref-backend)))
 
-  ;; Speed it up by filtering first and then searching just the relevant files
-  (defun dumb-jump-generate-rg-command (look-for _cur-file proj regexes lang exclude-paths)
-    "Generate the rg response based on the needle LOOK-FOR in the directory PROJ."
-    (let* ((filled-regexes (dumb-jump-populate-regexes look-for regexes 'rg))
-           (rgtypes (dumb-jump-get-rg-type-by-language lang))
-           (proj-dir (file-name-as-directory proj))
-           (cmd (concat dumb-jump-rg-cmd
-                        " -0l"
-                        " " (shell-quote-argument (format "\\b%s\\b" (regexp-quote look-for)))
-                        " " (shell-quote-argument proj)
-                        " | xargs -0 "
-                        dumb-jump-rg-cmd " --color never --no-heading --line-number -U"
-                        (when (not (s-blank? dumb-jump-rg-search-args))
-                          (concat " " dumb-jump-rg-search-args))
-                        (s-join "" (--map (format " --type %s" it) rgtypes))))
-           (exclude-args (dumb-jump-arg-joiner
-                          "-g" (--map (shell-quote-argument (concat "!" (s-replace proj-dir "" it))) exclude-paths)))
-           (regex-args (shell-quote-argument (s-join "|" filled-regexes))))
-      (if (= (length regexes) 0)
-          ""
-        (dumb-jump-concat-command cmd exclude-args regex-args)))))
-#+END_SRC
+(use-package simple-jump :autoload simple-jump-xref-backend)
+#+end_src
 
 **** Imenu
 #+BEGIN_SRC emacs-lisp
@@ -1663,13 +1639,10 @@ fundamental-mode) for performance sake."
 (use-package sh-mode
   :init (add-to-list 'major-mode-remap-alist '(sh-mode . bash-ts-mode))
   :config
-  (after! dumb-jump
-    (add-to-list 'dumb-jump-language-file-exts '(:language "sh" :ext "sh"   :rgtype "sh"))
-    (add-to-list 'dumb-jump-language-file-exts '(:language "sh" :ext "bash" :rgtype "sh"))
-    (add-to-list 'dumb-jump-find-rules '(:type "function" :supports ("rg") :language "sh"
-                                               :regex "(function\\s+JJJ\\b|\\bJJJ\\s*\\()"))
-    (add-to-list 'dumb-jump-find-rules '(:type "variable" :supports ("rg") :language "sh"
-                                               :regex "\\bJJJ=[^=]"))))
+  (after! simple-jump
+    (let ((family (make-simple-jump-family :regexes '("function\\L+JJJ\\b" "\\bJJJ(\\L*\\(|=[^=])"))))
+      (setf (alist-get 'sh-mode      simple-jump-family-alist) family)
+      (setf (alist-get 'bash-ts-mode simple-jump-family-alist) family))))
 #+end_src
 
 *** C/C++
@@ -1787,24 +1760,13 @@ fundamental-mode) for performance sake."
       ((node-is "field_initializer_list") parent-bol ,(* c-ts-mode-indent-offset 2))))
   (setq! c-ts-mode-indent-style #'+c-ts-mode--indent-style)
 
-  (after! dumb-jump
-    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "c"   :rgtype "cpp"))
-    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "C"   :rgtype "cpp"))
-    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "cc"  :rgtype "cpp"))
-    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "cpp" :rgtype "cpp"))
-    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "cxx" :rgtype "cpp"))
-    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "h"   :rgtype "cpp"))
-    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "H"   :rgtype "cpp"))
-    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "hh"  :rgtype "cpp"))
-    (add-to-list 'dumb-jump-language-file-exts '(:language "c++" :ext "hpp" :rgtype "cpp"))
-    (add-to-list 'dumb-jump-find-rules '(:type "function" :supports ("rg") :language "c++"
-                                               :regex "\\w+[*\\s]+JJJ\\s*\\((?>[^()]+|(?1))*\\)[^;\\{]*\\{"))
-    (add-to-list 'dumb-jump-find-rules '(:type "define" :supports ("rg") :language "c++"
-                                               :regex "^\s*#define\\s+JJJ\\b"))
-    (add-to-list 'dumb-jump-find-rules '(:type "type" :supports ("rg") :language "c++"
-                                               :regex "(struct|union|class)\\b.+\\bJJJ\\s*\\{"))
-    (add-to-list 'dumb-jump-find-rules '(:type "type" :supports ("rg") :language "c++"
-                                               :regex "(typedef\\b|\\}).+\\bJJJ\\s*;"))))
+  (after! simple-jump
+    (let ((family (make-simple-jump-family :regexes '("\\w+[*\\s]+JJJ\\s*\\((?>[^()]+|(?1))*\\)[^;\\{]*\\{"
+                                                      "(struct|union|class)\\b.+\\bJJJ\\s*\\{"
+                                                      "(typedef\\b|\\}).+\\bJJJ\\s*;"
+                                                      "^\\L*#define\\s+JJJ\\b"))))
+      (setf (alist-get 'c-ts-mode   simple-jump-family-alist) family)
+      (setf (alist-get 'c++-ts-mode simple-jump-family-alist) family))))
 #+END_SRC
 
 *** Dockerfile & Containerfile
@@ -1832,10 +1794,9 @@ fundamental-mode) for performance sake."
 (use-package jai-mode :elpaca (jai-mode :host github :repo "weirdNox/jai-mode"
                                         :files ("*.el"))
   :config
-  (after! dumb-jump
-    (add-to-list 'dumb-jump-language-file-exts '(:language "jai" :ext "jai" :rgtype "jai"))
-    (add-to-list 'dumb-jump-find-rules '(:type "constant" :supports ("rg") :language "jai"
-                                               :regex "\\bJJJ\\s*::"))))
+  (after! simple-jump
+    (let ((family (make-simple-jump-family :regexes '("\\bJJJ\\s*::"))))
+      (setf (alist-get 'jai-mode simple-jump-family-alist) family))))
 #+end_src
 
 *** Javascript (& JSON)
@@ -1879,13 +1840,10 @@ fundamental-mode) for performance sake."
 #+begin_src emacs-lisp
 (use-package lisp-mode
   :config
-  (after! dumb-jump
-    (add-to-list 'dumb-jump-language-file-exts '(:language "lisp" :ext "el"    :rgtype "lisp"))
-    (add-to-list 'dumb-jump-language-file-exts '(:language "lisp" :ext "el.gz" :rgtype "lisp"))
-    (add-to-list 'dumb-jump-language-file-exts '(:language "lisp" :ext "lisp"  :rgtype "lisp"))
-    (add-to-list 'dumb-jump-language-file-exts '(:language "lisp" :ext "lsp"   :rgtype "lisp"))
-    (add-to-list 'dumb-jump-find-rules '(:type "definition" :supports ("rg") :language "lisp"
-                                               :regex "\\((cl-)?def(fun|macro|var|custom)\\s+JJJ\\j"))))
+  (after! simple-jump
+    (let ((family (make-simple-jump-family :regexes '("\\((cl-)?def(fun|macro|var|custom)\\s+JJJ\\j"))))
+      (setf (alist-get 'lisp-mode       simple-jump-family-alist) family)
+      (setf (alist-get 'emacs-lisp-mode simple-jump-family-alist) family))))
 #+end_src
 
 *** Markdown
@@ -1971,12 +1929,10 @@ fundamental-mode) for performance sake."
      ((python-indent-dedent-line))
      (t (backward-delete-char-untabify arg))))
 
-  (after! dumb-jump
-    (add-to-list 'dumb-jump-language-file-exts '(:language "python" :ext "py" :rgtype "py"))
-    (add-to-list 'dumb-jump-find-rules '(:type "assignment" :supports ("rg") :language "python"
-                                               :regex "(^|[,;])\\s*JJJ\\s*(:[\\s\\w\\[\\]|,]+)?=[^=\\n]"))
-    (add-to-list 'dumb-jump-find-rules '(:type "definition" :supports ("rg") :language "python"
-                                               :regex "(def|class)\\s+JJJ\\s*[(:]"))))
+  (after! simple-jump
+    (let ((family (make-simple-jump-family :regexes '("(^|[,;])\\L*JJJ\\L*(:[\\L\\w\\[\\]|,]+)?=[^=\\n]"
+                                                      "(def|class)\\L+JJJ\\L*[(:]"))))
+      (setf (alist-get 'python-ts-mode simple-jump-family-alist) family))))
 #+end_src
 
 *** SPICE
