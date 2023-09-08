@@ -18,21 +18,25 @@
                                         finally return (string-join regex-list "|"))
                                look-for))
 
-(defun simple-jump--sort-results (a b) (not (string> a b)))
+(defun simple-jump--sort-results (a b)
+  (let ((afl (xref-item-location a))
+        (bfl (xref-item-location b)))
+    (or (string< (xref-file-location-file afl) (xref-file-location-file bfl))
+        (and (string= (xref-file-location-file afl) (xref-file-location-file bfl))
+             (<       (xref-file-location-line afl) (xref-file-location-line bfl))))))
+
 (defun simple-jump--parse-raw (raw-results curr-file curr-line)
-  (cl-loop for line in (sort (string-lines raw-results t nil) #'simple-jump--sort-results)
-           for match = (string-match (rx bol (group (+ nonl)) ":" (group (+ num)) ":" (group (* nonl))) line)
-           for filepath = (match-string 1 line)
-           for line-num = (string-to-number (or (match-string 2 line) ""))
-           for context  = (match-string 3 line)
-           with prev = nil
-           if (and match (not (or (and (string= filepath (car prev)) (= line-num (1+ (cdr prev))))
-                                  (and (string= filepath curr-file)  (= line-num curr-line)))))
-           collect (xref-make context (xref-make-file-location filepath line-num 0))
-           do (setq prev (cons filepath line-num))))
+  (cl-loop with matcher = (rx bol (group (+ nonl)) ":" (group (+ num)) ":" (group (* nonl)))
+           for line in (string-lines raw-results t nil)
+           for match = (string-match matcher line)
+           for result = (xref-make (match-string 3 line) (xref-make-file-location
+                                                          (match-string 1 line)
+                                                          (string-to-number (or (match-string 2 line) "")) 0))
+           if match collect result into results
+           finally return (sort results #'simple-jump--sort-results)))
 
 (defun simple-jump--find (symbol &optional all-refs)
-  (when-let* ((curr-file (expand-file-name (buffer-file-name)))
+  (when-let* ((curr-file (expand-file-name (or (buffer-file-name) "./")))
               (curr-line (line-number-at-pos))
               (search-from (project-root (or (project-current) (cons 'transient (expand-file-name "./")))))
               (family (alist-get major-mode simple-jump-family-alist))
@@ -40,12 +44,22 @@
               (base-args " -0l ")
               (search-regex (simple-jump--populate-regexes family prompt))
               (search-args " --color never --no-heading -PHUn ")
-              (cmd (concat (concat simple-jump-rg-command (if all-refs search-args base-args)
+              (allref-args " --color never --no-heading -Hn ")
+              (cmd (concat (concat simple-jump-rg-command (if all-refs allref-args base-args)
                                    (shell-quote-argument base-regex) " " (shell-quote-argument search-from))
                            " | xargs -0 "
                            (unless all-refs (concat simple-jump-rg-command search-args (shell-quote-argument search-regex)))))
               (raw-results (shell-command-to-string cmd)))
     (let ((results (simple-jump--parse-raw raw-results curr-file curr-line)))
+      (setq results (cl-loop for result in results
+                             for  rfl = (xref-item-location result)
+                             with pfl = (xref-make-file-location nil 0 0)
+                             unless (or (and (string= (xref-file-location-file rfl)     (xref-file-location-file pfl))
+                                             (=       (xref-file-location-line rfl) (1+ (xref-file-location-line pfl))))
+                                        (and (string= (xref-file-location-file rfl) curr-file)
+                                             (=       (xref-file-location-line rfl) curr-line)))
+                             collect result
+                             do (setq pfl rfl)))
       (when simple-jump-debug
         (message "Command :: %s" cmd)
         (message "Raw out ::\n%s" raw-results)

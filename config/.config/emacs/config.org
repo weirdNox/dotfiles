@@ -1636,7 +1636,7 @@ fundamental-mode) for performance sake."
 #+end_src
 *** (Ba)sh
 #+begin_src emacs-lisp
-(use-package sh-mode
+(use-package sh-script
   :init (add-to-list 'major-mode-remap-alist '(sh-mode . bash-ts-mode))
   :config
   (after! simple-jump
@@ -1761,10 +1761,11 @@ fundamental-mode) for performance sake."
   (setq! c-ts-mode-indent-style #'+c-ts-mode--indent-style)
 
   (after! simple-jump
-    (let ((family (make-simple-jump-family :regexes '("\\w+[*\\s]+JJJ\\s*\\((?>[^()]+|(?1))*\\)[^;\\{]*\\{"
-                                                      "(struct|union|class)\\b.+\\bJJJ\\s*\\{"
-                                                      "(typedef\\b|\\}).+\\bJJJ\\s*;"
-                                                      "^\\L*#define\\s+JJJ\\b"))))
+    (let ((family (make-simple-jump-family
+                   :regexes '("\\w+[*\\s]+JJJ\\s*(\\((?>[^()]+|(?1))*\\))(?:\\s|\\/\\/(?-s:.*)|\\/\\*(?s:.*?)\\*\\/)*\\{"
+                              "(struct|union|class)\\b.+\\bJJJ\\s*\\{"
+                              "(typedef\\b|\\}).+\\bJJJ\\s*;"
+                              "^\\L*#define\\s+JJJ\\b"))))
       (setf (alist-get 'c-ts-mode   simple-jump-family-alist) family)
       (setf (alist-get 'c++-ts-mode simple-jump-family-alist) family))))
 #+END_SRC
