@@ -1838,6 +1838,13 @@ fundamental-mode) for performance sake."
   (make-directory TeX-auto-local t))
 #+END_SRC
 
+*** Linker scripts (ld)
+#+begin_src emacs-lisp
+(use-package ld-mode
+  :autoload ld-mode
+  :init (add-to-list 'major-mode-remap-alist '(ld-script-mode . ld-mode)))
+#+end_src
+
 *** (Emacs) Lisp
 #+begin_src emacs-lisp
 (use-package lisp-mode
