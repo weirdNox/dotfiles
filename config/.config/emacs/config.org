@@ -1662,7 +1662,7 @@ fundamental-mode) for performance sake."
   (defsubst +c-ts-mode--skip-preproc (in-node)
     (cl-loop for node = in-node then (treesit-node-parent node)
              for type =              (treesit-node-type   node)
-             while (and node (string-match-p "preproc" type))
+             while (and node (string-match-p "preproc\\|\n" type))
              finally return node))
 
   ;; NOTE(nox): Same as parent-is, but skips preproc
@@ -1683,7 +1683,8 @@ fundamental-mode) for performance sake."
 
   (defun +c-ts-mode--parenthesized-indent (search-for)
     `(lambda (child parent &rest _)
-       (cl-loop for is-first = (= (treesit-node-index child) 1) then nil
+       (cl-loop with is-empty = (member (treesit-node-type (treesit-node-child parent 1)) '(")" "}" "]"))
+                for is-first = (or is-empty (= (treesit-node-index child) 1)) then nil
                 for p = parent then (treesit-node-parent p)
                 until (string= ,search-for (treesit-node-type p))
                 finally return
