@@ -3729,8 +3729,9 @@ Return the result as a string."
 
 (defun +compile (arg)
   (interactive "P")
-  (let* ((override-cmd (and arg t))
-         (set-default (equal arg '(16)))
+  (let* ((set-default  (equal arg '(16)))
+         (override-cmd (and arg t))
+         (save-cmd     (or set-default (equal arg 0)))
          (calling-from (expand-file-name (or (buffer-file-name) "./")))
          (candidates (cl-loop for dir = (expand-file-name "./") then next
                               for next = (file-name-directory (directory-file-name dir))
@@ -3762,10 +3763,9 @@ Return the result as a string."
 
     (when (eq (+compile-info-type chosen) 'new-custom)
       (setf (+compile-info-type chosen) 'custom)
-      (setf (+compile-info-path chosen) (read-directory-name "Base directory: " nil nil t))
+      (setf (+compile-info-path chosen) (expand-file-name (read-directory-name "Base directory: " nil nil t)))
       (unless (string-prefix-p (+compile-info-path chosen) calling-from)
-        (error "Directory '%s' isn't a prefix of '%s'" (+compile-info-path chosen) calling-from))
-      (setq override-cmd t set-default t))
+        (error "Directory '%s' isn't a prefix of '%s'" (+compile-info-path chosen) calling-from)))
 
     (let* ((path (+compile-info-path chosen))
            (dir (file-name-directory path))
@@ -3785,9 +3785,8 @@ Return the result as a string."
       (when override-cmd (setq cmd (read-string "Command: " cmd '+compile-cmd-history)))
       (setf (+compile-info-last-time chosen) (current-time))
 
-      (when set-default
-        (setf (+compile-info-cmd chosen) cmd)
-        (setf (+compile-info-rank-time chosen) (+compile-info-last-time chosen)))
+      (when save-cmd    (setf (+compile-info-cmd chosen) cmd))
+      (when set-default (setf (+compile-info-rank-time chosen) (+compile-info-last-time chosen)))
 
       (projectile-save-project-buffers)
 
