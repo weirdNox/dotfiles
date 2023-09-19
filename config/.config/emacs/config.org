@@ -4258,8 +4258,10 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
   :when (executable-find "git")
   :config
   (setq! magit-diff-refine-hunk 'all
-         magit-bury-buffer-function 'magit-mode-quit-window)
+         magit-bury-buffer-function 'magit-mode-quit-window))
 
+(use-package magit-submodule
+  :config
   (transient-define-suffix magit-submodule-update (modules args)
     "Update MODULES by checking out the recorded commits."
     :class 'magit--git-submodule-suffix
@@ -4281,6 +4283,16 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
 
   (transient-append-suffix 'magit-submodule '(0 -1) '("-i" "Also initialize" "--init"))
   (transient-append-suffix 'magit-submodule '(2 -1) '("U" +magit-submodule-update-all)))
+
+(use-package magit-patch
+  :config
+  (transient-define-argument magit-format-patch:--output ()
+    :description "Output to file"
+    :class 'transient-option
+    :key "-o     "
+    :argument "--output="
+    :reader #'transient-read-file)
+  (transient-append-suffix 'magit-patch-create "C-m o" '(magit-format-patch:--output)))
 #+END_SRC
 
 *** Misc
