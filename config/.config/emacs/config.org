@@ -1766,7 +1766,7 @@ fundamental-mode) for performance sake."
                    :regexes '("\\w+[*\\s]+JJJ\\s*(\\((?>[^()]+|(?1))*\\))(?:\\s|\\/\\/(?-s:.*)|\\/\\*(?s:.*?)\\*\\/)*\\{"
                               "(struct|union|class)\\b.+\\bJJJ\\s*\\{"
                               "(typedef\\b|\\}).+\\bJJJ\\s*;"
-                              "^\\L*#define\\s+JJJ\\b"))))
+                              "^\\L*#\\s*define\\s+JJJ\\b"))))
       (setf (alist-get 'c-ts-mode   simple-jump-family-alist) family)
       (setf (alist-get 'c++-ts-mode simple-jump-family-alist) family))))
 #+END_SRC
