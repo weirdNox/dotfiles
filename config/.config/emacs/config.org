@@ -694,11 +694,11 @@ symbols.
 
 *** Font
 #+BEGIN_SRC emacs-lisp
-(defvar nox-fonts '(("PragmataPro"      10.5 .15)
+(defvar nox-fonts '(("PragmataPro"      10.0 .00)
                     ("Cascadia Code"    10.0 .00)
-                    ("Consolas"         11.0 .15)
-                    ("Liberation Mono"  10.0 .15)
-                    ("DejaVu Sans Mono" 10.0 .15)
+                    ("Consolas"         10.0 .00)
+                    ("Liberation Mono"  10.0 .00)
+                    ("DejaVu Sans Mono"  9.0 .00)
                     ("Source Code Pro"  10.0 .00)))
 
 (defvar nox-font-faces-changed nil
@@ -822,6 +822,8 @@ ARGS are the same as in `custom-set-faces'."
     (nox-theme-set-faces
      `(org-drawer ((t . (:foreground ,(face-attribute 'shadow :foreground)))))
      `(org-headline-done ((t . (:foreground ,(face-attribute 'shadow :foreground) :strike-through nil)))))))
+
+(use-package modus-themes :elpaca t)
 #+END_SRC
 
 **** Extra programming keywords
@@ -878,7 +880,7 @@ Disable fringes in the minibuffer window.
 (elpaca nil
   (defun nox-setup-appearance (frame)
     (with-selected-frame frame
-      (load-theme 'sanityinc-tomorrow-night t)
+      (load-theme 'modus-vivendi t)
       (nox/change-font)
       (when (> (window-width) 100) (split-window-right))
       (setq! system-time-locale "C")))
