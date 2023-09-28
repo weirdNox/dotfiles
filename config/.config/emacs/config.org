@@ -956,7 +956,7 @@ Disable fringes in the minibuffer window.
   (setq recentf-save-file (concat nox-cache-dir "recentf")
         recentf-auto-cleanup 120
         recentf-max-menu-items 0
-        recentf-max-saved-items 300
+        recentf-max-saved-items 10000
         recentf-filename-handlers '(file-truename)
         recentf-exclude
         (list #'file-remote-p "\\.\\(?:gz\\|gif\\|svg\\|png\\|jpe?g\\)$"
