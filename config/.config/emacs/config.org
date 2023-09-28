@@ -3337,7 +3337,7 @@ When optional argument is non-nil, refresh cached heading."
 
 *** Org Noter
 #+BEGIN_SRC emacs-lisp
-(use-package org-noter :elpaca t
+(use-package org-noter :elpaca (:host github :repo "weirdNox/org-noter")
   :general
   (nox-local-leader :keymaps 'org-mode-map      "n" '(org-noter :wk "Org Noter"))
   (nox-local-leader :keymaps 'pdf-view-mode-map "n" '(org-noter :wk "Org Noter"))
