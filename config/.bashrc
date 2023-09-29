@@ -10,7 +10,7 @@ HISTFILESIZE=5000000   # Number of commands to store in history file
 HISTFILE="$XDG_STATE_HOME/bash_history"
 
 # ------------------------------------------------------------------------------------------
-# Aliases
+# Aliases and helper functions
 alias   ls='ls   --color=auto'
 alias grep='grep --color=auto'
 
@@ -25,3 +25,23 @@ alias   gef='gdb -q -x "$XDG_CONFIG_HOME"/gdb/gef.py'
 
 # This makes bash check if the commands following sudo are aliases
 alias sudo='sudo '
+
+function watch_and_run {
+    local args=(); while [[ $# -ge 1 && "$1" != "--" ]]; do args+=("$1"); shift 1; done
+    shift 1
+
+    if [[ "${#args}" -lt 1 || ! $# -eq 1 ]]; then
+        echo "USAGE: ${FUNCNAME[0]} <arg> [<arg> ...] -- <cmd>"
+        return 1
+    fi
+
+    local batch_window="${batch_window:-5}"
+
+    IFS= inotifywait -e create,close_write,moved_to --format '%w%f%0' -mr "${args[@]}" 2>/dev/null |
+        while read -d '' file; do
+            local files=("$file")
+            while read -d '' -t "$batch_window" file; do files+=("$file"); done
+            readarray -td '' files < <(printf "%s\0" "${files[@]}" | sort -zu)
+            eval "$@"
+        done
+}
