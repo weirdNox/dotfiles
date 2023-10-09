@@ -1783,6 +1783,14 @@ fundamental-mode) for performance sake."
 *** GLSL
 #+begin_src emacs-lisp
 (use-package glsl-mode :elpaca t)
+
+;; glsl-mode uses cc-mode for indentation
+(use-package cc-mode :elpaca nil
+  :config
+  (setq! c-default-style "weirdNox")
+  (c-add-style c-default-style '((c-basic-offset . 4)
+                                 (c-offsets-alist . ((arglist-close . c-lineup-arglist)
+                                                     (substatement-open . 0))))))
 #+end_src
 
 *** Go
