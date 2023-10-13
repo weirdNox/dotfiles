@@ -3,6 +3,9 @@
 # For interactive login bash shells, ~/.profile loads this.
 #
 
+# Disable XON/XOFF flow control (allows using Ctrl-s)
+stty -ixon
+
 # History settings
 HISTCONTROL=ignoreboth # Don't insert commands that start with a space or that are duplicates in the history
 HISTSIZE=-1            # Unlimited history during a single session
