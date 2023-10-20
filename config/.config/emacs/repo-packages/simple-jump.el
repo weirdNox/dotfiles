@@ -9,8 +9,8 @@
 
 (defsubst simple-jump--populate-regex (regex look-for)
   (setq regex (string-replace "JJJ" (regexp-quote look-for) regex))
-  (setq regex (string-replace "\\L" "[^\\S\\n\\r]" regex))
-  (setq regex (string-replace "\\j" "[\\b-]"       regex)))
+  (setq regex (string-replace "\\L" "[\\t ]" regex))
+  (setq regex (string-replace "\\j" "[\\b-]" regex)))
 
 (defsubst simple-jump--populate-regexes (family look-for)
   (simple-jump--populate-regex (cl-loop for regex in (simple-jump-family-regexes family)

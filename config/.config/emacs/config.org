@@ -1765,10 +1765,10 @@ fundamental-mode) for performance sake."
 
   (after! simple-jump
     (let ((family (make-simple-jump-family
-                   :regexes '("\\w+[*\\s]+JJJ\\s*(\\((?>[^()]+|(?1))*\\))(?:\\s|\\/\\/(?-s:.*)|\\/\\*(?s:.*?)\\*\\/)*\\{"
+                   :regexes '("\\bJJJ\\s*(\\((?>[^()]+|(?1))*\\))(?:\\s|\\/\\/(?-s:.*)|\\/\\*(?s:(?!\\*\\/).)*\\*\\/)*\\{"
                               "(struct|union|class)\\b.+\\bJJJ\\s*\\{"
                               "(typedef\\b|\\}).+\\bJJJ\\s*;"
-                              "^\\L*#\\s*define\\s+JJJ\\b"))))
+                              "^\\L*#\\L*define\\L+JJJ\\b"))))
       (setf (alist-get 'c-ts-mode   simple-jump-family-alist) family)
       (setf (alist-get 'c++-ts-mode simple-jump-family-alist) family))))
 #+END_SRC
