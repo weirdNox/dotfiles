@@ -75,6 +75,12 @@ Also create the directories if they don't exist.
   (declare (doc-string 1))
   `(lambda () (interactive) ,@body))
 
+(defmacro no-sorting! (list)
+  `(lambda (string pred action)
+     (if (eq action 'metadata)
+         '(metadata (display-sort-function . identity))
+       (complete-with-action action ,list string pred))))
+
 (defun nox-unquote (exp)
   "Return EXP unquoted."
   (declare (pure t) (side-effect-free t))
@@ -3715,26 +3721,31 @@ Return the result as a string."
 
 **** Compilation command
 #+BEGIN_SRC emacs-lisp
-(defconst +compile-sh-names   '("build_nox.sh"  "build.sh"))
-(defconst +compile-jai-names  '("build_nox.jai" "build.jai" "first.jai" "main.jai"))
-(defconst +compile-make-names '("GNUmakefile" "makefile" "Makefile"))
-(defconst +compile-look-for (append (cl-loop for f in +compile-sh-names   collect (cons f 'sh))
-                                    (cl-loop for f in +compile-jai-names  collect (cons f 'jai))
-                                    (cl-loop for f in +compile-make-names collect (cons f 'make))))
+(defconst +compile-look-for
+  '(("build_nox\\.sh"        sh   0)
+    ("build_nox\\.jai"       jai  0)
+    ("build\\(_.+\\)?\\.sh"  sh   1)
+    ("build\\(_.+\\)?\\.jai" jai  1)
+    ("first\\.jai"           jai  1)
+    ("main\\.jai"            jai  1)
+    ("\\(GNU\\)?[Mm]akefile" make 5)))
 
 (defvar-local +compile-info nil)
-(cl-defstruct +compile-info type path cmd (last-time '(0 0 0 1)) (rank-time '(0 0 0 1)) delete-window)
+(cl-defstruct +compile-info type path cmd sort-key (last-time '(0 0 0 1)) (rank-time '(0 0 0 1)) delete-window)
 (defvar +compile-info-table (make-hash-table :test 'equal))
 
 (defvar +compile-cmd-history nil)
 
-(defsubst +compile-builder (path &optional type)
-  (let ((info (or (gethash path +compile-info-table)
-                  (and type (make-+compile-info :type type :path path
-                                                :cmd (cond ((eq type 'sh)   "%s")
-                                                           ((eq type 'jai)  "jai %s")
-                                                           ((eq type 'make) "make -k")
-                                                           (t "")))))))
+(defsubst +compile-builder (path &optional type-desc)
+  (let* ((type (or (car-safe type-desc) type-desc))
+         (sort-key (if (consp type-desc) (cadr type-desc) 999))
+         (info (or (gethash path +compile-info-table)
+                   (and type (make-+compile-info :type type :path path
+                                                 :cmd (cond ((eq type 'sh)   "%s")
+                                                            ((eq type 'jai)  "jai %s")
+                                                            ((eq type 'make) "make -k")
+                                                            (t ""))
+                                                 :sort-key sort-key)))))
     (and info (cons path info))))
 
 (defun +compile (arg)
@@ -3747,23 +3758,28 @@ Return the result as a string."
                               for next = (file-name-directory (directory-file-name dir))
                               until (string= dir next)
                               for custom-builder = (+compile-builder dir) if custom-builder collect custom-builder into list
-                              nconc (cl-loop with builder
-                                             for lf in +compile-look-for
-                                             for path = (expand-file-name (car lf) dir)
-                                             if (file-exists-p path) collect (+compile-builder path (cdr lf)))
+                              nconc (cl-loop for lf in +compile-look-for
+                                             for paths = (file-expand-wildcards (expand-file-name (car lf) dir) t t)
+                                             nconc (cl-loop for path in paths
+                                                            unless (assoc path dir-results)
+                                                            collect (+compile-builder path (cdr lf)))
+                                             into dir-results finally
+                                             return (reverse dir-results))
                               into list
                               finally return
-                              (cl-nreconc list (append (and (string= (file-name-extension calling-from) "jai")
-                                                            (not (assoc calling-from list))
-                                                            (list (+compile-builder calling-from 'jai)))
-                                                       (and set-default
-                                                            (list (+compile-builder "Add custom builder..." 'new-custom)))))))
+                              (nconc (sort (reverse list) (lambda (a b) (< (+compile-info-sort-key (cdr a))
+                                                                           (+compile-info-sort-key (cdr b)))))
+                                     (append (and (string= (file-name-extension calling-from) "jai")
+                                                  (not (assoc calling-from list))
+                                                  (list (+compile-builder calling-from 'jai)))
+                                             (and set-default
+                                                  (list (+compile-builder "Add custom builder..." 'new-custom)))))))
          chosen)
     (unless candidates (error "No builder found"))
 
     (setq chosen (or (and (not set-default) +compile-info)
                      (cdr (if set-default
-                              (assoc (completing-read "Which builder? " candidates nil t nil nil nil) candidates)
+                              (assoc (completing-read "Which builder? " (no-sorting! candidates) nil t nil nil nil) candidates)
                             (cl-loop with result = (car candidates)
                                      for builder in candidates
                                      if (time-less-p (+compile-info-rank-time (cdr result))
