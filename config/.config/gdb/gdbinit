@@ -1,4 +1,7 @@
+# -*- mode: conf-space; -*-
 set history save on
 set history size 500000
 
 set disassembly-flavor intel
+
+set debuginfod enabled on
