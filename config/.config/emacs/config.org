@@ -4308,7 +4308,9 @@ _p_rev       _u_pper              _=_: upper/lower       _r_esolve
     (magit-with-toplevel (magit-run-git-async "submodule" "update" args)))
 
   (transient-append-suffix 'magit-submodule '(0 -1) '("-i" "Also initialize" "--init"))
-  (transient-append-suffix 'magit-submodule '(2 -1) '("U" +magit-submodule-update-all)))
+  (transient-append-suffix 'magit-submodule '(2 -1) '("U" +magit-submodule-update-all))
+
+  (transient-append-suffix 'magit-fetch '(0 0) '("-P" "Prune tags" "--prune-tags")))
 
 (use-package magit-patch
   :config
