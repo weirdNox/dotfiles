@@ -47,8 +47,8 @@
               (allref-args " --color never --no-heading -Hn ")
               (cmd (concat (concat simple-jump-rg-command (if all-refs allref-args base-args)
                                    (shell-quote-argument base-regex) " " (shell-quote-argument search-from))
-                           " | xargs -0 "
-                           (unless all-refs (concat simple-jump-rg-command search-args (shell-quote-argument search-regex)))))
+                           (unless all-refs (concat " | xargs -0 " simple-jump-rg-command
+                                                    search-args (shell-quote-argument search-regex)))))
               (raw-results (shell-command-to-string cmd)))
     (let ((results (simple-jump--parse-raw raw-results curr-file curr-line)))
       (setq results (cl-loop for result in results
