@@ -3881,7 +3881,6 @@ Return the result as a string."
   (setq! denote-directory "~/archive/notes"
          denote-known-keywords '()
          denote-date-prompt-use-org-read-date t
-         denote-allow-multi-word-keywords t
          denote-backlinks-show-context t)
 
   (defun +denote/search-in-all-notes ()

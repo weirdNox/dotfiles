@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# To be used as WINELOADER when running yabridgectl and the DAWs
+
+set -euo pipefail
+
+script_path="${BASH_SOURCE[0]}"
+stage2="/tmp/yabridge_wine"
+
+if [[ "$script_path" == "$stage2" ]]; then
+    ip link add eth0 type dummy
+    ip link set dev eth0 up
+    exec "$@"
+else
+    yabridge_data="$XDG_DATA_HOME/yabridge"
+    yabridge_wine="$yabridge_data/wine"
+    yabridge_prfx="$yabridge_data/prefix"
+
+    mkdir -p "$yabridge_prfx"
+
+    wrapper=(
+        bwrap
+
+        --unshare-user --unshare-ipc --unshare-net --unshare-uts --unshare-cgroup
+        --cap-add CAP_NET_ADMIN
+        --die-with-parent
+
+        --dev-bind / /
+        --proc  /proc
+        --tmpfs /home
+        --tmpfs /tmp
+        --tmpfs "$XDG_RUNTIME_DIR"
+        --bind-try "/tmp/.X11-unix" "/tmp/.X11-unix"
+        --bind-try "$script_path" "$stage2"
+        --bind-try "$yabridge_data" "$yabridge_data"
+        --bind-try "$HOME/.vst"  "$HOME/.vst"
+        --bind-try "$HOME/.vst3" "$HOME/.vst3"
+        --bind-try "$YABRIDGE_TEMP_DIR" "$YABRIDGE_TEMP_DIR"
+
+        --setenv WINEDEBUG  "-all"
+        --setenv WINEPREFIX "$yabridge_prfx"
+        --setenv WINEFSYNC  1
+    )
+
+    if [[ "${1-}" == "-" ]]; then cmd=("${2-}"); shift 2
+    elif [[ -d "$yabridge_wine" ]]; then cmd=("$yabridge_wine/bin/wine")
+    else cmd=("wine")
+    fi;  cmd+=("$@")
+
+    exec "${wrapper[@]}" "$stage2" "${cmd[@]}"
+fi
