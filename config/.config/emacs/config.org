@@ -1854,6 +1854,12 @@ fundamental-mode) for performance sake."
   (make-directory TeX-auto-local t))
 #+END_SRC
 
+*** Lua
+#+begin_src emacs-lisp
+(use-package lua-mode :elpaca t
+  :config (setq! lua-indent-level 4))
+#+end_src
+
 *** Linker scripts (ld)
 #+begin_src emacs-lisp
 (use-package ld-mode
