@@ -1829,7 +1829,12 @@ fundamental-mode) for performance sake."
 
 *** LaTeX
 #+BEGIN_SRC emacs-lisp
-(use-package latex :elpaca auctex
+(use-package latex :elpaca (auctex :pre-build (("./autogen.sh")
+                                               ("./configure" "--without-texmf-dir" "--with-packagelispdir=./" "--with-packagedatadir=./")
+                                               ("make"))
+                                   :build (:not elpaca--compile-info)
+                                   :files ("*.el" "doc/*.info*" "etc" "images" "latex" "style")
+                                   :version (lambda (_) (require 'tex-site) AUCTeX-version))
   :commands +tex*set-auto-location
   :config
   (setq! TeX-auto-save t
@@ -1853,6 +1858,11 @@ fundamental-mode) for performance sake."
   (advice-add #'TeX-tex-mode :after #'+tex*set-auto-location)
   (make-directory TeX-auto-local t))
 #+END_SRC
+
+*** Ledger
+#+begin_src emacs-lisp
+(use-package ledger-mode :elpaca t)
+#+end_src
 
 *** Lua
 #+begin_src emacs-lisp
