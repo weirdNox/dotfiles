@@ -1,7 +1,5 @@
--- quality-menu 4.1.0 - 2023-Feb-17
+-- quality-menu 4.1.1 - 2023-Oct-22
 -- https://github.com/christoph-heinrich/mpv-quality-menu
---
--- Modified by weirdNox to fix "ytdl://" prefix support
 --
 -- Change the stream video and audio quality on the fly.
 --
@@ -15,6 +13,7 @@ local utils = require 'mp.utils'
 local msg = require 'mp.msg'
 local assdraw = require 'mp.assdraw'
 local opt = require('mp.options')
+local script_name = mp.get_script_name()
 
 local opts = {
     --key bindings
@@ -238,11 +237,10 @@ end
 
 -- special thanks to reload.lua (https://github.com/4e6/mpv-reload/)
 local function reload_resume()
-    local playlist_pos = mp.get_property_number('playlist-pos')
     local reload_duration = mp.get_property_native('duration')
     local time_pos = mp.get_property('time-pos')
 
-    mp.set_property_number('playlist-pos', playlist_pos)
+    mp.command('playlist-play-index current')
 
     -- Tries to determine live stream vs. pre-recorded VOD. VOD has non-zero
     -- duration property. When reloading VOD, to keep the current time position
@@ -251,7 +249,7 @@ local function reload_resume()
     -- That's the reason we don't pass the offset when reloading streams.
     if reload_duration and reload_duration > 0 then
         local function seeker()
-            mp.commandv('seek', time_pos, 'absolute')
+            mp.commandv('seek', time_pos, 'absolute+exact')
             mp.unregister_event(seeker)
         end
 
@@ -500,12 +498,21 @@ end
 local function get_url()
     local path = mp.get_property('path')
     if not path then return nil end
+    path = path:gsub('ytdl://', '') -- Strip possible ytdl:// prefix.
 
-    local prefix = "ytdl://"
-    local has_prefix = (path:sub(1, #prefix) == prefix)
-    if has_prefix then path = path:sub(#prefix + 1) end
+    ---@param str string
+    ---@return boolean
+    local function is_url(str)
+        -- adapted the regex from
+        -- https://stackoverflow.com/questions/3809401/what-is-a-good-regular-expression-to-match-a-url
+        return nil ~=
+            str:match(
+                '^[%w]-://[-a-zA-Z0-9@:%._\\+~#=]+%.' ..
+                '[a-zA-Z0-9()][a-zA-Z0-9()]?[a-zA-Z0-9()]?[a-zA-Z0-9()]?[a-zA-Z0-9()]?[a-zA-Z0-9()]?' ..
+                '[-a-zA-Z0-9()@:%_\\+.~#?&/=]*')
+    end
 
-    return (has_prefix or path:match("[a-z]*://[^ >,;]*")) and path or nil
+    return is_url(path) and path or nil
 end
 
 local uosc_available = false
@@ -630,19 +637,6 @@ local function download_formats(url)
 
         msg.verbose('ytdl succeeded!')
         local data = process_json_string(result.stdout)
-        function dump(o)
-           if type(o) == 'table' then
-              local s = '{ '
-              for k,v in pairs(o) do
-                 if type(k) ~= 'number' then k = '"'..k..'"' end
-                 s = s .. '['..k..'] = ' .. dump(v) .. ','
-              end
-              return s .. '} '
-           else
-              return tostring(o)
-           end
-        end
-        msg.verbose(dump(data))
         url_data[url] = data
         uosc_set_format_counts()
 
@@ -687,10 +681,10 @@ end
 ---@param video_format string
 ---@param audio_format string
 local function set_format(url, video_format, audio_format)
-    if (url and (url_data[url].video_active_id ~= video_format or url_data[url].audio_active_id ~= audio_format)) then
+    if (url_data[url].video_active_id ~= video_format or url_data[url].audio_active_id ~= audio_format) then
         url_data[url].video_active_id = video_format
         url_data[url].audio_active_id = audio_format
-        if url == get_url(mp.get_property('path')) then reload_resume() end
+        if url == mp.get_property('path') then reload_resume() end
     end
 end
 
@@ -754,7 +748,7 @@ local function text_menu_open(formats, active_format, menu_type)
         local clip_top = math.floor(margin_top * height + 0.5)
         local clip_bottom = math.floor((1 - margin_bottom) * height + 0.5)
         local clipping_coordinates = '0,' .. clip_top .. ',' .. width .. ',' .. clip_bottom
-        ass:append(opts.style_ass_tags .. '{\\q2\\clip(' .. clipping_coordinates .. ')}')
+        ass:append('{\\rDefault\\q2\\clip(' .. clipping_coordinates .. ')}' .. opts.style_ass_tags)
 
         if #formats > 0 then
             for i, format in ipairs(formats) do
@@ -781,29 +775,47 @@ local function text_menu_open(formats, active_format, menu_type)
         draw_menu()
     end
 
-    local function update_margins()
-        local shared_props = mp.get_property_native('shared-script-properties')
-        local val = shared_props['osc-margins']
-        if val then
-            -- formatted as '%f,%f,%f,%f' with left, right, top, bottom, each
-            -- value being the border size as ratio of the window size (0.0-1.0)
-            local vals = {}
-            for v in string.gmatch(val, '[^,]+') do
-                vals[#vals + 1] = tonumber(v)
+    local update_margins;
+    if utils.shared_script_property_set then
+        update_margins = function()
+            local shared_props = mp.get_property_native('shared-script-properties')
+            local val = shared_props['osc-margins']
+            if val then
+                -- formatted as '%f,%f,%f,%f' with left, right, top, bottom, each
+                -- value being the border size as ratio of the window size (0.0-1.0)
+                local vals = {}
+                for v in string.gmatch(val, '[^,]+') do
+                    vals[#vals + 1] = tonumber(v)
+                end
+                margin_top = vals[3] -- top
+                margin_bottom = vals[4] -- bottom
+            else
+                margin_top = 0
+                margin_bottom = 0
             end
-            margin_top = vals[3] -- top
-            margin_bottom = vals[4] -- bottom
-        else
-            margin_top = 0
-            margin_bottom = 0
+            draw_menu()
         end
-        draw_menu()
+        mp.observe_property('shared-script-properties', 'native', update_margins)
+    else
+        update_margins = function(_, val)
+            if not val then
+                val = mp.get_property_native('user-data/osc/margins')
+            end
+            if val then
+                margin_top = val.t
+                margin_bottom = val.b
+            else
+                margin_top = 0
+                margin_bottom = 0
+            end
+            draw_menu()
+        end
+        mp.observe_property('user-data/osc/margins', 'native', update_margins)
     end
 
     update_dimensions()
     update_margins()
     mp.observe_property('osd-dimensions', 'native', update_dimensions)
-    mp.observe_property('shared-script-properties', 'native', update_margins)
 
     ---@param amount integer
     local function selected_move(amount)
@@ -900,7 +912,6 @@ end
 
 ---@param menu table
 ---@param menu_type UIState
----@return string
 local function uosc_show_menu(menu, menu_type)
     local json = utils.format_json(menu)
     -- always using update wouldn't work, because it doesn't support the on_close command
@@ -908,7 +919,6 @@ local function uosc_show_menu(menu, menu_type)
     -- while updating the same kind requires `update-menu`
     if open_menu_state == menu_type then mp.commandv('script-message-to', 'uosc', 'update-menu', json)
     else mp.commandv('script-message-to', 'uosc', 'open-menu', json) end
-    return json
 end
 
 ---@param formats Format[]
@@ -922,7 +932,7 @@ local function uosc_menu_open(formats, active_format, menu_type)
         keep_open = true,
         on_close = {
             'script-message-to',
-            'quality_menu',
+            script_name,
             'uosc-menu-closed',
             menu_type.name,
         }
@@ -935,7 +945,7 @@ local function uosc_menu_open(formats, active_format, menu_type)
         hint = 'open menu',
         value = {
             'script-message-to',
-            'quality_menu',
+            script_name,
             menu_type.to_other_type.type .. '_formats_toggle',
         },
     }
@@ -947,7 +957,7 @@ local function uosc_menu_open(formats, active_format, menu_type)
         active = active_format == '',
         value = {
             'script-message-to',
-            'quality_menu',
+            script_name,
             menu_type.type .. '-format-set',
             current_url,
             '',
@@ -961,7 +971,7 @@ local function uosc_menu_open(formats, active_format, menu_type)
             active = format.id == active_format,
             value = {
                 'script-message-to',
-                'quality_menu',
+                script_name,
                 menu_type.type .. '-format-set',
                 current_url,
                 format.id,
@@ -969,9 +979,9 @@ local function uosc_menu_open(formats, active_format, menu_type)
         }
     end
 
-    local json = uosc_show_menu(menu, menu_type)
+    uosc_show_menu(menu, menu_type)
     destructor = function()
-        mp.commandv('script-message-to', 'uosc', 'open-menu', json)
+        mp.commandv('script-message-to', 'uosc', 'close-menu', menu.type)
     end
 end
 
@@ -1096,19 +1106,19 @@ local function loading_message(menu_type)
         if open_menu_state and open_menu_state == menu_type then return end
         local menu = {
             title = menu_type.type_capitalized .. ' Formats',
-            items = { { icon = 'spinner', value = 'ignore' } },
+            items = { { icon = 'spinner', selectable = false, value = 'ignore' } },
             type = 'quality-menu-' .. menu_type.name,
             keep_open = true,
             on_close = {
                 'script-message-to',
-                'quality_menu',
+                script_name,
                 'uosc-menu-closed',
                 menu_type.name
             }
         }
-        local json = uosc_show_menu(menu, menu_type)
+        uosc_show_menu(menu, menu_type)
         destructor = function()
-            mp.commandv('script-message-to', 'uosc', 'open-menu', json)
+            mp.commandv('script-message-to', 'uosc', 'close-menu', menu.type)
         end
     else
         osd_message('fetching available ' .. menu_type.type .. ' formats...', 60)
@@ -1210,7 +1220,7 @@ end)
 
 -- run before ytdl_hook, which uses a priority of 10
 mp.add_hook('on_load', 9, function()
-    local path = get_url(mp.get_property('path'))
+    local path = mp.get_property('path')
     local data = url_data[path]
     if not (data and data.video_active_id and data.audio_active_id) then return end
     local format = format_string(data.video_active_id, data.audio_active_id)
@@ -1265,7 +1275,7 @@ mp.register_script_message('uosc-version', function(version)
         'uosc',
         'overwrite-binding',
         'stream-quality',
-        'script-binding quality_menu/video_formats_toggle'
+        'script-binding ' .. script_name .. '/video_formats_toggle'
     )
     ---@param name string
     mp.register_script_message('uosc-menu-closed', function(name)
