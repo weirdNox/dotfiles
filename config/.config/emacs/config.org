@@ -470,6 +470,20 @@ symbols.
          (use-package-process-keywords name rest state))))))
 #+END_SRC
 
+**** Update built-in packages
+#+begin_src emacs-lisp
+(defun +elpaca-unload-seq (e)
+  (and (featurep 'seq) (unload-feature 'seq t))
+  (elpaca--continue-build e))
+
+(defun +elpaca-seq-build-steps ()
+  (append (butlast (if (file-exists-p (expand-file-name "seq" elpaca-builds-directory))
+                       elpaca--pre-built-steps elpaca-build-steps))
+          (list '+elpaca-unload-seq 'elpaca--activate-package)))
+
+(use-package seq :elpaca `(seq :build ,(+elpaca-seq-build-steps)))
+#+end_src
+
 **** Repo packages
 #+begin_src emacs-lisp
 (add-to-list 'load-path nox-repo-packages-dir)
