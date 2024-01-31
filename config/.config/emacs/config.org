@@ -1686,13 +1686,42 @@ fundamental-mode) for performance sake."
 
 *** C/C++
 #+BEGIN_SRC emacs-lisp
-(use-package c-ts-mode
-  :mode (("\\.\\(c\\|h\\)\\(\\.inl\\)?\\'" . c-ts-mode)
-         ("\\.\\(c\\|h\\)pp\\(\\.inl\\)?\\'" . c++-ts-mode))
-  :init
-  (add-to-list 'major-mode-remap-alist '(c-mode   . c-ts-mode))
-  (add-to-list 'major-mode-remap-alist '(c++-mode . c++-ts-mode))
+(use-package cc-mode
+  :mode (("\\.\\(c\\|h\\)\\(\\.inl\\)?\\'" . c-mode)
+         ("\\.\\(c\\|h\\)pp\\(\\.inl\\)?\\'" . c++-mode))
+  :config
+  (add-hook! (c-mode c++-mode) (setq-local comment-start "// " comment-end ""))
 
+  (defun +cc-style-stmt-case-intro (info)
+    (save-excursion
+      (goto-char (cdr info)) ;; NOTE(nox): Anchor
+      (and (search-forward ":" (line-end-position) t) (not (looking-at "[[:space:]]*$")) 0)))
+
+  (defun +cc-arglist-close (info)
+    (and (save-excursion (skip-chars-backward " \t\n" (cdr info)) (eq ?, (char-before)))
+         (c-lineup-arglist info)))
+
+  (defun +cc-anchor-indentation (info)
+    (save-excursion
+      (goto-char (cdr info)) ;; NOTE(nox): Anchor
+      (back-to-indentation)
+      (vector (current-column))))
+
+  (setq! c-default-style "weirdNox")
+  (c-add-style c-default-style
+               '((c-basic-offset . 4)
+                 (c-offsets-alist . ((case-label . +)
+                                     (statement-case-intro . (+cc-style-stmt-case-intro +))
+                                     (substatement-open . +cc-anchor-indentation)
+                                     (statement-block-intro . (add +cc-anchor-indentation +))
+                                     (innamespace . [0])
+                                     (inextern-lang . 0)
+                                     (arglist-close . (+cc-arglist-close 0))
+                                     ;; Help with aligning macro false positives
+                                     (topmost-intro-cont . 0)
+                                     (knr-argdecl-intro . 0))))))
+
+(use-package c-ts-mode
   :config
   (setq! c-ts-mode-indent-offset 4)
 
@@ -1798,16 +1827,18 @@ fundamental-mode) for performance sake."
       ((+c-ts-mode--parent-is "case_statement") standalone-parent c-ts-mode-indent-offset)
 
       ((node-is "field_initializer_list") parent-bol ,(* c-ts-mode-indent-offset 2))))
-  (setq! c-ts-mode-indent-style #'+c-ts-mode--indent-style)
+  (setq! c-ts-mode-indent-style #'+c-ts-mode--indent-style))
 
-  (after! simple-jump
-    (let ((family (make-simple-jump-family
-                   :regexes '("\\bJJJ\\s*(\\((?>[^()]+|(?-1))*\\))(?:\\s|\\/\\/(?-s:.*)|\\/\\*(?s:.)*?\\*\\/)*+\\{"
-                              "(struct|union|class)\\b.+\\bJJJ\\s*\\{"
-                              "\\btypedef\\b(?:(?!JJJ\\s*;)[^;{]|(\\{(?>[^{}]+|(?-1))*\\}))++\\bJJJ\\s*;"
-                              "^\\L*#\\L*define\\L+JJJ\\b"))))
-      (setf (alist-get 'c-ts-mode   simple-jump-family-alist) family)
-      (setf (alist-get 'c++-ts-mode simple-jump-family-alist) family))))
+(after! simple-jump
+  (let ((family (make-simple-jump-family
+                 :regexes '("\\bJJJ\\s*(\\((?>[^()]+|(?-1))*\\))(?:\\s|\\/\\/(?-s:.*)|\\/\\*(?s:.)*?\\*\\/)*+\\{"
+                            "(struct|union|class)\\b.+\\bJJJ\\s*\\{"
+                            "\\btypedef\\b(?:(?!JJJ\\s*;)[^;{]|(\\{(?>[^{}]+|(?-1))*\\}))++\\bJJJ\\s*;"
+                            "^\\L*#\\L*define\\L+JJJ\\b"))))
+    (setf (alist-get 'c-mode      simple-jump-family-alist) family)
+    (setf (alist-get 'c++-mode    simple-jump-family-alist) family)
+    (setf (alist-get 'c-ts-mode   simple-jump-family-alist) family)
+    (setf (alist-get 'c++-ts-mode simple-jump-family-alist) family)))
 #+END_SRC
 
 *** Dockerfile & Containerfile
@@ -1820,14 +1851,6 @@ fundamental-mode) for performance sake."
 *** GLSL
 #+begin_src emacs-lisp
 (use-package glsl-mode :elpaca t)
-
-;; glsl-mode uses cc-mode for indentation
-(use-package cc-mode :elpaca nil
-  :config
-  (setq! c-default-style "weirdNox")
-  (c-add-style c-default-style '((c-basic-offset . 4)
-                                 (c-offsets-alist . ((arglist-close . c-lineup-arglist)
-                                                     (substatement-open . 0))))))
 #+end_src
 
 *** Go
