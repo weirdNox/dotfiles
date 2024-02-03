@@ -1692,6 +1692,12 @@ fundamental-mode) for performance sake."
   :config
   (add-hook! (c-mode c++-mode) (setq-local comment-start "// " comment-end ""))
 
+  (defun +cc-anchor-indentation (info)
+    (save-excursion
+      (goto-char (cdr info)) ;; NOTE(nox): Anchor
+      (back-to-indentation)
+      (vector (current-column))))
+
   (defun +cc-style-stmt-case-intro (info)
     (save-excursion
       (goto-char (cdr info)) ;; NOTE(nox): Anchor
@@ -1701,22 +1707,22 @@ fundamental-mode) for performance sake."
     (and (save-excursion (skip-chars-backward " \t\n" (cdr info)) (eq ?, (char-before)))
          (c-lineup-arglist info)))
 
-  (defun +cc-anchor-indentation (info)
-    (save-excursion
-      (goto-char (cdr info)) ;; NOTE(nox): Anchor
-      (back-to-indentation)
-      (vector (current-column))))
+  (defun +cc-anchor-column (info) (save-excursion (goto-char (cdr info)) (vector (current-column))))
 
   (setq! c-default-style "weirdNox")
   (c-add-style c-default-style
                '((c-basic-offset . 4)
                  (c-offsets-alist . ((case-label . +)
-                                     (statement-case-intro . (+cc-style-stmt-case-intro +))
-                                     (substatement-open . +cc-anchor-indentation)
-                                     (statement-block-intro . (add +cc-anchor-indentation +))
                                      (innamespace . [0])
                                      (inextern-lang . 0)
+                                     (substatement-open . +cc-anchor-indentation)
+                                     (statement-block-intro . (add +cc-anchor-indentation +))
+                                     (statement-cont . (c-lineup-ternary-bodies +))
+                                     (statement-case-intro . (+cc-style-stmt-case-intro +))
+                                     (arglist-cont-nonempty . (c-lineup-gcc-asm-reg c-lineup-ternary-bodies
+                                                               c-lineup-arglist))
                                      (arglist-close . (+cc-arglist-close 0))
+                                     (brace-list-entry . +cc-anchor-column)
                                      ;; Help with aligning macro false positives
                                      (topmost-intro-cont . 0)
                                      (knr-argdecl-intro . 0))))))
