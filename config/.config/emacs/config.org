@@ -519,7 +519,8 @@ symbols.
  inhibit-compacting-font-caches t
  minibuffer-prompt-properties '(read-only t cursor-intangible t face minibuffer-prompt)
  auth-source-save-behavior nil
- process-error-pause-time 0)
+ process-error-pause-time 0
+ native-comp-async-report-warnings-errors nil)
 
 (add-hook! 'minibuffer-setup-hook #'cursor-intangible-mode)
 #+END_SRC
