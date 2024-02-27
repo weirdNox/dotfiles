@@ -6,28 +6,17 @@ Type=Package
 # Match NVIDIA driver packages
 Target=nvidia
 Target=nvidia-lts
-# Match Linux kernel
+# Match Linux kernel (for checks below)
 Target=linux
-Target=linux-ck*
-Target=linux-git*
-Target=linux-hardened*
-Target=linux-lts*
-Target=linux-mainline*
-Target=linux-next*
-Target=linux-tkg*
-Target=linux-vfio*
-Target=linux-xanmod*
-Target=linux-zen*
-# Prevent Linux kernel false positives
-Target=!*docs
-Target=!*headers
+Target=linux-hardened
+Target=linux-lts
 
 [Action]
 Description=Updating NVIDIA modules in initcpio...
 Depends=mkinitcpio
 When=PostTransaction
-NeedsTargets
-Exec=/bin/sh -c 'while read -r Pkg; do [[ "$Pkg" == *linux* ]] && exit 0; done; /usr/bin/mkinitcpio -P'
+NeedsTargets # This flag + the below check prevent running mkinitcpio multiple times when linux is also updated
+Exec=/bin/sh -c 'while read -r pkg; do [[ "$pkg" == linux* ]] && exit 0; done; /usr/bin/mkinitcpio -P'
 
 # Local Variables:
 # mode: conf-unix
