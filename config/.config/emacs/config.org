@@ -1290,7 +1290,7 @@ Position the cursor at its beginning, according to the current mode."
                              embark-highlight-indicator
                              embark-isearch-highlight-indicator)))
 (use-package embark-consult :elpaca t
-  :hook (embark-collect-mode . consult-preview-at-point-mode))
+  :hook (embark-collect-mode-hook . consult-preview-at-point-mode))
 
 (use-package marginalia :elpaca t
   :demand
@@ -1608,7 +1608,8 @@ fundamental-mode) for performance sake."
            (dockerfile . ("https://github.com/camdencheek/tree-sitter-dockerfile"))
            (javascript . ("https://github.com/tree-sitter/tree-sitter-javascript"))
            (json       . ("https://github.com/tree-sitter/tree-sitter-json"))
-           (python     . ("https://github.com/tree-sitter/tree-sitter-python"))))
+           (python     . ("https://github.com/tree-sitter/tree-sitter-python"))
+           (yaml       . ("https://github.com/ikatyang/tree-sitter-yaml"))))
 
   (defun +treesit/install-all-language-grammars ()
     (interactive)
@@ -1896,6 +1897,7 @@ fundamental-mode) for performance sake."
                                    :build (:not elpaca--compile-info)
                                    :files ("*.el" "doc/*.info*" "etc" "images" "latex" "style")
                                    :version (lambda (_) (require 'tex-site) AUCTeX-version))
+  :if (executable-find "latex")
   :commands +tex*set-auto-location
   :config
   (setq! TeX-auto-save t
@@ -2073,6 +2075,12 @@ fundamental-mode) for performance sake."
 (use-package web-mode :elpaca t
   :mode (("\\.\\(go\\)?html?\\'" . web-mode)))
 #+END_SRC
+
+*** Yaml
+#+begin_src emacs-lisp
+(use-package yaml-ts-mode
+  :mode ("\\.ya?ml\\'" . yaml-ts-mode))
+#+end_src
 
 ** Org Mode
 *** Base configuration
