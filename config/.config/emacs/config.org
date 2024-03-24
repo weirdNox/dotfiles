@@ -1691,8 +1691,7 @@ fundamental-mode) for performance sake."
 *** C/C++
 #+BEGIN_SRC emacs-lisp
 (use-package cc-mode
-  :mode (("\\.\\(c\\|h\\)\\(\\.inl\\)?\\'" . c-mode)
-         ("\\.\\(c\\|h\\)pp\\(\\.inl\\)?\\'" . c++-mode))
+  :mode (("\\.\\(c\\|h\\)\\(pp\\)?\\(\\.inl\\)?\\'" . c++-mode))
   :config
   (add-hook! (c-mode c++-mode) (setq-local comment-start "// " comment-end ""))
 
