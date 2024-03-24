@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=org-protocol
-Exec=emacsclient -e (+capture-frame\ \"%u\")
+Exec=emacsclient -e '(+capture-frame "%u")'
 Type=Application
 Terminal=false
 NoDisplay=true
