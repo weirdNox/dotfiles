@@ -10,12 +10,16 @@ stty -ixon
 HISTCONTROL=ignoreboth # Don't insert commands that start with a space or that are duplicates in the history
 HISTSIZE=-1            # Unlimited history during a single session
 HISTFILESIZE=5000000   # Number of commands to store in history file
-HISTFILE="$XDG_STATE_HOME/bash_history"
+HISTFILE="${XDG_STATE_HOME:-$HOME/.local/state}/bash_history"
+mkdir -p "$(dirname -- "$HISTFILE")"
 
 # ------------------------------------------------------------------------------------------
 # Aliases and helper functions
-alias   ls='ls   --color=auto'
-alias grep='grep --color=auto'
+alias    ls='ls --color=auto'
+alias    ll='ls -la'
+alias    l.='ls -d .* --color=auto'
+alias  grep='grep --color=auto'
+alias mount='mount | column -t'
 
 alias   vpn-up='wg-quick up   mullvad'
 alias vpn-down='wg-quick down mullvad'
