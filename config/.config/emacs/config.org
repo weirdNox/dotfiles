@@ -1342,6 +1342,7 @@ Position the cursor at its beginning, according to the current mode."
   (:keymaps '+projectile-map
             "SPC" #'+projectile
             "o"   #'+projectile/find-other-file
+            "O"   #'+projectile/find-other-file-other-window
             "p"   #'+projectile/switch-project
             "s g" #'+projectile/git-grep
             "s s" #'+projectile/ripgrep
@@ -1461,6 +1462,12 @@ Position the cursor at its beginning, according to the current mode."
     (if-let (root (projectile-project-root))
         (projectile-find-other-file)
       (ff-find-other-file)))
+
+  (defun +projectile/find-other-file-other-window ()
+    (interactive)
+    (if-let (root (projectile-project-root))
+        (projectile-find-other-file-other-window)
+      (ff-find-other-file-other-window)))
 
   (defun +projectile/switch-project ()
     (interactive)
