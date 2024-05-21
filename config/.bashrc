@@ -21,9 +21,6 @@ alias    l.='ls -d .* --color=auto'
 alias  grep='grep --color=auto'
 alias mount='mount | column -t'
 
-alias   vpn-up='wg-quick up   mullvad'
-alias vpn-down='wg-quick down mullvad'
-
 alias moltengamepad='moltengamepad --mimic-xpad --dpad-as-hat'
 
 alias   gdb='gdb -q'
