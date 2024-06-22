@@ -1,1 +1,3 @@
+# -*- mode: conf-space; -*-
+
 dashboard registers -style column-major True

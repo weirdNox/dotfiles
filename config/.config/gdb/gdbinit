@@ -1,7 +1,14 @@
 # -*- mode: conf-space; -*-
+
+# History settings
 set history save on
 set history size 500000
 
+# Disable annoying confirmation prompts
+set confirm off
+
+# Use Intel-style disassembly by default
 set disassembly-flavor intel
 
+# Allow GDB to fetch missing debug files
 set debuginfod enabled on
