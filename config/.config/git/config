@@ -1,11 +1,11 @@
 [merge]
-	conflictStyle = diff3
+    conflictStyle = diff3
 
 [rebase]
-	autosquash = true
+    autosquash = true
 
 [log]
-	date = iso
+    date = iso
 
 [include]
     path = ~/.config/git/local
@@ -14,7 +14,13 @@
     autoSetupRemote = true
 
 [pull]
-	rebase = true
+    rebase = true
 
 [init]
-	templatedir = ~/.config/git/template
+    templatedir = ~/.config/git/template
+
+[filter "lfs"]
+    required = true
+    clean = git-lfs clean -- %f
+    smudge = git-lfs smudge -- %f
+    process = git-lfs filter-process
