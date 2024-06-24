@@ -900,16 +900,15 @@ Disable fringes in the minibuffer window.
 
 *** Appearance setup
 #+BEGIN_SRC emacs-lisp
-(elpaca nil
-  (defun nox-setup-appearance (frame)
-    (with-selected-frame frame
-      (load-theme 'modus-vivendi t)
-      (nox/change-font)
-      (when (> (window-width) 100) (split-window-right))
-      (setq! system-time-locale "C")))
+(defun nox-setup-appearance (frame)
+  (with-selected-frame frame
+    (load-theme 'modus-vivendi t)
+    (nox/change-font)
+    (when (> (window-width) 100) (split-window-right))
+    (setq! system-time-locale "C")))
 
-  (add-transient-hook! 'elpaca-after-init-hook (nox-setup-appearance (selected-frame)))
-  (when (daemonp) (add-transient-hook! 'after-make-frame-functions 'nox-setup-appearance)))
+(add-transient-hook! 'elpaca-after-init-hook (nox-setup-appearance (selected-frame)))
+(when (daemonp) (add-transient-hook! 'after-make-frame-functions 'nox-setup-appearance))
 
 (use-package window
   :config
