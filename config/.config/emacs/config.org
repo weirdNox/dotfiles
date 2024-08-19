@@ -1726,7 +1726,7 @@ fundamental-mode) for performance sake."
                                      (inextern-lang . 0)
                                      (substatement-open . +cc-anchor-indentation)
                                      (statement-block-intro . (add +cc-anchor-indentation +))
-                                     (statement-cont . (c-lineup-ternary-bodies +))
+                                     (statement-cont . (c-lineup-ternary-bodies 0))
                                      (statement-case-intro . (+cc-style-stmt-case-intro +))
                                      (arglist-cont-nonempty . (c-lineup-gcc-asm-reg c-lineup-ternary-bodies
                                                                c-lineup-arglist))
