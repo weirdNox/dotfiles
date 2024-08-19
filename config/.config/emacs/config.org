@@ -851,6 +851,9 @@ ARGS are the same as in `custom-set-faces'."
 
 **** Extra programming keywords
 #+BEGIN_SRC emacs-lisp
+(defface font-lock-nocheckin-face '((t (:foreground "#dc322f" :weight bold :box t)))
+  "Face for nocheckin keywords.")
+
 (defface font-lock-todo-face      '((t (:foreground "#dc322f" :weight bold :underline t)))
   "Face for TODO keywords.")
 
@@ -864,7 +867,8 @@ ARGS are the same as in `custom-set-faces'."
   "Face for STUDY keywords.")
 
 (add-hook! prog-mode (font-lock-add-keywords
-                      nil '(("\\<\\(TODO\\|FIXME\\|OPTIMIZE\\|HACK\\)" 1 'font-lock-todo-face t)
+                      nil '(("\\<\\(nocheckin\\)" 1 'font-lock-nocheckin-face t)
+                            ("\\<\\(TODO\\|FIXME\\|OPTIMIZE\\|HACK\\)" 1 'font-lock-todo-face t)
                             ("\\<\\(IMPORTANT\\)" 1 'font-lock-important-face t)
                             ("\\<\\(NOTE\\)" 1 'font-lock-note-face t)
                             ("\\<\\(STUDY\\|REVIEW\\)" 1 'font-lock-study-face t))))
