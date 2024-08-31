@@ -1860,6 +1860,13 @@ fundamental-mode) for performance sake."
     (setf (alist-get 'c++-ts-mode simple-jump-family-alist) family)))
 #+END_SRC
 
+*** Caddyfile
+#+begin_src emacs-lisp
+(use-package caddyfile-mode :ensure t
+  :mode (("/Caddyfile\\'"    . caddyfile-mode)
+         ("/caddy\\.conf\\'" . caddyfile-mode)))
+#+end_src
+
 *** Dockerfile & Containerfile
 #+begin_src emacs-lisp
 (use-package dockerfile-ts-mode
