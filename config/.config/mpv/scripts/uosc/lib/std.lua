@@ -1,5 +1,7 @@
 --[[ Stateless utilities missing in lua standard library ]]
 
+---@alias Shortcut {id: string; key: string; modifiers?: string; alt: boolean; ctrl: boolean; shift: boolean}
+
 ---@param number number
 function round(number) return math.floor(number + 0.5) end
 
@@ -16,6 +18,11 @@ function serialize_rgba(rgba)
 		opacity = clamp(0, tonumber(#a == 2 and a or 'ff', 16) / 255, 1),
 	}
 end
+
+-- Trim any white space from the start and end of the string.
+---@param str string
+---@return string
+function trim(str) return str:match('^%s*(.-)%s*$') end
 
 -- Trim any `char` from the end of the string.
 ---@param str string
@@ -76,12 +83,18 @@ function string_last_index_of(str, sub)
 	end
 end
 
+-- Escapes a string to be used in a matching expression.
+---@param value string
+function regexp_escape(value)
+	return string.gsub(value, '[%(%)%.%+%-%*%?%[%]%^%$%%]', '%%%1')
+end
+
 ---@param itable table
 ---@param value any
 ---@return integer|nil
 function itable_index_of(itable, value)
-	for index, item in ipairs(itable) do
-		if item == value then return index end
+	for index = 1, #itable do
+		if itable[index] == value then return index end
 	end
 end
 
@@ -160,7 +173,7 @@ end
 ---@return T[]
 function itable_join(...)
 	local args, result = {...}, {}
-	for i = 1, #args do
+	for i = 1, select('#', ...) do
 		if args[i] then for _, value in ipairs(args[i]) do result[#result + 1] = value end end
 	end
 	return result
@@ -201,8 +214,8 @@ end
 ---@return T
 function table_assign(target, ...)
 	local args = {...}
-	for i = 1, #args do
-		if args[i] then for key, value in pairs(args[i]) do target[key] = value end end
+	for i = 1, select('#', ...) do
+		if type(args[i]) == 'table' then for key, value in pairs(args[i]) do target[key] = value end end
 	end
 	return target
 end
@@ -214,6 +227,19 @@ end
 ---@return T
 function table_assign_props(target, source, props)
 	for _, name in ipairs(props) do target[name] = source[name] end
+	return target
+end
+
+-- Assign props from `source` to `target` that are not in `props` set.
+---@generic T: table<any, any>
+---@param target T
+---@param source T
+---@param props table<string, boolean>
+---@return T
+function table_assign_exclude(target, source, props)
+	for key, value in pairs(source) do
+		if not props[key] then target[key] = value end
+	end
 	return target
 end
 
@@ -242,6 +268,26 @@ function serialize_key_value_list(input, value_sanitizer)
 		if key and value then result[key] = sanitize(value, key) end
 	end
 	return result
+end
+
+---@param key string
+---@param modifiers? string
+---@return Shortcut
+function create_shortcut(key, modifiers)
+	key = key:lower()
+
+	local id_parts, modifiers_set
+	if modifiers then
+		id_parts = split(modifiers:lower(), '+')
+		table.sort(id_parts, function(a, b) return a < b end)
+		modifiers_set = create_set(id_parts)
+		modifiers = table.concat(id_parts, '+')
+	else
+		id_parts, modifiers, modifiers_set = {}, nil, {}
+	end
+	id_parts[#id_parts + 1] = key
+
+	return table_assign({id = table.concat(id_parts, '+'), key = key, modifiers = modifiers}, modifiers_set)
 end
 
 --[[ EASING FUNCTIONS ]]

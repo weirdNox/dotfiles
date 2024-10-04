@@ -1,11 +1,57 @@
 --[[ UI specific utilities that might or might not depend on its state or options ]]
 
 ---@alias Point {x: number; y: number}
----@alias Rect {ax: number, ay: number, bx: number, by: number}
+---@alias Rect {ax: number, ay: number, bx: number, by: number, window_drag?: boolean}
+---@alias Circle {point: Point, r: number, window_drag?: boolean}
+---@alias Hitbox Rect|Circle
+---@alias ComplexBindingInfo {event: 'down' | 'repeat' | 'up' | 'press'; is_mouse: boolean; canceled: boolean; key_name?: string; key_text?: string;}
 
---- In place sorting of filenames
----@param filenames string[]
-function sort_filenames(filenames)
+-- String sorting
+do
+	----- winapi start -----
+	-- in windows system, we can use the sorting function provided by the win32 API
+	-- see https://learn.microsoft.com/en-us/windows/win32/api/shlwapi/nf-shlwapi-strcmplogicalw
+	-- this function was taken from https://github.com/mpvnet-player/mpv.net/issues/575#issuecomment-1817413401
+	local winapi = nil
+
+	if state.platform == 'windows' and config.refine.sorting then
+		-- is_ffi_loaded is false usually means the mpv builds without luajit
+		local is_ffi_loaded, ffi = pcall(require, 'ffi')
+
+		if is_ffi_loaded then
+			winapi = {
+				ffi = ffi,
+				C = ffi.C,
+				CP_UTF8 = 65001,
+				shlwapi = ffi.load('shlwapi'),
+			}
+
+			-- ffi code from https://github.com/po5/thumbfast, Mozilla Public License Version 2.0
+			ffi.cdef [[
+				int __stdcall MultiByteToWideChar(unsigned int CodePage, unsigned long dwFlags, const char *lpMultiByteStr,
+				int cbMultiByte, wchar_t *lpWideCharStr, int cchWideChar);
+				int __stdcall StrCmpLogicalW(wchar_t *psz1, wchar_t *psz2);
+			]]
+
+			winapi.utf8_to_wide = function(utf8_str)
+				if utf8_str then
+					local utf16_len = winapi.C.MultiByteToWideChar(winapi.CP_UTF8, 0, utf8_str, -1, nil, 0)
+
+					if utf16_len > 0 then
+						local utf16_str = winapi.ffi.new('wchar_t[?]', utf16_len)
+
+						if winapi.C.MultiByteToWideChar(winapi.CP_UTF8, 0, utf8_str, -1, utf16_str, utf16_len) > 0 then
+							return utf16_str
+						end
+					end
+				end
+
+				return ''
+			end
+		end
+	end
+	----- winapi end -----
+
 	-- alphanum sorting for humans in Lua
 	-- http://notebook.kulchenko.com/algorithms/alphanumeric-natural-sorting-for-humans-in-lua
 	local function padnum(n, d)
@@ -13,15 +59,28 @@ function sort_filenames(filenames)
 			or ('%03d%s'):format(#n, n)
 	end
 
-	local tuples = {}
-	for i, f in ipairs(filenames) do
-		tuples[i] = {f:lower():gsub('0*(%d+)%.?(%d*)', padnum), f}
+	local function sort_lua(strings)
+		local tuples = {}
+		for i, f in ipairs(strings) do
+			tuples[i] = {f:lower():gsub('0*(%d+)%.?(%d*)', padnum), f}
+		end
+		table.sort(tuples, function(a, b)
+			return a[1] == b[1] and #b[2] < #a[2] or a[1] < b[1]
+		end)
+		for i, tuple in ipairs(tuples) do strings[i] = tuple[2] end
+		return strings
 	end
-	table.sort(tuples, function(a, b)
-		return a[1] == b[1] and #b[2] < #a[2] or a[1] < b[1]
-	end)
-	for i, tuple in ipairs(tuples) do filenames[i] = tuple[2] end
-	return filenames
+
+	---@param strings string[]
+	function sort_strings(strings)
+		if winapi then
+			table.sort(strings, function(a, b)
+				return winapi.shlwapi.StrCmpLogicalW(winapi.utf8_to_wide(a), winapi.utf8_to_wide(b)) == -1
+			end)
+		else
+			sort_lua(strings)
+		end
+	end
 end
 
 -- Creates in-between frames to animate value from `from` to `to` numbers.
@@ -84,6 +143,13 @@ end
 function get_point_to_point_proximity(point_a, point_b)
 	local dx, dy = point_a.x - point_b.x, point_a.y - point_b.y
 	return math.sqrt(dx * dx + dy * dy)
+end
+
+---@param point Point
+---@param hitbox Hitbox
+function point_collides_with(point, hitbox)
+	return (hitbox.r and get_point_to_point_proximity(point, hitbox.point) <= hitbox.r) or
+		(not hitbox.r and get_point_to_rectangle_proximity(point, hitbox --[[@as Rect]]) == 0)
 end
 
 ---@param lax number
@@ -153,11 +219,6 @@ function get_ray_to_rectangle_distance(ax, ay, bx, by, rect)
 	updateDistance(get_ray_to_line_distance(ax, ay, bx, by, rect.ax, rect.ay, rect.ax, rect.by))
 
 	return closest
-end
-
--- Call function with args if it exists
-function call_maybe(fn, ...)
-	if type(fn) == 'function' then fn(...) end
 end
 
 -- Extracts the properties used by property expansion of that string.
@@ -330,9 +391,20 @@ function has_any_extension(path, extensions)
 	return false
 end
 
----@return string
-function get_default_directory()
-	return mp.command_native({'expand-path', options.default_directory})
+-- Executes mp command defined as a string or an itable, or does nothing if command is any other value.
+-- Returns boolean specifying if command was executed or not.
+---@param command string | string[] | nil | any
+---@return boolean executed `true` if command was executed.
+function execute_command(command)
+	local command_type = type(command)
+	if command_type == 'string' then
+		mp.command(command)
+		return true
+	elseif command_type == 'table' and #command > 0 then
+		mp.command_native(command)
+		return true
+	end
+	return false
 end
 
 -- Serializes path into its semantic parts.
@@ -359,18 +431,17 @@ end
 -- Reads items in directory and splits it into directories and files tables.
 ---@param path string
 ---@param opts? {types?: string[], hidden?: boolean}
----@return string[]|nil files
----@return string[]|nil directories
+---@return string[] files
+---@return string[] directories
+---@return string|nil error
 function read_directory(path, opts)
 	opts = opts or {}
 	local items, error = utils.readdir(path, 'all')
+	local files, directories = {}, {}
 
 	if not items then
-		msg.error('Reading files from "' .. path .. '" failed: ' .. error)
-		return nil, nil
+		return files, directories, 'Reading directory "' .. path .. '" failed. Error: ' .. utils.to_string(error)
 	end
-
-	local files, directories = {}, {}
 
 	for _, item in ipairs(items) do
 		if item ~= '.' and item ~= '..' and (opts.hidden or item:sub(1, 1) ~= '.') then
@@ -399,9 +470,12 @@ function get_adjacent_files(file_path, opts)
 	opts = opts or {}
 	local current_meta = serialize_path(file_path)
 	if not current_meta then return end
-	local files = read_directory(current_meta.dirname, {hidden = opts.hidden})
-	if not files then return end
-	sort_filenames(files)
+	local files, _dirs, error = read_directory(current_meta.dirname, {hidden = opts.hidden})
+	if error then
+		msg.error(error)
+		return
+	end
+	sort_strings(files)
 	local current_file_index
 	local paths = {}
 	for _, file in ipairs(files) do
@@ -563,7 +637,7 @@ function delete_file_navigate(delta)
 		if Menu:is_open('open-file') then
 			Elements:maybe('menu', 'delete_value', path)
 		end
-		delete_file(path)
+		if path then delete_file(path) end
 	end
 end
 
@@ -714,18 +788,20 @@ end
 ---@return {[string]: table}|table
 function find_active_keybindings(key)
 	local bindings = mp.get_property_native('input-bindings', {})
-	local active = {} -- map: key-name -> bind-info
+	local active_map = {} -- map: key-name -> bind-info
+	local active_table = {}
 	for _, bind in pairs(bindings) do
 		if bind.owner ~= 'uosc' and bind.priority >= 0 and (not key or bind.key == key) and (
-				not active[bind.key]
-				or (active[bind.key].is_weak and not bind.is_weak)
-				or (bind.is_weak == active[bind.key].is_weak and bind.priority > active[bind.key].priority)
+				not active_map[bind.key]
+				or (active_map[bind.key].is_weak and not bind.is_weak)
+				or (bind.is_weak == active_map[bind.key].is_weak and bind.priority > active_map[bind.key].priority)
 			)
 		then
-			active[bind.key] = bind
+			active_table[#active_table + 1] = bind
+			active_map[bind.key] = bind
 		end
 	end
-	return not key and active or active[key]
+	return key and active_map[key] or active_table
 end
 
 ---@param type 'sub'|'audio'|'video'
@@ -738,30 +814,85 @@ function load_track(type, path)
 	end
 end
 
----@return string|nil
-function get_clipboard()
+---@param args (string|number)[]
+---@return string|nil error
+---@return table data
+function call_ziggy(args)
 	local result = mp.command_native({
 		name = 'subprocess',
 		capture_stderr = true,
 		capture_stdout = true,
 		playback_only = false,
-		args = {config.ziggy_path, 'get-clipboard'},
+		args = itable_join({config.ziggy_path}, args),
 	})
 
-	local function print_error(message)
-		msg.error('Getting clipboard data failed. Error: ' .. message)
+	if result.status ~= 0 then
+		return 'Calling ziggy failed. Exit code ' .. result.status .. ': ' .. result.stdout .. result.stderr, {}
 	end
 
-	if result.status == 0 then
-		local data = utils.parse_json(result.stdout)
-		if data and data.payload then
-			return data.payload
-		else
-			print_error(data and (data.error and data.message or 'unknown error') or 'couldn\'t parse json')
-		end
+	local data = utils.parse_json(result.stdout)
+	if not data then
+		return 'Ziggy response error. Couldn\'t parse json: ' .. result.stdout, {}
+	elseif data.error then
+		return 'Ziggy error: ' .. data.message, {}
 	else
-		print_error('exit code ' .. result.status .. ': ' .. result.stdout .. result.stderr)
+		return nil, data
 	end
+end
+
+---@param args (string|number)[]
+---@param callback fun(error: string|nil, data: table)
+---@return fun() abort Function to abort the request.
+function call_ziggy_async(args, callback)
+	local abort_signal = mp.command_native_async({
+		name = 'subprocess',
+		capture_stderr = true,
+		capture_stdout = true,
+		playback_only = false,
+		args = itable_join({config.ziggy_path}, args),
+	}, function(success, result, error)
+		if not success or not result or result.status ~= 0 then
+			local exit_code = (result and result.status or 'unknown')
+			local message = error or (result and result.stdout .. result.stderr) or ''
+			callback('Calling ziggy failed. Exit code: ' .. exit_code .. ' Error: ' .. message, {})
+			return
+		end
+
+		local json = result and type(result.stdout) == 'string' and result.stdout or ''
+		local data = utils.parse_json(json)
+		if not data then
+			callback('Ziggy response error. Couldn\'t parse json: ' .. json, {})
+		elseif data.error then
+			callback('Ziggy error: ' .. data.message, {})
+		else
+			return callback(nil, data)
+		end
+	end)
+
+	return function()
+		mp.abort_async_command(abort_signal)
+	end
+end
+
+---@return string|nil
+function get_clipboard()
+	local err, data = call_ziggy({'get-clipboard'})
+	if err then
+		mp.commandv('show-text', 'Get clipboard error. See console for details.')
+		msg.error(err)
+	end
+	return data and data.payload
+end
+
+---@param payload any
+---@return string|nil payload String that was copied to clipboard.
+function set_clipboard(payload)
+	local err, data = call_ziggy({'set-clipboard', tostring(payload)})
+	if err then
+		mp.commandv('show-text', 'Set clipboard error. See console for details.')
+		msg.error(err)
+	end
+	return data and data.payload
 end
 
 --[[ RENDERING ]]
@@ -771,6 +902,9 @@ function render()
 	state.render_last_time = mp.get_time()
 
 	cursor:clear_zones()
+
+	-- Click on empty area detection
+	if setup_click_detection then setup_click_detection() end
 
 	-- Actual rendering
 	local ass = assdraw.ass_new()
