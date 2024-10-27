@@ -15,10 +15,16 @@ mkdir -p "$(dirname -- "$HISTFILE")"
 
 # ------------------------------------------------------------------------------------------
 # Aliases and helper functions
-alias    ls='ls --color=auto'
-alias    ll='ls -la'
-alias    l.='ls -d .* --color=auto'
+alias  ..='cd ..'
+alias ...='cd ../..'
+
 alias  grep='grep --color=auto'
+alias    ip='ip   --color=auto'
+alias     ls='ls  --color=auto'
+alias     l.='ls -d .*'
+alias     ll='ls -la'
+alias    ll.='l. -la'
+
 alias mount='mount | column -t'
 
 alias moltengamepad='moltengamepad --mimic-xpad --dpad-as-hat'
