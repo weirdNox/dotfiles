@@ -1,12 +1,10 @@
 ! Font configuration
 Xft.antialias: true
-
-Xft.hinting: true
-Xft.hintstyle: hintslight
-
 Xft.rgba: rgb
 Xft.lcdfilter: lcddefault
 
+Xft.hinting: true
+Xft.hintstyle: hintslight
 Xft.autohint: false
 
 Xft.embeddedbitmap: false

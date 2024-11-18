@@ -722,7 +722,11 @@ symbols.
                     ("Consolas"         10.0 .00)
                     ("Liberation Mono"  10.0 .00)
                     ("DejaVu Sans Mono"  9.0 .00)
-                    ("Source Code Pro"  10.0 .00)))
+                    ("Source Code Pro"  10.0 .00)
+                    ("Iosevka"          10.0 .00)
+                    ("Monaspace Neon"   10.0 .00)
+                    ("Monaspace Argon"  10.0 .00)
+                    ("Monaspace Xenon"  10.0 .00)))
 
 (defvar nox-font-faces-changed nil
   "List ARGS passed to custom-set-faces, in order to fix font.")
