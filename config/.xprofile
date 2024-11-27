@@ -1,5 +1,0 @@
-#
-# This file is loaded at the beginning of the X user session.
-#
-xrdb -merge "$HOME/.Xresources"
-xhost +local: >/dev/null
